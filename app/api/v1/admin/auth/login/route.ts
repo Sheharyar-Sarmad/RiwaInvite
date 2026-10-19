@@ -96,10 +96,12 @@ export async function POST(request: Request) {
     const hashedToken = hashSessionToken(rawToken);
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
+    const expiresAtIso = expiresAt.toISOString();
+
     // 7. Save Session to DB
     await sql`
       INSERT INTO admin_sessions (admin_id, token_hash, expires_at)
-      VALUES (${admin.id}, ${hashedToken}, ${expiresAt})
+      VALUES (${admin.id}, ${hashedToken}, ${expiresAtIso})
     `;
 
     // 8. Set Cookie
