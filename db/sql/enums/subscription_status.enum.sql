@@ -1,0 +1,1 @@
+CREATE TYPE subscription_status AS ENUM ('active', 'past_due', 'canceled', 'expired');

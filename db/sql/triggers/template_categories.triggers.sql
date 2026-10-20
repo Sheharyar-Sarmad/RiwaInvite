@@ -1,0 +1,3 @@
+CREATE TRIGGER trg_update_template_categories_updated_at
+BEFORE UPDATE ON template_categories
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

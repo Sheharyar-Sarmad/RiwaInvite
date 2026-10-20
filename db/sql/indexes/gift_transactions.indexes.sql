@@ -1,0 +1,2 @@
+CREATE INDEX idx_gift_transactions_invitation ON gift_transactions(invitation_id);
+CREATE INDEX idx_gift_transactions_status ON gift_transactions(status);
