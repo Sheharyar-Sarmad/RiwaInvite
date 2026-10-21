@@ -177,3 +177,15 @@ export const UpdateCategorySchema = z.object({
     .optional()
     .nullable(),
 }).strict();
+
+export const updateAccountSettingsSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  firstName: z.string().min(2, "First name must be at least 2 characters").optional(),
+  lastName: z.string().min(2, "Last name must be at least 2 characters").optional(),
+  email: z.string().email("Invalid email format").optional(),
+  phoneNumber: z.string().regex(/^\+?[1-9]\d{1,14}$/, "Invalid phone number format").optional(),
+  newPassword: z.string().min(8, "New password must be at least 8 characters").optional(),
+}).refine((data) => {
+    // If newPassword is provided, ensure they aren't just setting it to the same thing (optional logic)
+    return true; 
+});

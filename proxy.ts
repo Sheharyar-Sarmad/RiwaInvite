@@ -2,8 +2,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import settings from '@/config/settings_config';
-import { verifyAdminSession } from '@/middlewares/auth/verify_admin';
-import { verifyUserSession } from '@/middlewares/auth/verify_user';
+import { verifyAdminSession } from '@/middlewares/verify_admin';
+import { verifyUserSession } from '@/middlewares/verify_user';
 
 const appConfig = settings();
 

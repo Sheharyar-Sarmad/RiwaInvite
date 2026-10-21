@@ -1,4 +1,3 @@
-// middlewares/auth/verify_user.ts
 import { sql } from "@/db/connections/postgres_connection";
 import { getRedisClient } from "@/db/connections/redis_connection";
 import { hashSessionToken } from "@/lib/auth";
@@ -18,12 +17,14 @@ export async function verifyUserSession(rawToken: string, ip: string = "unknown"
     if (attempts === 1) {
       await redis.expire(rateLimitKey, 60); // 1 minute window
     }
+    
+    // If they made more than 10 attempts in 1 minute, block them
     if (attempts > 10) {
-      console.warn(`Rate limit exceeded for session verification from IP: ${ip}`);
+      console.warn(`[Rate Limit] Exceeded session verification from IP: ${ip}`);
       return null; 
     }
 
-    // 2. Redis Check (Ultra Fast)
+    // 2. Redis Check
     const cachedUserId = await redis.get(cacheKey);
     
     if (cachedUserId) {
