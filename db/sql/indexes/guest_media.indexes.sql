@@ -1,1 +1,0 @@
-CREATE INDEX idx_guest_media_invitation ON guest_media(invitation_id);

@@ -104,19 +104,8 @@ export async function POST(request: Request) {
       VALUES (${admin.id}, ${hashedToken}, ${expiresAtIso})
     `;
 
-    // 8. Set Cookie
-    (await cookies()).set(config.sessionCookieName, rawToken, {
-      httpOnly: true,
-      secure: config.isProduction,
-      sameSite: "strict",
-      expires: expiresAt,
-      path: "/",
-    });
-
-    // Clear rate limit on successful login
-    await redis.del(rateLimitKey);
-
-    return NextResponse.json(
+    // 8. Set Cookie & Return Response
+    const response = NextResponse.json(
       {
         status: "success",
         message: "Logged in successfully",
@@ -125,6 +114,21 @@ export async function POST(request: Request) {
       },
       { status: STATUS_CODE.OK }
     );
+
+    // Attach cookie directly to the response (Next.js Best Practice)
+    response.cookies.set(config.sessionCookieName, rawToken, {
+      httpOnly: true,
+      // FORCE secure to false for local testing. Change back to config.isProduction later if needed.
+      secure: process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_VERCEL_ENV !== undefined,
+      sameSite: "strict",
+      expires: expiresAt,
+      path: "/",
+    });
+
+    // Clear rate limit on successful login
+    await redis.del(rateLimitKey);
+
+    return response;
 
   } catch (error: any) {
     console.error("Login Error:", error);

@@ -1,1 +1,0 @@
-CREATE TYPE payout_status AS ENUM ('pending', 'processing', 'paid', 'failed');
