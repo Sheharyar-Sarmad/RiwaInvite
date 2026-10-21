@@ -12,25 +12,25 @@ export async function verifyUserSession(rawToken: string, ip: string = "unknown"
   try {
     const redis = await getRedisClient();
 
-    // 1. Rate Limiting for session verification attempts (Prevents token brute-forcing)
+    // 1. Rate Limiting for session verification attempts
     const attempts = await redis.incr(rateLimitKey);
     if (attempts === 1) {
       await redis.expire(rateLimitKey, 60); // 1 minute window
     }
     
-    // If they made more than 10 attempts in 1 minute, block them
     if (attempts > 10) {
       console.warn(`[Rate Limit] Exceeded session verification from IP: ${ip}`);
       return null; 
     }
 
     // 2. Redis Check
-    const cachedUserId = await redis.get(cacheKey);
+    const cachedUserString = await redis.get(cacheKey);
     
-    if (cachedUserId) {
+    if (cachedUserString) {
       // Clear rate limit on successful cache hit
       await redis.del(rateLimitKey);
-      return { id: cachedUserId }; 
+      // Parse the string back to an object so proxy.ts can read `.id` and `.email`
+      return JSON.parse(cachedUserString); 
     }
 
     // 3. Postgres Check (Fallback)
@@ -51,7 +51,8 @@ export async function verifyUserSession(rawToken: string, ip: string = "unknown"
     const user = sessions[0];
 
     // 4. Re-cache to Redis (expire in 15 mins)
-    await redis.setEx(cacheKey, 900, user.id.toString());
+    // Store the full user object as a JSON string, not just the ID
+    await redis.setEx(cacheKey, 900, JSON.stringify(user));
 
     // Clear rate limit on successful DB hit
     await redis.del(rateLimitKey);
