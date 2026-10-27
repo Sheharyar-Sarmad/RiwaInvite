@@ -18,9 +18,16 @@
 }
 
 @layer base {
+  /* No sideways scrolling, ever. `clip` (unlike `hidden`) keeps sticky headers working. */
+  html {
+    overflow-x: hidden;
+    scrollbar-gutter: stable; /* no layout jump when the scrollbar appears */
+  }
+
   body {
     background-color: var(--background);
     color: var(--foreground);
+    overflow-x: clip;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -28,5 +35,42 @@
   /* CRITICAL FIX: Force inputs and buttons to inherit the body font */
   input, button, textarea, select {
     font-family: inherit !important;
+  }
+}
+
+/* ======================================================================
+   Ember scrollbars
+   Standards-based (Chrome/Brave/Edge 121+, Firefox, Safari 18.2+).
+   `scrollbar-color` also removes the old ▲ ▼ arrow buttons.
+   ====================================================================== */
+@supports (scrollbar-color: auto) {
+  * {
+    scrollbar-width: thin;
+  }
+
+  /* inherited by every scrollable area on the page */
+  html {
+    scrollbar-color: #fb923c #fff3e6; /* thumb  track */
+  }
+
+  /* slim areas: sidebar, menus, notification list, Ctrl K list */
+  .scroll-ember {
+    scrollbar-color: #fdba74 transparent;
+  }
+  .scroll-ember:hover {
+    scrollbar-color: #f97316 transparent;
+  }
+}
+
+/* Very old browsers only: gradient pill via the webkit pseudo-elements */
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar { width: 12px; height: 12px; }
+  ::-webkit-scrollbar-button { display: none; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #fdba74, #f97316);
+    background-clip: padding-box;
+    border: 3px solid transparent;
+    border-radius: 999px;
   }
 }
