@@ -9,15 +9,16 @@ export async function verifyAdminSession(rawToken: string) {
   const cacheKey = `admin_session:${hashedToken}`;
 
   try {
-    // 1. Redis Check (Ultra Fast - keeps Middleware latency low)
+    // 1. Redis Check
     const redis = await getRedisClient();
-    const cachedAdminId = await redis.get(cacheKey);
+    const cachedAdminString = await redis.get(cacheKey);
     
-    if (cachedAdminId) {
-      return { id: cachedAdminId }; 
+    if (cachedAdminString) {
+      // FIX: Parse the full JSON object
+      return JSON.parse(cachedAdminString); 
     }
 
-    // 2. Postgres Check (Fallback if Redis misses)
+    // 2. Postgres Check
     const sessions = await sql`
       SELECT a.id, a.email, a.account_name 
       FROM admin_sessions s
@@ -35,11 +36,11 @@ export async function verifyAdminSession(rawToken: string) {
     const admin = sessions[0];
 
     // 3. Re-cache to Redis (expire in 15 mins)
-    await redis.setEx(cacheKey, 900, admin.id.toString());
+    // FIX: Stringify the whole object so email is available on Redis hits
+    await redis.setEx(cacheKey, 900, JSON.stringify(admin));
 
     return admin;
   } catch (error) {
-    // If Redis or DB is down, safely reject the session rather than crashing the proxy
     console.error("Admin Session verification error:", error);
     return null;
   }

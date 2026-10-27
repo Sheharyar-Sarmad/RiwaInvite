@@ -3,6 +3,7 @@ class Settings {
   readonly appName: string;
   readonly appDescription: string;
   readonly appPhase: "development" | "production" | "test";
+  readonly appUrl: string;
 
   // Databases
   readonly postgresUrl: string;
@@ -38,6 +39,7 @@ class Settings {
       ["development", "production", "test"],
       "development",
     );
+    this.appUrl = this.getRequired("APP_URL")
 
     // Databases
     this.postgresUrl = this.getRequired("POSTGRES_URL");
