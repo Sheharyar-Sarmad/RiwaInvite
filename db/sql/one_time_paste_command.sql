@@ -347,6 +347,34 @@ CREATE TRIGGER trg_update_subscriptions_updated_at BEFORE UPDATE ON subscription
 DROP TRIGGER IF EXISTS trg_update_user_subscriptions_updated_at ON user_subscriptions;
 CREATE TRIGGER trg_update_user_subscriptions_updated_at BEFORE UPDATE ON user_subscriptions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- 1. Create the ENUM type
+DO $$ 
+BEGIN 
+    CREATE TYPE admin_notification_type AS ENUM ('order', 'user', 'system', 'alert'); 
+EXCEPTION 
+    WHEN duplicate_object THEN null; 
+END $$;
+
+-- 2. Create the table
+CREATE TABLE IF NOT EXISTS admin_notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    admin_id UUID REFERENCES admins(id) ON DELETE CASCADE, -- NULL means broadcast to all admins
+    type admin_notification_type NOT NULL,
+    title VARCHAR(100) NOT NULL,
+    message TEXT NOT NULL,
+    read_at TIMESTAMPTZ DEFAULT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. Create the indexes for performance
+CREATE INDEX IF NOT EXISTS idx_admin_notifications_admin 
+    ON admin_notifications(admin_id);
+
+CREATE INDEX IF NOT EXISTS idx_admin_notifications_unread 
+    ON admin_notifications(admin_id) WHERE read_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_admin_notifications_created 
+    ON admin_notifications(created_at DESC);
 
 -- 1. Create the ENUM type
 DO $$ 
