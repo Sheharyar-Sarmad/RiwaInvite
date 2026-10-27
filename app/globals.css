@@ -74,3 +74,31 @@
     border-radius: 999px;
   }
 }
+
+/* Custom Sidebar Scrollbar */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #fb923c transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #fb923c; /* orange-400 */
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #f97316; /* orange-500 */
+}
+
+/* This hides the native Windows arrows */
+.custom-scrollbar::-webkit-scrollbar-button {
+  display: none;
+}

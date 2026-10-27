@@ -66,12 +66,12 @@ export function AdminShell({ admin, children }: { admin: AdminSession; children:
     <div
       ref={rootRef}
       onPointerMove={onMove}
-      className="relative isolate min-h-screen bg-white font-[family-name:var(--font-body)] text-neutral-900"
+      // FIX: Changed to h-[100dvh] overflow-hidden to lock the screen height
+      className="relative isolate h-[100dvh] w-full overflow-hidden bg-white font-[family-name:var(--font-body)] text-neutral-900"
     >
       {/* ---------- BACKGROUND: dot grid that lights up under the cursor ---------- */}
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-orange-50 via-white to-orange-50/70" />
-        {/* resting dots */}
         <div
           className="absolute inset-0"
           style={{
@@ -79,7 +79,6 @@ export function AdminShell({ admin, children }: { admin: AdminSession; children:
             backgroundSize: "24px 24px",
           }}
         />
-        {/* ember dots, revealed only around the cursor */}
         <div
           className="absolute inset-0"
           style={{
@@ -89,7 +88,6 @@ export function AdminShell({ admin, children }: { admin: AdminSession; children:
             WebkitMaskImage: mask,
           }}
         />
-        {/* soft light following the cursor */}
         <div
           className="absolute inset-0"
           style={{
@@ -109,13 +107,15 @@ export function AdminShell({ admin, children }: { admin: AdminSession; children:
 
       <AdminSidebar admin={admin} collapsed={collapsed} onToggleCollapsed={() => setCollapsed((v) => !v)} />
 
+      {/* FIX: Changed to h-full overflow-hidden */}
       <div
-        className={`flex min-h-screen min-w-0 flex-col transition-[padding] duration-300 ease-out ${
+        className={`flex h-full min-w-0 flex-col overflow-hidden transition-[padding] duration-300 ease-out ${
           collapsed ? "lg:pl-[96px]" : "lg:pl-[284px]"
         }`}
       >
         {/* ---------- FLOATING TOPBAR ---------- */}
-        <header className="sticky top-0 z-20 px-2 pt-2 sm:px-5 sm:pt-3 lg:px-6">
+        {/* FIX: Removed sticky top-0, added shrink-0 */}
+        <header className="shrink-0 px-2 pt-2 sm:px-5 sm:pt-3 lg:px-6">
           <div className="flex h-14 items-center gap-2 rounded-2xl border border-white bg-white/80 px-2 backdrop-blur-xl sm:gap-3 sm:px-3 shadow-[inset_0_1px_0_#fff,0_1px_2px_rgba(15,23,42,0.05),0_14px_30px_-14px_rgba(249,115,22,0.35)]">
             <AdminMobileNav admin={admin} />
             <Crumbs />
@@ -137,7 +137,8 @@ export function AdminShell({ admin, children }: { admin: AdminSession; children:
           </div>
         </header>
 
-        <main className="relative flex-1 px-3 py-5 sm:px-6 sm:py-6 lg:px-8">
+        {/* FIX: Added overflow-y-auto to main so this is the only scrolling area */}
+        <main className="relative flex-1 overflow-y-auto px-3 py-5 sm:px-6 sm:py-6 lg:px-8">
           <motion.div
             key="content"
             initial={{ opacity: 0, y: 6 }}

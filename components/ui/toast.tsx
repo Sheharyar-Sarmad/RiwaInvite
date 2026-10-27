@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Toast as ToastPrimitive } from "@base-ui/react/toast"
-import { cn } from "cn"
+import { cn } from "cn" // Make sure this path is correct for your project
 
 import { Button } from "@/components/ui/button"
 import { XIcon, CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
@@ -35,7 +35,8 @@ function Toast({ className, ...props }: ToastPrimitive.Root.Props) {
     <ToastPrimitive.Root
       data-slot="toast"
       className={cn(
-        "group/toast pointer-events-auto absolute right-0 bottom-0 z-[calc(1000-var(--toast-index))] w-full origin-bottom rounded-2xl border bg-popover text-popover-foreground shadow-lg will-change-transform outline-none select-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        // CHANGED: Replaced bg-popover/text-popover-foreground with solid white, orange border, and soft shadow
+        "group/toast pointer-events-auto absolute right-0 bottom-0 z-[calc(1000-var(--toast-index))] w-full origin-bottom rounded-2xl border border-orange-100 bg-white text-neutral-900 shadow-xl shadow-orange-500/10 will-change-transform outline-none select-none focus-visible:border-orange-300 focus-visible:ring-[3px] focus-visible:ring-orange-500/20",
         "[--gap:0.75rem] [--height:var(--toast-frontmost-height,var(--toast-height))] [--offset-y:calc(var(--toast-offset-y)*-1+calc(var(--toast-index)*var(--gap)*-1)+var(--toast-swipe-movement-y))] [--peek:0.75rem] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))]",
         "h-(--height) [transform:translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--peek))-(var(--shrink)*var(--height))))_scale(var(--scale))] [transition:transform_500ms_cubic-bezier(0.22,1,0.36,1),opacity_500ms,height_150ms]",
         "after:absolute after:top-full after:left-0 after:h-[calc(var(--gap)+1px)] after:w-full after:content-['']",
@@ -74,7 +75,8 @@ function ToastTitle({ className, ...props }: ToastPrimitive.Title.Props) {
   return (
     <ToastPrimitive.Title
       data-slot="toast-title"
-      className={cn("text-sm font-medium", className)}
+      // CHANGED: Made font-semibold and explicit dark text
+      className={cn("text-sm font-semibold text-neutral-900", className)}
       {...props}
     />
   )
@@ -87,7 +89,8 @@ function ToastDescription({
   return (
     <ToastPrimitive.Description
       data-slot="toast-description"
-      className={cn("text-sm text-muted-foreground", className)}
+      // CHANGED: Replaced text-muted-foreground with neutral-500 for readability
+      className={cn("text-sm text-neutral-500", className)}
       {...props}
     />
   )
@@ -120,7 +123,7 @@ function ToastClose({
       aria-label="Close toast"
       render={render}
       className={cn(
-        "relative shrink-0 text-muted-foreground after:absolute after:-inset-2 after:content-[''] hover:text-foreground",
+        "relative shrink-0 text-neutral-400 after:absolute after:-inset-2 after:content-[''] hover:text-neutral-700",
         className
       )}
       {...props}
@@ -136,33 +139,27 @@ function ToastIcon({ type }: { type: string | undefined }) {
   let icon: React.ReactNode = null
 
   if (type === "success") {
-    icon = (
-      <CircleCheckIcon aria-hidden="true" />
-    )
+    // CHANGED: Added green color
+    icon = <CircleCheckIcon className="text-green-500" aria-hidden="true" />
   }
 
   if (type === "info") {
-    icon = (
-      <InfoIcon aria-hidden="true" />
-    )
+    // CHANGED: Added orange color to match theme
+    icon = <InfoIcon className="text-orange-500" aria-hidden="true" />
   }
 
   if (type === "warning") {
-    icon = (
-      <TriangleAlertIcon aria-hidden="true" />
-    )
+    // CHANGED: Added amber color
+    icon = <TriangleAlertIcon className="text-amber-500" aria-hidden="true" />
   }
 
   if (type === "error") {
-    icon = (
-      <OctagonXIcon className="text-destructive" aria-hidden="true" />
-    )
+    // CHANGED: Added explicit red color
+    icon = <OctagonXIcon className="text-red-500" aria-hidden="true" />
   }
 
   if (type === "loading") {
-    icon = (
-      <Loader2Icon className="animate-spin" aria-hidden="true" />
-    )
+    icon = <Loader2Icon className="animate-spin text-orange-500" aria-hidden="true" />
   }
 
   if (!icon) {
@@ -172,7 +169,7 @@ function ToastIcon({ type }: { type: string | undefined }) {
   return (
     <span
       data-slot="toast-icon"
-      className="shrink-0 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4"
+      className="shrink-0 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-5"
     >
       {icon}
     </span>

@@ -29,6 +29,16 @@ export const metadata: Metadata = {
     template: "%s · Riwainvite",
   },
   description: "Create, send, and track beautiful event invitations.",
+  icons: {
+    icon: [{ url: "/logo.png", type: "image/png" }],
+    shortcut: "/logo.png",
+    apple: "/logo.png", // iOS home screen
+  },
+  openGraph: {
+    title: "Riwainvite",
+    description: "Create, send, and track beautiful event invitations.",
+    images: [{ url: "/logo.png" }], // optional: link previews on WhatsApp, X and others
+  },
 };
 
 export const viewport: Viewport = {

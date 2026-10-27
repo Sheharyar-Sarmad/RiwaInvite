@@ -1,7 +1,7 @@
 "use client";
 
-import { ReactNode, useEffect, useState } from "react";
-import { motion, useScroll, useSpring } from "framer-motion";
+import { ReactNode, useEffect, useRef, useState } from "react";
+import { motion, useMotionValue, useSpring } from "framer-motion";
 import {
   useAdminAnalytics,
   OverallBusinessData, UsersData, InvitationsData, RsvpsData,
@@ -9,7 +9,7 @@ import {
 } from "@/hooks/useAdminAnalytics";
 import { MetricCard } from "@/components/admin/cards/MetricCard";
 import { DashboardCard } from "@/components/admin/cards/DashboardCard";
-import { RevenueSection } from "./RevenueSection";
+import { RevenueSection } from "@/components/admin/sections/RevenueSection";
 import { ACCENTS, Accent } from "@/components/admin/cards/CardFrame";
 import { CustomAreaChart, CustomPieChart, CustomBarChart } from "@/components/admin/charts/AllCharts";
 import {
@@ -45,9 +45,33 @@ export function DashboardAnalytics() {
   const { data: orders } = useAdminAnalytics<OrdersData>("orders", range);
   const { data: templates } = useAdminAnalytics<TemplatesData>("templates", range);
 
-  // Scroll progress for the bar under the header
-  const { scrollYProgress } = useScroll();
-  const progress = useSpring(scrollYProgress, { stiffness: 140, damping: 28, mass: 0.4 });
+  // AdminShell scrolls inside <main>, not the window, so find the real scroller
+  // and feed its progress to the bar under the header.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const rawProgress = useMotionValue(0);
+  const progress = useSpring(rawProgress, { stiffness: 140, damping: 28, mass: 0.4 });
+
+  useEffect(() => {
+    let el: HTMLElement | null = rootRef.current?.parentElement ?? null;
+    while (el && !/(auto|scroll)/.test(getComputedStyle(el).overflowY)) el = el.parentElement;
+    const target: HTMLElement | Window = el ?? window;
+
+    const read = () => {
+      const top = el ? el.scrollTop : window.scrollY;
+      const max = el
+        ? el.scrollHeight - el.clientHeight
+        : document.documentElement.scrollHeight - window.innerHeight;
+      rawProgress.set(max > 0 ? Math.min(1, Math.max(0, top / max)) : 0);
+    };
+
+    read();
+    target.addEventListener("scroll", read, { passive: true });
+    window.addEventListener("resize", read);
+    return () => {
+      target.removeEventListener("scroll", read);
+      window.removeEventListener("resize", read);
+    };
+  }, [rawProgress]);
 
   // Scrollspy: highlights the nav chip of the section crossing the middle of the viewport
   useEffect(() => {
@@ -69,9 +93,9 @@ export function DashboardAnalytics() {
   const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return (
-    <div className="space-y-16 pb-32">
+    <div ref={rootRef} className="space-y-16 pb-32">
       {/* Sticky command bar: title, range, section nav, scroll progress */}
-      <div className="sticky top-[4.5rem] z-30 overflow-hidden rounded-2xl border border-neutral-900/[0.08] bg-white/55 shadow-[0_8px_30px_rgba(0,0,0,0.04)] backdrop-blur-xl">
+      <div className="sticky top-2 z-30 overflow-hidden rounded-2xl border border-neutral-900/[0.08] bg-white/55 shadow-[0_8px_30px_rgba(0,0,0,0.04)] backdrop-blur-xl">
         <div className="flex flex-col gap-3 px-4 pt-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-neutral-900">
             Analytics Overview
@@ -251,7 +275,7 @@ function Section({ id, children }: { id: string; children: ReactNode }) {
   const rgb = ACCENTS[s.accent];
 
   return (
-    <section id={id} className="scroll-mt-52 space-y-4">
+    <section id={id} className="scroll-mt-40 space-y-4">
       <header className="mb-2 flex items-center gap-3">
         <div
           className="grid size-10 shrink-0 place-items-center rounded-xl text-white"
