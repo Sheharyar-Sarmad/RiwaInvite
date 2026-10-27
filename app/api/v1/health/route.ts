@@ -1,6 +1,7 @@
 import { NextResponse, connection } from "next/server";
 import { sql } from "@/db/connections/postgres_connection";
 import { getRedisClient } from "@/db/connections/redis_connection";
+import settings from "@/config/settings_config";
 
 export async function GET() {
   // 1. Opt out of static rendering (Next.js 16 replacement for dynamic = 'force-dynamic')
@@ -28,7 +29,7 @@ export async function GET() {
           redis: "connected",
           latency_ms: latency,
           timestamp: new Date().toISOString(),
-          environment: process.env.NODE_ENV,
+          environment: settings().appPhase,
         },
         error: null,
       },

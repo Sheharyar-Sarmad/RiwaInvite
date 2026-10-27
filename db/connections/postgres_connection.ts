@@ -11,7 +11,7 @@ const globalForPostgres = globalThis as unknown as {
 
 function createPool() {
   // This log will only show if a genuinely new pool is created
-  if (process.env.NODE_ENV !== 'production') {
+  if (config.appPhase !== 'production') {
     console.log(`[Postgres] Initializing connection pool (PID: ${process.pid})`);
   }
 
