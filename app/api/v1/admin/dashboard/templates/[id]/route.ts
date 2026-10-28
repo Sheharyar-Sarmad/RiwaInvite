@@ -6,6 +6,37 @@ import { UpdateTemplateSchema } from "@/lib/validations/admin";
 import { ZodError } from "zod";
 import { STATUS_CODE } from "@/lib/status_codes";
 
+// GET: Fetch a single template by ID
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const adminId = req.headers.get("x-admin-id");
+    if (!adminId) return NextResponse.json({ error: "Unauthorized" }, { status: STATUS_CODE.UNAUTHORIZED });
+
+    const { id } = await params;
+
+    // We join the templates table with template_bodies to get the design_schema
+    const [template] = await sql`
+      SELECT t.*, c.name as category_name, tb.design_schema
+      FROM templates t
+      LEFT JOIN template_categories c ON t.category_id = c.id
+      LEFT JOIN template_bodies tb ON t.id = tb.template_id AND tb.version = 1
+      WHERE t.id = ${id}
+    `;
+
+    if (!template) {
+      return NextResponse.json({ status: "error", message: "Template not found" }, { status: STATUS_CODE.NOT_FOUND });
+    }
+
+    return NextResponse.json({ status: "success", data: template }, { status: STATUS_CODE.OK });
+  } catch (error: any) {
+    console.error("[GET_SINGLE_TEMPLATE_ERROR]", error);
+    return NextResponse.json({ status: "error", message: "Internal server error" }, { status: STATUS_CODE.INTERNAL_SERVER_ERROR });
+  }
+}
+
 // PATCH: Update Template Metadata
 // FIX 1: params is now typed as a Promise
 export async function PATCH(

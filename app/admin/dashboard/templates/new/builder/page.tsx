@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import ElementorBuilder from "@/components/admin/sections/templates/ElementorBuilder";
+import {ElementorBuilder} from "@/components/admin/sections/templates/ElementorBuilder";
 
 export const instant = false;
 

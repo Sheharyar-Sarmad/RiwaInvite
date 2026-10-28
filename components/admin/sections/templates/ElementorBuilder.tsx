@@ -754,7 +754,8 @@ function ShadowSection({ api }: { api: StyleApi }) {
 /* Builder                                                                    */
 /* ========================================================================== */
 
-export function ElementorBuilder() {
+// 1. ADDED initialTemplateId prop
+export function ElementorBuilder({ initialTemplateId }: { initialTemplateId?: string }) {
   const router = useRouter();
   const cloud = useCloudinary();
   const { categories, refetch: refetchCats } = useCategories();
@@ -823,8 +824,8 @@ export function ElementorBuilder() {
   const def = selected ? REGISTRY[selected.type] : undefined;
 
   // ---- template meta (database fields) ----
-  // ADDED: templateId state to switch between Create and Update mode
-  const [templateId, setTemplateId] = React.useState<string | null>(null);
+  // 2. INITIALIZE with initialTemplateId
+  const [templateId, setTemplateId] = React.useState<string | null>(initialTemplateId || null);
   
   const [name, setName] = React.useState("Untitled Template");
   const [description, setDescription] = React.useState("");
@@ -850,6 +851,52 @@ export function ElementorBuilder() {
   const [catModal, setCatModal] = React.useState(false);
   const [dropIndex, setDropIndex] = React.useState<number | null>(null);
   const canvasRef = React.useRef<HTMLDivElement>(null);
+
+  // 3. ADDED Fetch Template Logic
+  React.useEffect(() => {
+    if (!initialTemplateId) return;
+
+    const fetchTemplate = async () => {
+      try {
+        const res = await apiClient.get(`/admin/dashboard/templates/${initialTemplateId}`);
+        const data = res.data.data;
+
+        setName(data.name || "Untitled Template");
+        setDescription(data.description || "");
+        setCategoryId(data.category_id || "");
+        setThumbnailUrl(data.thumbnail_url || "");
+        setIsPremium(data.is_premium || false);
+        setPrice(String(data.price || 0));
+        setGalleryUrls(data.gallery_urls || []);
+        setVideoUrls(data.video_urls || []);
+        setMusicUrls(data.music_urls || []);
+
+        if (data.core_names_config?.bride) {
+          setCoreNames({
+            bride: data.core_names_config.bride.label || "",
+            groom: data.core_names_config.groom.label || "",
+          });
+        }
+
+        if (data.design_schema) {
+          if (data.design_schema.pageSettings) {
+            setPageSettings(data.design_schema.pageSettings);
+          }
+          if (data.design_schema.elements) {
+            setElementsState(data.design_schema.elements);
+            elRef.current = data.design_schema.elements;
+          }
+        }
+        
+        toast.add({ title: "Success", description: "Template data loaded successfully.", type: "success" });
+      } catch (error: any) {
+        console.error("LOAD ERROR DETAILS:", error.response?.data || error.message);
+        toast.add({ title: "Error", description: "Failed to load template data.", type: "error" });
+      }
+    };
+
+    fetchTemplate();
+  }, [initialTemplateId]);
 
   /* ---- element mutations ---- */
   const insertAt = (w: WidgetDefinition, index: number) => {
@@ -1160,8 +1207,6 @@ export function ElementorBuilder() {
           type: "success",
         });
       }
-      
-      // NOTE: Removed router.push() here to stop the RSC payload error and keep you on the page.
       
     } catch (error: any) {
       console.error("SAVE ERROR DETAILS:", error.response?.data || error.message);
