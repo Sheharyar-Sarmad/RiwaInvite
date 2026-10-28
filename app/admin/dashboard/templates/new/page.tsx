@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -5,6 +6,11 @@ import { LayoutTemplate, FolderPlus, ArrowRight } from "lucide-react";
 import { CategoryModalTrigger } from "@/components/admin/sections/templates/CategoryModalTrigger";
 
 export const instant = false;
+
+export const metadata: Metadata = {
+  title: "Create New · Riwainvite",
+  description: "Create a new invitation category or launch the visual builder to design a new template.",
+};
 
 export default async function NewTemplatePage() {
   const h = await headers();

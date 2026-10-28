@@ -145,6 +145,9 @@ export const UpdateTemplateSchema = z
     price: z.number().min(0).optional(),
     custom_slug_price: z.number().min(0).optional(),
     status: z.enum(["draft", "published", "archived"]).optional(),
+    
+    // ADD THIS LINE:
+    design_schema: designSchemaSchema.optional(),
   })
   .strict();
   

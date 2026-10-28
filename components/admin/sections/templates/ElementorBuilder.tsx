@@ -755,7 +755,11 @@ function ShadowSection({ api }: { api: StyleApi }) {
 /* ========================================================================== */
 
 // 1. ADDED initialTemplateId prop
-export function ElementorBuilder({ initialTemplateId }: { initialTemplateId?: string }) {
+export function ElementorBuilder({
+  initialTemplateId,
+}: {
+  initialTemplateId?: string;
+}) {
   const router = useRouter();
   const cloud = useCloudinary();
   const { categories, refetch: refetchCats } = useCategories();
@@ -825,14 +829,17 @@ export function ElementorBuilder({ initialTemplateId }: { initialTemplateId?: st
 
   // ---- template meta (database fields) ----
   // 2. INITIALIZE with initialTemplateId
-  const [templateId, setTemplateId] = React.useState<string | null>(initialTemplateId || null);
-  
+  const [templateId, setTemplateId] = React.useState<string | null>(
+    initialTemplateId || null,
+  );
+
   const [name, setName] = React.useState("Untitled Template");
   const [description, setDescription] = React.useState("");
   const [categoryId, setCategoryId] = React.useState("");
   const [thumbnailUrl, setThumbnailUrl] = React.useState("");
   const [isPremium, setIsPremium] = React.useState(false);
   const [price, setPrice] = React.useState("0");
+  const [status, setStatus] = React.useState<"draft" | "published">("draft");
   const [coreNames, setCoreNames] = React.useState({ bride: "", groom: "" });
   const [galleryUrls, setGalleryUrls] = React.useState<string[]>([]);
   const [videoUrls, setVideoUrls] = React.useState<string[]>([]);
@@ -858,13 +865,16 @@ export function ElementorBuilder({ initialTemplateId }: { initialTemplateId?: st
 
     const fetchTemplate = async () => {
       try {
-        const res = await apiClient.get(`/admin/dashboard/templates/${initialTemplateId}`);
+        const res = await apiClient.get(
+          `/admin/dashboard/templates/${initialTemplateId}`,
+        );
         const data = res.data.data;
 
         setName(data.name || "Untitled Template");
         setDescription(data.description || "");
         setCategoryId(data.category_id || "");
         setThumbnailUrl(data.thumbnail_url || "");
+        setStatus(data.status === "published" ? "published" : "draft");
         setIsPremium(data.is_premium || false);
         setPrice(String(data.price || 0));
         setGalleryUrls(data.gallery_urls || []);
@@ -887,11 +897,22 @@ export function ElementorBuilder({ initialTemplateId }: { initialTemplateId?: st
             elRef.current = data.design_schema.elements;
           }
         }
-        
-        toast.add({ title: "Success", description: "Template data loaded successfully.", type: "success" });
+
+        toast.add({
+          title: "Success",
+          description: "Template data loaded successfully.",
+          type: "success",
+        });
       } catch (error: any) {
-        console.error("LOAD ERROR DETAILS:", error.response?.data || error.message);
-        toast.add({ title: "Error", description: "Failed to load template data.", type: "error" });
+        console.error(
+          "LOAD ERROR DETAILS:",
+          error.response?.data || error.message,
+        );
+        toast.add({
+          title: "Error",
+          description: "Failed to load template data.",
+          type: "error",
+        });
       }
     };
 
@@ -1123,11 +1144,17 @@ export function ElementorBuilder({ initialTemplateId }: { initialTemplateId?: st
 
   /* ---- save ---- */
   const handleSave = async () => {
-    if (!name.trim() || !categoryId) {
+    // List every required field that is still empty so the user knows exactly what to fix.
+    const missing: string[] = [];
+    if (!name.trim()) missing.push("Template name");
+    if (!categoryId) missing.push("Template category");
+    if (!thumbnailUrl) missing.push("Thumbnail");
+    if (missing.length > 0) {
       setSelectedId(null);
+      setInspectorTab("content");
       return toast.add({
-        title: "Missing details",
-        description: "Name and category are required.",
+        title: "Missing required fields",
+        description: `Please fill in: ${missing.join(", ")}.`,
         type: "error",
       });
     }
@@ -1166,7 +1193,7 @@ export function ElementorBuilder({ initialTemplateId }: { initialTemplateId?: st
         },
       },
 
-      status: "draft",
+      status: status,
       design_schema: {
         pageSettings,
         elements: elements.map((e) => ({
@@ -1188,7 +1215,10 @@ export function ElementorBuilder({ initialTemplateId }: { initialTemplateId?: st
     try {
       if (templateId) {
         // --- UPDATE EXISTING ---
-        await apiClient.patch(`/admin/dashboard/templates/${templateId}`, payload);
+        await apiClient.patch(
+          `/admin/dashboard/templates/${templateId}`,
+          payload,
+        );
         toast.add({
           title: "Updated",
           description: "Template updated successfully.",
@@ -1200,16 +1230,18 @@ export function ElementorBuilder({ initialTemplateId }: { initialTemplateId?: st
         // Save the ID so the next click updates instead of creating
         const newId = res.data?.data?.template?.id;
         if (newId) setTemplateId(newId);
-        
+
         toast.add({
           title: "Created",
           description: "Template saved. You are now in edit mode.",
           type: "success",
         });
       }
-      
     } catch (error: any) {
-      console.error("SAVE ERROR DETAILS:", error.response?.data || error.message);
+      console.error(
+        "SAVE ERROR DETAILS:",
+        error.response?.data || error.message,
+      );
       const errorMsg =
         error.response?.data?.error?.[0]?.message ||
         error.response?.data?.message ||
@@ -1410,6 +1442,16 @@ export function ElementorBuilder({ initialTemplateId }: { initialTemplateId?: st
             <Eye className="size-4" />
             Preview
           </button>
+          <div className="w-36">
+            <AceternitySelect
+              value={status}
+              onChange={(v) => setStatus(v as "draft" | "published")}
+              options={[
+                { label: "Draft", value: "draft" },
+                { label: "Published", value: "published" },
+              ]}
+            />
+          </div>
           <button
             type="button"
             onClick={handleSave}
