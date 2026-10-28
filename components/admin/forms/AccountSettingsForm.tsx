@@ -102,7 +102,8 @@ export function AccountSettingsForm({ initialData }: AccountSettingsFormProps) {
 
   return (
     <MotionConfig reducedMotion="user">
-      <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="mx-auto max-w-4xl space-y-10 pb-28" noValidate>
+      {/* Changed max-w-4xl to w-full max-w-5xl */}
+      <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="mx-auto w-full max-w-5xl space-y-10 pb-28" noValidate>
         {/* Identity header */}
         <Panel delay={0}>
           <div className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:p-8">

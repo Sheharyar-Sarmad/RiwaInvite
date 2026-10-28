@@ -81,7 +81,8 @@ export default async function AccountSettingsPage({
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 pb-12">
+    // Changed max-w-4xl to max-w-5xl and added w-full to allow it to expand
+    <div className="mx-auto w-full max-w-5xl space-y-8 pb-12">
       <div>
         <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold tracking-tight text-neutral-900 sm:text-3xl">
           Account Settings
