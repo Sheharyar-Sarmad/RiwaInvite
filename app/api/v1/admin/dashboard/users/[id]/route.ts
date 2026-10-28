@@ -75,25 +75,18 @@ export async function DELETE(
 
   const { id } = await params;
 
-  // Body is optional — default mode is soft_delete
   let body: DeleteBody = {};
   try {
     body = (await req.json()) as DeleteBody;
-  } catch {
-    /* empty body → defaults */
-  }
+  } catch {}
 
-  const mode: DeleteMode =
-    body.mode === "deactivate" ? "deactivate" : "soft_delete";
+  const mode: DeleteMode = body.mode === "deactivate" ? "deactivate" : "soft_delete";
   const reason = body.reason?.trim() || null;
 
+  console.time("[TIMER] DELETE Transaction (DB)");
   try {
-    // FIXED: Added `tx: any` to resolve the implicit 'any' TypeScript error
     const result = await sql.begin<TxResult>(async (tx: any) => {
-      // 1. Lock the user row so concurrent requests can't race
-      const [user] = await tx<
-        { id: string; email: string; first_name: string; last_name: string }[]
-      >`
+      const [user] = await tx<{ id: string; email: string; first_name: string; last_name: string }[]>`
         SELECT id, email, first_name, last_name
         FROM users
         WHERE id = ${id}
@@ -101,71 +94,27 @@ export async function DELETE(
       `;
 
       if (!user) return { kind: "not_found" };
+      if (user.email.endsWith(DELETED_SUFFIX)) return { kind: "already_deleted", original_email: user.email };
 
-      if (user.email.endsWith(DELETED_SUFFIX)) {
-        return { kind: "already_deleted", original_email: user.email };
-      }
-
-      // 2. Snapshot blockers
-      const [blockers] = await tx<
-        {
-          active_subs: number;
-          past_due_subs: number;
-          pending_orders: number;
-          live_invites: number;
-        }[]
-      >`
+      const [blockers] = await tx<{ active_subs: number; past_due_subs: number; pending_orders: number; live_invites: number }[]>`
         SELECT
-          (SELECT COUNT(*)::int FROM user_subscriptions
-             WHERE user_id = ${id} AND status = 'active'   AND expires_at > now())  AS active_subs,
-          (SELECT COUNT(*)::int FROM user_subscriptions
-             WHERE user_id = ${id} AND status = 'past_due' AND expires_at > now())  AS past_due_subs,
-          (SELECT COUNT(*)::int FROM orders
-             WHERE user_id = ${id} AND status = 'pending')                          AS pending_orders,
-          (SELECT COUNT(*)::int FROM invitations
-             WHERE user_id = ${id} AND status = 'published'
-               AND (expires_at IS NULL OR expires_at > now()))                      AS live_invites
+          (SELECT COUNT(*)::int FROM user_subscriptions WHERE user_id = ${id} AND status = 'active'   AND expires_at > now())  AS active_subs,
+          (SELECT COUNT(*)::int FROM user_subscriptions WHERE user_id = ${id} AND status = 'past_due' AND expires_at > now())  AS past_due_subs,
+          (SELECT COUNT(*)::int FROM orders WHERE user_id = ${id} AND status = 'pending')                          AS pending_orders,
+          (SELECT COUNT(*)::int FROM invitations WHERE user_id = ${id} AND status = 'published' AND (expires_at IS NULL OR expires_at > now())) AS live_invites
       `;
 
-      // ── DEACTIVATE ────────────────────────────────────────
       if (mode === "deactivate") {
-        const cancelled = await tx`
-          UPDATE user_subscriptions
-          SET status = 'canceled', updated_at = now()
-          WHERE user_id = ${id} AND status IN ('active','past_due')
-          RETURNING id
-        `;
-
-        const revoked = await tx`
-          DELETE FROM user_sessions
-          WHERE user_id = ${id}
-          RETURNING id
-        `;
-
+        const cancelled = await tx`UPDATE user_subscriptions SET status = 'canceled', updated_at = now() WHERE user_id = ${id} AND status IN ('active','past_due') RETURNING id`;
+        const revoked = await tx`DELETE FROM user_sessions WHERE user_id = ${id} RETURNING id`;
         await tx`
           INSERT INTO admin_notifications (admin_id, type, title, message)
-          VALUES (
-            ${adminId},
-            'user',
-            'User deactivated',
-            ${`Deactivated ${user.email}` + (reason ? ` — reason: ${reason}` : "")}
-          )
+          VALUES (${adminId}, 'user', 'User deactivated', ${`Deactivated ${user.email}` + (reason ? ` — reason: ${reason}` : "")})
         `;
-
-        return {
-          kind: "deactivated",
-          original_email: user.email,
-          cancelled_subscriptions: cancelled.length,
-          revoked_sessions: revoked.length,
-        };
+        return { kind: "deactivated", original_email: user.email, cancelled_subscriptions: cancelled.length, revoked_sessions: revoked.length };
       }
 
-      // ── SOFT DELETE ───────────────────────────────────────
-      const blocked =
-        blockers.active_subs > 0 ||
-        blockers.past_due_subs > 0 ||
-        blockers.pending_orders > 0;
-
+      const blocked = blockers.active_subs > 0 || blockers.past_due_subs > 0 || blockers.pending_orders > 0;
       if (blocked) {
         return {
           kind: "blocked",
@@ -180,133 +129,70 @@ export async function DELETE(
 
       const deletedEmail = `deleted-${id}${DELETED_SUFFIX}`;
 
-      // 2a. Anonymize PII
       await tx`
         UPDATE users
-        SET email        = ${deletedEmail},
-            first_name   = 'Deleted',
-            last_name    = 'User',
-            phone_number = NULL,
-            password     = '!'
+        SET email = ${deletedEmail}, first_name = 'Deleted', last_name = 'User', phone_number = NULL, password = '!'
         WHERE id = ${id}
       `;
 
-      // 2b. Revoke sessions
-      const revoked = await tx`
-        DELETE FROM user_sessions
-        WHERE user_id = ${id}
-        RETURNING id
-      `;
+      const revoked = await tx`DELETE FROM user_sessions WHERE user_id = ${id} RETURNING id`;
+      const archived = await tx`UPDATE invitations SET status = 'archived', updated_at = now() WHERE user_id = ${id} AND status <> 'archived' RETURNING id`;
+      const cancelled = await tx`UPDATE user_subscriptions SET status = 'canceled', updated_at = now() WHERE user_id = ${id} AND status IN ('active','past_due') RETURNING id`;
 
-      // 2c. Archive invitations so guests don't hit stale pages
-      const archived = await tx`
-        UPDATE invitations
-        SET status = 'archived', updated_at = now()
-        WHERE user_id = ${id} AND status <> 'archived'
-        RETURNING id
-      `;
-
-      // 2d. Clean up any leftover active/past_due subs
-      const cancelled = await tx`
-        UPDATE user_subscriptions
-        SET status = 'canceled', updated_at = now()
-        WHERE user_id = ${id} AND status IN ('active','past_due')
-        RETURNING id
-      `;
-
-      // 2e. Audit
       await tx`
         INSERT INTO admin_notifications (admin_id, type, title, message)
-        VALUES (
-          ${adminId},
-          'user',
-          'User deleted',
-          ${`Soft-deleted ${user.email}` + (reason ? ` — reason: ${reason}` : "")}
-        )
+        VALUES (${adminId}, 'user', 'User deleted', ${`Soft-deleted ${user.email}` + (reason ? ` — reason: ${reason}` : "")})
       `;
 
-      return {
-        kind: "deleted",
-        original_email: user.email,
-        archived_invitations: archived.length,
-        cancelled_subscriptions: cancelled.length,
-        revoked_sessions: revoked.length,
-      };
+      return { kind: "deleted", original_email: user.email, archived_invitations: archived.length, cancelled_subscriptions: cancelled.length, revoked_sessions: revoked.length };
     });
+    console.timeEnd("[TIMER] DELETE Transaction (DB)");
 
-    // ── Post-transaction responses ────────────────────────
     if (result.kind === "not_found") {
-      return NextResponse.json(
-        { error: "User not found", message: "User not found", status: "error" },
-        { status: STATUS_CODE.NOT_FOUND },
-      );
+      return NextResponse.json({ error: "User not found", message: "User not found", status: "error" }, { status: STATUS_CODE.NOT_FOUND });
     }
 
     if (result.kind === "already_deleted") {
-      return NextResponse.json(
-        {
-          error: "ALREADY_DELETED",
-          message: "This account has already been anonymized.",
-          status: "error",
-        },
-        { status: STATUS_CODE.CONFLICT },
-      );
+      return NextResponse.json({ error: "ALREADY_DELETED", message: "This account has already been anonymized.", status: "error" }, { status: STATUS_CODE.CONFLICT });
     }
 
     if (result.kind === "blocked") {
-      return NextResponse.json(
-        {
-          error: "DELETION_BLOCKED",
-          message:
-            "This user still has active services. Deactivate the account, or resolve the blockers first.",
-          status: "error",
-          blockers: result.blockers,
-        },
-        { status: STATUS_CODE.CONFLICT },
-      );
+      return NextResponse.json({
+        error: "DELETION_BLOCKED",
+        message: "This user still has active services. Deactivate the account, or resolve the blockers first.",
+        status: "error",
+        blockers: result.blockers,
+      }, { status: STATUS_CODE.CONFLICT });
     }
 
-    // Invalidate caches on a real mutation
-    await Promise.all([
+    // ── 4. NON-BLOCKING Cache Invalidation ─────────────────────
+    console.time("[TIMER] Redis Cache Invalidation (Async)");
+    Promise.all([
       bumpUserListVersion(),
       delCacheKey(`users:detail:${id}`),
-    ]);
+    ]).then(() => console.timeEnd("[TIMER] Redis Cache Invalidation (Async)"))
+      .catch((err) => console.error("Cache invalidation error:", err));
 
     if (result.kind === "deactivated") {
       return NextResponse.json({
         status: "success",
         message: "User deactivated.",
-        data: {
-          id,
-          mode,
-          original_email: result.original_email,
-          cancelled_subscriptions: result.cancelled_subscriptions,
-          revoked_sessions: result.revoked_sessions,
-        },
+        data: { id, mode, original_email: result.original_email, cancelled_subscriptions: result.cancelled_subscriptions, revoked_sessions: result.revoked_sessions },
       });
     }
 
     return NextResponse.json({
       status: "success",
       message: "User deleted and anonymized.",
-      data: {
-        id,
-        mode,
-        original_email: result.original_email,
-        archived_invitations: result.archived_invitations,
-        cancelled_subscriptions: result.cancelled_subscriptions,
-        revoked_sessions: result.revoked_sessions,
-      },
+      data: { id, mode, original_email: result.original_email, archived_invitations: result.archived_invitations, cancelled_subscriptions: result.cancelled_subscriptions, revoked_sessions: result.revoked_sessions },
     });
+
   } catch (err: any) {
+    console.timeEnd("[TIMER] DELETE Transaction (DB)");
     console.error("DELETE /admin/dashboard/users/[id] error:", err);
     return NextResponse.json(
-      {
-        error: settings().isProduction ? "Internal server error" : err.message,
-        message: "Internal server error",
-        status: "error",
-      },
-      { status: STATUS_CODE.INTERNAL_SERVER_ERROR },
+      { error: settings().isProduction ? "Internal server error" : err.message, message: "Internal server error", status: "error" },
+      { status: STATUS_CODE.INTERNAL_SERVER_ERROR }
     );
   }
 }

@@ -404,3 +404,33 @@ CREATE INDEX IF NOT EXISTS idx_admin_notifications_unread
 
 CREATE INDEX IF NOT EXISTS idx_admin_notifications_created 
     ON admin_notifications(created_at DESC);
+
+-- 1. ORDERS: Speeds up COUNT(*) and MAX(created_at)
+CREATE INDEX IF NOT EXISTS idx_orders_user_created 
+  ON orders (user_id, created_at DESC);
+
+-- 2. INVITATIONS: Speeds up the COUNT(*) FILTER (WHERE status = 'published')
+CREATE INDEX IF NOT EXISTS idx_invitations_user_status 
+  ON invitations (user_id, status, expires_at);
+
+-- 3. USER_SUBSCRIPTIONS: Speeds up fetching the latest active plan
+CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user_expires 
+  ON user_subscriptions (user_id, expires_at DESC);
+
+-- 4. TEMPLATE_PURCHASES: Speeds up the purchase count
+-- (Your schema has UNIQUE(user_id, template_id), which covers this, 
+-- but adding an explicit index guarantees the planner uses it for counts)
+CREATE INDEX IF NOT EXISTS idx_template_purchases_user 
+  ON template_purchases (user_id);
+
+-- 5. USERS: Speeds up the search (ILIKE) and Deleted filter
+CREATE EXTENSION IF NOT EXISTS pg_trgm; -- Ensure this is enabled
+CREATE INDEX IF NOT EXISTS idx_users_search_trgm 
+  ON users USING GIN (
+    first_name gin_trgm_ops, 
+    last_name gin_trgm_ops, 
+    email gin_trgm_ops, 
+    phone_number gin_trgm_ops
+  );
+CREATE INDEX IF NOT EXISTS idx_users_deleted_marker 
+  ON users (id) WHERE email LIKE '%@deleted.riwainvite.local';
