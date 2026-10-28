@@ -155,37 +155,23 @@ export async function POST(req: NextRequest) {
       return { template, body: templateBody };
     });
 
-    // Invalidate Cache
     const redis = await getRedisClient();
     const keys = await redis.keys("admin:templates:*");
     if (keys.length > 0) await redis.del(keys);
 
     return NextResponse.json(
-      {
-        status: "success",
-        message: "Template created successfully",
-        data: result,
-      },
+      { status: "success", message: "Template created successfully", data: result },
       { status: STATUS_CODE.CREATED },
     );
   } catch (error: any) {
     if (error instanceof ZodError)
-      return NextResponse.json(
-        { status: "error", error: error.issues },
-        { status: STATUS_CODE.BAD_REQUEST },
-      );
+      return NextResponse.json({ status: "error", error: error.issues }, { status: STATUS_CODE.BAD_REQUEST });
     if (error.message === "CATEGORY_NOT_FOUND")
-      return NextResponse.json(
-        { status: "error", message: "Category not found" },
-        { status: STATUS_CODE.NOT_FOUND },
-      );
+      return NextResponse.json({ status: "error", message: "Category not found" }, { status: STATUS_CODE.NOT_FOUND });
+    
     console.error("[CREATE_TEMPLATE_ERROR]", error);
     return NextResponse.json(
-      {
-        status: "error",
-        message: "Internal server error",
-        error: error.message,
-      },
+      { status: "error", message: "Internal server error", error: error.message },
       { status: STATUS_CODE.INTERNAL_SERVER_ERROR },
     );
   }

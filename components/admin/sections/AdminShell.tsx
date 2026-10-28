@@ -17,6 +17,9 @@ import {
 import { useAdminNotifications } from "@/hooks/useAdminNotifications";
 
 export function AdminShell({ admin, children }: { admin: AdminSession; children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isBuilder = pathname?.includes("/builder"); // <--- NEW CHECK
+
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -59,6 +62,13 @@ export function AdminShell({ admin, children }: { admin: AdminSession; children:
   }, []);
 
   const mask = "radial-gradient(230px circle at var(--mx,-999px) var(--my,-999px), #000 0%, transparent 100%)";
+
+  // ==========================================
+  // THE MAGIC: If in builder, strip the shell!
+  // ==========================================
+  if (isBuilder) {
+    return <div className="h-[100dvh] w-full overflow-hidden bg-[#f3f4f6]">{children}</div>;
+  }
 
   return (
     <div
