@@ -30,6 +30,10 @@ class Settings {
   readonly rateLimitWindowMs: number;
   readonly rateLimitMaxRequests: number;
 
+  // AI Rate Limiting
+  readonly aiDailyLimit: number;
+  readonly aiMaxTokens: number;
+
   constructor() {
     // App
     this.appName = this.getRequired("APP_NAME");
@@ -39,7 +43,7 @@ class Settings {
       ["development", "production", "test"],
       "development",
     );
-    this.appUrl = this.getRequired("APP_URL")
+    this.appUrl = this.getRequired("APP_URL");
 
     // Databases
     this.postgresUrl = this.getRequired("POSTGRES_URL");
@@ -76,6 +80,9 @@ class Settings {
     // Rate Limiting
     this.rateLimitWindowMs = this.getNumber("RATE_LIMIT_WINDOW_MS", 900000);
     this.rateLimitMaxRequests = this.getNumber("RATE_LIMIT_MAX_REQUESTS", 100);
+    
+    this.aiDailyLimit = this.getNumber("AI_DAILY_LIMIT", 50); // 50 requests/day for free tier
+    this.aiMaxTokens = this.getNumber("AI_MAX_TOKENS", 2048);
   }
 
   // Convenience Helpers

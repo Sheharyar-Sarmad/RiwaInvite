@@ -1,6 +1,9 @@
 allowBuilds:
   '@tsparticles/engine': true
   bcrypt: true
+  core-js: false
   esbuild: true
+  onnxruntime-node: false
+  protobufjs: false
   sharp: true
   unrs-resolver: true
