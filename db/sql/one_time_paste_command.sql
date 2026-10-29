@@ -452,3 +452,15 @@ CREATE INDEX IF NOT EXISTS idx_plans_name_trgm
 -- 4. Partial index for active plans
 CREATE INDEX IF NOT EXISTS idx_plans_is_active 
   ON plans (is_active) WHERE is_active = TRUE;
+
+-- ==========================================
+-- 6. SUBSCRIPTIONS TABLE OPTIMIZATION
+-- ==========================================
+
+-- 1. Speeds up pagination sorting (ORDER BY created_at DESC)
+CREATE INDEX IF NOT EXISTS idx_user_subs_created_at 
+  ON user_subscriptions (created_at DESC);
+
+-- 2. Superpower Index: Speeds up filtering by status AND sorting by date in one step
+CREATE INDEX IF NOT EXISTS idx_user_subs_status_created 
+  ON user_subscriptions (status, created_at DESC);
