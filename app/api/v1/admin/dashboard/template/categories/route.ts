@@ -87,6 +87,21 @@ export async function POST(req: NextRequest) {
       RETURNING *
     `;
 
+    // Insert Admin Notification (Safe: won't break the API if it fails)
+    try {
+      await sql`
+        INSERT INTO admin_notifications (admin_id, type, title, message)
+        VALUES (
+          ${adminId}, 
+          'system', 
+          'Category Created', 
+          ${`New category "${category.name}" was successfully created.`}
+        )
+      `;
+    } catch (notifError) {
+      console.warn("[NOTIFICATION_ERROR]", notifError);
+    }
+
     const redis = await getRedisClient();
     const keys = await redis.keys("admin:categories:*");
     if (keys.length > 0) await redis.del(keys);

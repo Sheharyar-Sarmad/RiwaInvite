@@ -1,4 +1,3 @@
-// app/api/v1/admin/dashboard/template/categories/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/db/connections/postgres_connection";
 import { getRedisClient } from "@/db/connections/redis_connection";
@@ -49,6 +48,21 @@ export async function PATCH(
       );
     }
 
+    // Insert Admin Notification (Safe: won't break the API if it fails)
+    try {
+      await sql`
+        INSERT INTO admin_notifications (admin_id, type, title, message)
+        VALUES (
+          ${adminId}, 
+          'system', 
+          'Category Updated', 
+          ${`Category "${updatedCategory.name}" was updated.`}
+        )
+      `;
+    } catch (notifError) {
+      console.warn("[NOTIFICATION_ERROR]", notifError);
+    }
+
     // Invalidate Redis Cache
     const redis = await getRedisClient();
     const cacheKeys = await redis.keys("admin:categories:*");
@@ -66,7 +80,7 @@ export async function PATCH(
         { status: STATUS_CODE.BAD_REQUEST },
       );
     }
-    // 23505 = Unique Violation (e.g. updating slug to one that already exists)
+    // 23505 = Unique Violation
     if (error.code === "23505") {
       return NextResponse.json(
         {
@@ -107,7 +121,7 @@ export async function DELETE(
     const [deletedCategory] = await sql`
       DELETE FROM template_categories 
       WHERE id = ${id} 
-      RETURNING id
+      RETURNING id, name
     `;
 
     if (!deletedCategory) {
@@ -115,6 +129,21 @@ export async function DELETE(
         { status: "error", message: "Category not found" },
         { status: STATUS_CODE.NOT_FOUND }
       );
+    }
+
+    // Insert Admin Notification (Safe: won't break the API if it fails)
+    try {
+      await sql`
+        INSERT INTO admin_notifications (admin_id, type, title, message)
+        VALUES (
+          ${adminId}, 
+          'alert', 
+          'Category Deleted', 
+          ${`Category "${deletedCategory.name}" was permanently deleted.`}
+        )
+      `;
+    } catch (notifError) {
+      console.warn("[NOTIFICATION_ERROR]", notifError);
     }
 
     // Invalidate Cache
@@ -135,7 +164,7 @@ export async function DELETE(
           message: "Cannot delete category because it is currently being used by one or more templates. Please delete or reassign those templates first.",
           error: "FOREIGN_KEY_VIOLATION",
         },
-        { status: STATUS_CODE.CONFLICT } // 409
+        { status: STATUS_CODE.CONFLICT }
       );
     }
 

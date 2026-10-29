@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
   const where = conditions.reduce((a, b) => sql`${a} AND ${b}`);
 
   try {
-        const [rows, countRows] = await Promise.all([
+    const [rows, countRows] = await Promise.all([
       sql`
         SELECT 
           p.*, 
@@ -78,6 +78,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // Added adminId extraction for the notification
+  const adminId = req.headers.get("x-admin-id");
+
   let body: unknown;
   try {
     body = await req.json();
@@ -97,6 +100,19 @@ export async function POST(req: NextRequest) {
       VALUES (${p.name}, ${p.description ?? null}, ${p.price}, ${p.duration_days}, ${p.max_simple_templates}, ${p.max_premium_templates}, ${p.allows_custom_slug}, ${p.is_active})
       RETURNING *
     `;
+
+    // NEW: Insert Admin Notification ONLY when created
+    if (adminId) {
+      await sql`
+        INSERT INTO admin_notifications (admin_id, type, title, message)
+        VALUES (
+          ${adminId}, 
+          'system', 
+          'Plan Created', 
+          ${`New subscription plan "${row.name}" was successfully created.`}
+        )
+      `;
+    }
 
     try {
       const redis = await getRedisClient();

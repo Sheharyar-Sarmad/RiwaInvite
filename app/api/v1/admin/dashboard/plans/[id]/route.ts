@@ -30,7 +30,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
+  const adminId = req.headers.get("x-admin-id");
   const { id } = await params;
+  
   if (!UUID_RE.test(id))
     return errorResponse(STATUS_CODE.BAD_REQUEST, "INVALID_ID", "Invalid plan id.");
 
@@ -72,6 +74,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (!row)
       return errorResponse(STATUS_CODE.NOT_FOUND, "NOT_FOUND", "Plan not found.");
 
+    // Insert Admin Notification
+    if (adminId) {
+      await sql`
+        INSERT INTO admin_notifications (admin_id, type, title, message)
+        VALUES (
+          ${adminId}, 
+          'system', 
+          'Plan Updated', 
+          ${`Plan "${row.name}" was updated.`}
+        )
+      `;
+    }
+
     try {
       const redis = await getRedisClient();
       const keys = await redis.keys("plans:*");
@@ -86,8 +101,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, { params }: Params) {
+  const adminId = req.headers.get("x-admin-id");
   const { id } = await params;
+  
   if (!UUID_RE.test(id)) {
     return errorResponse(STATUS_CODE.BAD_REQUEST, "INVALID_ID", "Invalid plan id.");
   }
@@ -105,10 +122,24 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       );
     }
 
-    const [row] = await sql`DELETE FROM plans WHERE id = ${id} RETURNING id`;
+    // Changed RETURNING to include name for the notification message
+    const [row] = await sql`DELETE FROM plans WHERE id = ${id} RETURNING id, name`;
 
     if (!row) {
       return errorResponse(STATUS_CODE.NOT_FOUND, "NOT_FOUND", "Plan not found.");
+    }
+
+    // Insert Admin Notification
+    if (adminId) {
+      await sql`
+        INSERT INTO admin_notifications (admin_id, type, title, message)
+        VALUES (
+          ${adminId}, 
+          'alert', 
+          'Plan Deleted', 
+          ${`Plan "${row.name}" was permanently deleted.`}
+        )
+      `;
     }
 
     try {

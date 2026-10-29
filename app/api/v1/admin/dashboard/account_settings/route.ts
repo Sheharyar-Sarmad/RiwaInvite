@@ -3,16 +3,11 @@ import { sql } from "@/db/connections/postgres_connection";
 import { updateAccountSettingsSchema } from "@/lib/validations/admin";
 import { verifyPassword, hashPassword } from "@/lib/auth";
 import { pgErrorToResponse } from "@/lib/api/errors";
-import { getRedisClient } from "@/db/connections/redis_connection"; // <-- Updated Import
+import { getRedisClient } from "@/db/connections/redis_connection";
 import { STATUS_CODE } from "@/lib/status_codes";
 
-/**
- * GET: Fetch Admin Details (Excludes Password)
- * Uses Redis Cache-Aside pattern.
- */
 export async function GET(req: NextRequest) {
   try {
-    // 1. Middleware (proxy.ts) already verified the session and injected the header
     const adminId = req.headers.get("x-admin-id");
     if (!adminId) {
       return NextResponse.json(
@@ -21,13 +16,9 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 2. Initialize Redis Client
     const redis = await getRedisClient();
     const cacheKey = `admin_details:${adminId}`;
 
-    // 3. Check Redis Cache First (Fast Path)
-    // If Redis goes down, we could wrap this in a try/catch to fallback to Postgres,
-    // but for now, we let it fail fast.
     const cachedAdmin = await redis.get(cacheKey);
     if (cachedAdmin) {
       return NextResponse.json(
@@ -36,7 +27,6 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 4. Cache Miss: Query Postgres (Explicitly selecting everything EXCEPT password)
     const [admin] = await sql`
       SELECT 
         id, 
@@ -58,26 +48,18 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 5. Save to Redis (TTL: 15 minutes / 900 seconds)
-    // Note: `setEx` is the correct casing in node-redis v4+
     await redis.setEx(cacheKey, 900, JSON.stringify(admin));
 
-    // 6. Return Response
     return NextResponse.json(
       { admin }, 
       { status: STATUS_CODE.OK }
     );
 
   } catch (error: any) {
-    // Optional: Add specific Redis error handling here if needed
     return pgErrorToResponse(error);
   }
 }
 
-/**
- * PATCH: Update Admin Settings
- * Requires currentPassword to authorize changes.
- */
 export async function PATCH(req: NextRequest) {
   try {
     const adminId = req.headers.get("x-admin-id");
@@ -88,7 +70,6 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    // 1. Zod Validation
     const body = await req.json();
     const validation = updateAccountSettingsSchema.safeParse(body);
 
@@ -101,7 +82,6 @@ export async function PATCH(req: NextRequest) {
 
     const { currentPassword, firstName, lastName, email, phoneNumber, newPassword } = validation.data;
 
-    // 2. Fetch Password from DB to verify
     const [admin] = await sql`
       SELECT password FROM admins WHERE id = ${adminId} LIMIT 1
     `;
@@ -113,7 +93,6 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    // 3. Verify Current Password
     const isPasswordValid = await verifyPassword(currentPassword, admin.password);
     if (!isPasswordValid) {
       return NextResponse.json(
@@ -122,7 +101,6 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    // 4. Build Dynamic Update Object
     const updateData: Record<string, any> = {};
     if (firstName) updateData.first_name = firstName;
     if (lastName) updateData.last_name = lastName;
@@ -140,7 +118,6 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    // 5. Execute Update
     const updatedAdmin = await sql`
       UPDATE admins
       SET ${sql(updateData)}
@@ -148,18 +125,26 @@ export async function PATCH(req: NextRequest) {
       RETURNING id, account_name, first_name, last_name, email, phone_number, created_at
     `;
 
-    // 6. Cache Invalidation
+    // Insert Admin Notification
+    await sql`
+      INSERT INTO admin_notifications (admin_id, type, title, message)
+      VALUES (
+        ${adminId}, 
+        'system', 
+        'Account Updated', 
+        'Your admin account details were successfully updated.'
+      )
+    `;
+
     const redis = await getRedisClient();
     await redis.del(`admin_details:${adminId}`);
 
-    // 7. Return Updated Details (Never return the password)
     return NextResponse.json({
       message: "Account settings updated successfully",
       admin: updatedAdmin[0]
     }, { status: STATUS_CODE.OK });
 
   } catch (error: any) {
-    // Catches Unique Violations (23505) e.g., new email already exists
     return pgErrorToResponse(error);
   }
 }
