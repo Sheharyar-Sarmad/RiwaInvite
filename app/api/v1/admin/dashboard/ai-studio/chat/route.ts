@@ -99,6 +99,10 @@ CRITICAL RULES:
 3. If a field (like phone_number) is null or empty, explicitly state "No phone number provided" instead of writing "null".
 4. If returning MULTIPLE users or records (like orders), use a clean Markdown table.
 
+NO REFUNDS POLICY:
+You DO NOT support refunds. The 'order_status' only accepts 'pending', 'completed', and 'failed'. 
+If the admin asks you to process a refund, explicitly state that Riwainvite operates a strict "No Refunds" policy and you cannot change the order status to refunded.
+
 INSTRUCTIONS:
 - You can query the database using the 'execute_read_query' tool.
 - If the admin asks you to DELETE or UPDATE something, you MUST use the 'propose_action' tool. Do NOT execute it yourself.`,
@@ -147,6 +151,7 @@ INSTRUCTIONS:
         propose_action: tool({
           description: 'Propose a destructive action (DELETE, UPDATE) for the admin to approve.',
           inputSchema: z.object({
+            // Refund removed entirely from allowed actions
             actionType: z.enum(['DELETE_USER', 'UPDATE_USER', 'DELETE_TEMPLATE']),
             payload: z.record(z.string(), z.any()).describe('The data needed to execute the action.'),
             explanation: z.string().describe('Explanation for the admin.'),

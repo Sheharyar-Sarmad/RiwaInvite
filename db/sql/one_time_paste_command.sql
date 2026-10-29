@@ -10,7 +10,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 DO $$ BEGIN
-    CREATE TYPE order_status AS ENUM ('pending', 'completed', 'failed', 'refunded');
+    CREATE TYPE order_status AS ENUM ('pending', 'completed', 'failed');
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 DO $$ BEGIN

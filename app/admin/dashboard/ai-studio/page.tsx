@@ -1,5 +1,12 @@
 import { AIStudioChat } from "@/components/admin/sections/ai-studio/AIStudioChat";
 import { Sparkles } from "lucide-react";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "AI Studio | Admin Dashboard",
+  description:
+    "Analyze your database, generate schemas, and manage the RiwaInvite platform using AI-powered natural language tools.",
+};
 
 export default function AIStudioPage() {
   return (
@@ -11,7 +18,8 @@ export default function AIStudioPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">AI Studio</h1>
           <p className="text-sm text-gray-500">
-            Analyze database, generate schemas, and manage the platform with natural language.
+            Analyze database, generate schemas, and manage the platform with
+            natural language.
           </p>
         </div>
       </div>
