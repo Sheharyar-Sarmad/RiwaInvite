@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/db/connections/postgres_connection";
-import { getRedisClient } from "@/db/connections/redis_connection"; // Adjust import path to your redis file
+import { getRedisClient } from "@/db/connections/redis_connection";
 import { errorResponse, pgErrorToResponse } from "@/lib/api/errors";
 import { STATUS_CODE } from "@/lib/status_codes";
 import { createPlanSchema, listPlansQuerySchema } from "@/lib/validations/plan";
@@ -19,28 +19,25 @@ export async function GET(req: NextRequest) {
     Object.fromEntries(req.nextUrl.searchParams),
   );
   if (!parsed.success)
-    return errorResponse(
-      STATUS_CODE.BAD_REQUEST,
-      "VALIDATION_ERROR",
-      "Invalid query.",
-      parsed.error.issues,
-    );
+    return errorResponse(STATUS_CODE.BAD_REQUEST, "VALIDATION_ERROR", "Invalid query.", parsed.error.issues);
 
   const { page, limit, search, is_active } = parsed.data;
-  const redis = await getRedisClient();
-
-  // Create a unique cache key based on the query
   const cacheKey = `plans:admin:${page}:${limit}:${search || "none"}:${is_active ?? "all"}`;
 
-  // 1. Check Redis
-  const cachedData = await redis.get(cacheKey);
-  if (cachedData) {
-    return NextResponse.json(JSON.parse(cachedData), {
-      status: STATUS_CODE.OK,
-    });
+  let redis;
+  let cachedData = null;
+  
+  try {
+    redis = await getRedisClient();
+    cachedData = await redis.get(cacheKey);
+  } catch (e) {
+    console.warn("[Redis] Failed to fetch cache, falling back to Postgres:", e);
   }
 
-  // 2. Query Postgres
+  if (cachedData) {
+    return NextResponse.json(JSON.parse(cachedData), { status: STATUS_CODE.OK });
+  }
+
   const offset = (page - 1) * limit;
   const conditions = [sql`TRUE`];
   if (is_active !== undefined) conditions.push(sql`is_active = ${is_active}`);
@@ -48,8 +45,15 @@ export async function GET(req: NextRequest) {
   const where = conditions.reduce((a, b) => sql`${a} AND ${b}`);
 
   try {
-    const [rows, countRows] = await Promise.all([
-      sql`SELECT * FROM plans WHERE ${where} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+        const [rows, countRows] = await Promise.all([
+      sql`
+        SELECT 
+          p.*, 
+          (SELECT COUNT(*)::int FROM user_subscriptions us WHERE us.plan_id = p.id) as active_subscribers
+        FROM plans p
+        WHERE ${where} 
+        ORDER BY p.created_at DESC LIMIT ${limit} OFFSET ${offset}
+      `,
       sql`SELECT COUNT(*)::int AS total FROM plans WHERE ${where}`,
     ]);
 
@@ -59,8 +63,13 @@ export async function GET(req: NextRequest) {
       meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
     };
 
-    // 3. Save to Redis (Expire in 5 minutes = 300s)
-    await redis.setEx(cacheKey, 300, JSON.stringify(responseData));
+    if (redis) {
+      try {
+        await redis.setEx(cacheKey, 300, JSON.stringify(responseData));
+      } catch (e) {
+        console.warn("[Redis] Failed to save cache:", e);
+      }
+    }
 
     return NextResponse.json(responseData, { status: STATUS_CODE.OK });
   } catch (err) {
@@ -73,21 +82,12 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return errorResponse(
-      STATUS_CODE.BAD_REQUEST,
-      "INVALID_JSON",
-      "Invalid JSON.",
-    );
+    return errorResponse(STATUS_CODE.BAD_REQUEST, "INVALID_JSON", "Invalid JSON.");
   }
 
   const parsed = createPlanSchema.safeParse(body);
   if (!parsed.success)
-    return errorResponse(
-      STATUS_CODE.BAD_REQUEST,
-      "VALIDATION_ERROR",
-      "Invalid payload.",
-      parsed.error.issues,
-    );
+    return errorResponse(STATUS_CODE.BAD_REQUEST, "VALIDATION_ERROR", "Invalid payload.", parsed.error.issues);
 
   const p = parsed.data;
 
@@ -98,15 +98,15 @@ export async function POST(req: NextRequest) {
       RETURNING *
     `;
 
-    // INVALIDATE CACHE: Delete all admin plans keys so the next GET pulls fresh data
-    const redis = await getRedisClient();
-    const keys = await redis.keys("plans:admin:*");
-    if (keys.length > 0) await redis.del(keys);
+    try {
+      const redis = await getRedisClient();
+      const keys = await redis.keys("plans:*");
+      if (keys.length > 0) await redis.del(keys);
+    } catch (e) {
+      console.warn("[Redis] Failed to invalidate cache:", e);
+    }
 
-    return NextResponse.json(
-      { data: serializePlan(row) },
-      { status: STATUS_CODE.CREATED },
-    );
+    return NextResponse.json({ data: serializePlan(row) }, { status: STATUS_CODE.CREATED });
   } catch (err) {
     return pgErrorToResponse(err);
   }

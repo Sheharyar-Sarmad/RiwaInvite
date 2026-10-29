@@ -16,7 +16,7 @@ function createPool() {
   }
 
   return postgres(config.postgresUrl, {
-    max: config.dbPoolMax ?? 10,
+    max: config.dbPoolMax ?? 50,
     idle_timeout: 30,       // Keep connections open for 30s to avoid rapid reconnects
     connect_timeout: 30,    // Give Neon time to wake up from sleep
     prepare: false,         // CRITICAL for Neon

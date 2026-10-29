@@ -434,3 +434,21 @@ CREATE INDEX IF NOT EXISTS idx_users_search_trgm
   );
 CREATE INDEX IF NOT EXISTS idx_users_deleted_marker 
   ON users (id) WHERE email LIKE '%@deleted.riwainvite.local';
+
+-- 1. Index for the subquery count (CRITICAL)
+-- This makes counting active subscribers instant.
+CREATE INDEX IF NOT EXISTS idx_user_subscriptions_plan_id 
+  ON user_subscriptions (plan_id);
+
+-- 2. Index for sorting plans by date
+CREATE INDEX IF NOT EXISTS idx_plans_created_at 
+  ON plans (created_at DESC);
+
+-- 3. Trigram index for fast plan searching (ILIKE)
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX IF NOT EXISTS idx_plans_name_trgm 
+  ON plans USING GIN (name gin_trgm_ops);
+
+-- 4. Partial index for active plans
+CREATE INDEX IF NOT EXISTS idx_plans_is_active 
+  ON plans (is_active) WHERE is_active = TRUE;
