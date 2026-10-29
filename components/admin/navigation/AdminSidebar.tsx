@@ -25,6 +25,7 @@ import {
   CreditCard,
   RefreshCcw,
   CalendarCheck,
+  ShoppingCart,
   type LucideIcon,
 } from "lucide-react";
 import Image from "next/image";
@@ -45,7 +46,11 @@ export const NAV: NavGroup[] = [
     label: "Workspace",
     items: [
       { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
-      { label: "AI Studio", href: "/admin/dashboard/ai-studio", icon: Sparkles },
+      {
+        label: "AI Studio",
+        href: "/admin/dashboard/ai-studio",
+        icon: Sparkles,
+      },
     ],
   },
   {
@@ -72,8 +77,18 @@ export const NAV: NavGroup[] = [
     label: "Business",
     items: [
       { label: "Plans", href: "/admin/dashboard/plans", icon: CreditCard },
-      { label: "Subscriptions", href: "/admin/dashboard/subscriptions", icon: RefreshCcw },
+      {
+        label: "Subscriptions",
+        href: "/admin/dashboard/subscriptions",
+        icon: RefreshCcw,
+      },
       { label: "Orders", href: "/admin/dashboard/orders", icon: ShoppingBag },
+      {
+        label: "Purchases",
+        href: "/admin/dashboard/purchases",
+        icon: ShoppingCart,
+      }, 
+
       { label: "Users", href: "/admin/dashboard/users", icon: Users },
     ],
   },
@@ -235,7 +250,7 @@ function SidebarBody({
             </span>
           </div>
         )}
-        
+
         {onToggleCollapsed && (
           <button
             type="button"
@@ -250,7 +265,7 @@ function SidebarBody({
           </button>
         )}
       </div>
-      
+
       <div
         aria-hidden
         className="mx-4 h-px shrink-0 bg-gradient-to-r from-transparent via-orange-200 to-transparent"
@@ -356,7 +371,9 @@ function SidebarBody({
                           />
                         </span>
                         {!collapsed && (
-                          <span className="relative truncate">{item.label}</span>
+                          <span className="relative truncate">
+                            {item.label}
+                          </span>
                         )}
                       </Link>
                     </li>
@@ -375,7 +392,9 @@ function SidebarBody({
             <div className="relative shrink-0">
               <div
                 aria-hidden={!collapsed}
-                aria-label={collapsed ? `${displayName} · ${admin.email}` : undefined}
+                aria-label={
+                  collapsed ? `${displayName} · ${admin.email}` : undefined
+                }
                 className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${ORB_ON}`}
               >
                 {initial}
@@ -436,14 +455,19 @@ export function AdminSidebar({
   collapsed: boolean;
   onToggleCollapsed: () => void;
 }) {
-  const [logoutModal, setLogoutModal] = useState<{ open: boolean; allDevices: boolean }>({ open: false, allDevices: false });
+  const [logoutModal, setLogoutModal] = useState<{
+    open: boolean;
+    allDevices: boolean;
+  }>({ open: false, allDevices: false });
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const router = useRouter();
 
   const handleConfirmLogout = async () => {
     setIsLoggingOut(true);
     try {
-      await apiClient.post(`/admin/auth/logout${logoutModal.allDevices ? "?all=true" : ""}`);
+      await apiClient.post(
+        `/admin/auth/logout${logoutModal.allDevices ? "?all=true" : ""}`,
+      );
     } catch {
       /* ignore */
     } finally {
@@ -465,7 +489,9 @@ export function AdminSidebar({
             collapsed={collapsed}
             layoutId="active-nav"
             onToggleCollapsed={onToggleCollapsed}
-            onLogoutRequest={(allDevices) => setLogoutModal({ open: true, allDevices })}
+            onLogoutRequest={(allDevices) =>
+              setLogoutModal({ open: true, allDevices })
+            }
           />
         </Panel>
       </aside>
@@ -478,7 +504,10 @@ export function AdminSidebar({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => !isLoggingOut && setLogoutModal({ open: false, allDevices: false })}
+              onClick={() =>
+                !isLoggingOut &&
+                setLogoutModal({ open: false, allDevices: false })
+              }
               className="absolute inset-0 bg-orange-950/25 backdrop-blur-sm"
             />
             <motion.div
@@ -491,7 +520,9 @@ export function AdminSidebar({
                 <ShieldOff className="size-6" />
               </div>
               <h2 className="font-[family-name:var(--font-display)] text-lg font-semibold text-neutral-900">
-                {logoutModal.allDevices ? "Sign out from all devices?" : "Sign out?"}
+                {logoutModal.allDevices
+                  ? "Sign out from all devices?"
+                  : "Sign out?"}
               </h2>
               <p className="mt-1 text-sm text-neutral-500">
                 {logoutModal.allDevices
@@ -500,7 +531,9 @@ export function AdminSidebar({
               </p>
               <div className="mt-6 flex gap-3">
                 <button
-                  onClick={() => setLogoutModal({ open: false, allDevices: false })}
+                  onClick={() =>
+                    setLogoutModal({ open: false, allDevices: false })
+                  }
                   disabled={isLoggingOut}
                   className="flex-1 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50 disabled:opacity-50"
                 >
@@ -511,7 +544,11 @@ export function AdminSidebar({
                   disabled={isLoggingOut}
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-500/30 transition-all hover:bg-rose-500 active:scale-[0.98] disabled:opacity-70"
                 >
-                  {isLoggingOut ? <Loader2 className="size-4 animate-spin" /> : "Sign out"}
+                  {isLoggingOut ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    "Sign out"
+                  )}
                 </button>
               </div>
             </motion.div>
@@ -526,9 +563,12 @@ export function AdminMobileNav({ admin }: { admin: AdminSession }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
-  
+
   // Mobile also needs the logout modal logic
-  const [logoutModal, setLogoutModal] = useState<{ open: boolean; allDevices: boolean }>({ open: false, allDevices: false });
+  const [logoutModal, setLogoutModal] = useState<{
+    open: boolean;
+    allDevices: boolean;
+  }>({ open: false, allDevices: false });
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const router = useRouter();
 
@@ -559,9 +599,11 @@ export function AdminMobileNav({ admin }: { admin: AdminSession }) {
   const handleConfirmLogout = async () => {
     setIsLoggingOut(true);
     try {
-      await apiClient.post(`/admin/auth/logout${logoutModal.allDevices ? "?all=true" : ""}`);
-    } catch {}
-    finally {
+      await apiClient.post(
+        `/admin/auth/logout${logoutModal.allDevices ? "?all=true" : ""}`,
+      );
+    } catch {
+    } finally {
       router.replace("/admin/login");
       router.refresh();
     }
@@ -617,7 +659,9 @@ export function AdminMobileNav({ admin }: { admin: AdminSession }) {
                       admin={admin}
                       collapsed={false}
                       layoutId="active-nav-mobile"
-                      onLogoutRequest={(allDevices) => setLogoutModal({ open: true, allDevices })}
+                      onLogoutRequest={(allDevices) =>
+                        setLogoutModal({ open: true, allDevices })
+                      }
                     />
                   </Panel>
                 </motion.aside>
@@ -626,7 +670,7 @@ export function AdminMobileNav({ admin }: { admin: AdminSession }) {
           </AnimatePresence>,
           document.body,
         )}
-        
+
       {/* Mobile Logout Modal */}
       <AnimatePresence>
         {logoutModal.open && (
@@ -635,7 +679,10 @@ export function AdminMobileNav({ admin }: { admin: AdminSession }) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => !isLoggingOut && setLogoutModal({ open: false, allDevices: false })}
+              onClick={() =>
+                !isLoggingOut &&
+                setLogoutModal({ open: false, allDevices: false })
+              }
               className="absolute inset-0 bg-orange-950/25 backdrop-blur-sm"
             />
             <motion.div
@@ -648,7 +695,9 @@ export function AdminMobileNav({ admin }: { admin: AdminSession }) {
                 <ShieldOff className="size-6" />
               </div>
               <h2 className="font-[family-name:var(--font-display)] text-lg font-semibold text-neutral-900">
-                {logoutModal.allDevices ? "Sign out from all devices?" : "Sign out?"}
+                {logoutModal.allDevices
+                  ? "Sign out from all devices?"
+                  : "Sign out?"}
               </h2>
               <p className="mt-1 text-sm text-neutral-500">
                 {logoutModal.allDevices
@@ -657,7 +706,9 @@ export function AdminMobileNav({ admin }: { admin: AdminSession }) {
               </p>
               <div className="mt-6 flex gap-3">
                 <button
-                  onClick={() => setLogoutModal({ open: false, allDevices: false })}
+                  onClick={() =>
+                    setLogoutModal({ open: false, allDevices: false })
+                  }
                   disabled={isLoggingOut}
                   className="flex-1 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50 disabled:opacity-50"
                 >
@@ -668,7 +719,11 @@ export function AdminMobileNav({ admin }: { admin: AdminSession }) {
                   disabled={isLoggingOut}
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-500/30 transition-all hover:bg-rose-500 active:scale-[0.98] disabled:opacity-70"
                 >
-                  {isLoggingOut ? <Loader2 className="size-4 animate-spin" /> : "Sign out"}
+                  {isLoggingOut ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    "Sign out"
+                  )}
                 </button>
               </div>
             </motion.div>
