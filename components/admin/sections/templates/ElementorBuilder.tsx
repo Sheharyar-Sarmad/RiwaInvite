@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { icons } from "lucide-react";
 import {
@@ -10,6 +9,7 @@ import {
   AlignLeft,
   AlignRight,
   ArrowLeft,
+  CalendarDays,
   ChevronDown,
   Code,
   Copy,
@@ -18,8 +18,12 @@ import {
   EyeOff,
   GripVertical,
   ImagePlus,
+  Image as ImageIcon,
+  Images,
   LayoutTemplate,
+  Link2,
   Loader2,
+  MapPin,
   Maximize2,
   Minimize2,
   Monitor,
@@ -31,7 +35,9 @@ import {
   Smartphone,
   Tablet,
   Trash2,
+  Type,
   Undo2,
+  Users,
   Video,
   X,
   Layers,
@@ -42,6 +48,14 @@ import {
   WIDGET_REGISTRY,
   type WidgetDefinition,
 } from "@/lib/elementor/widgets";
+import {
+  BINDING_OPTIONS,
+  collectSlots,
+  defaultBindProp,
+  normalizeData,
+  resolveElement,
+  type InvitationData,
+} from "@/lib/elementor/invitation-data";
 import { toast } from "@/components/ui/toast";
 import { useCategories } from "@/hooks/useCategories";
 import { CategoryModal } from "@/components/admin/models/CategoryModal";
@@ -52,13 +66,15 @@ import {
   type BuilderElement,
   type CustomCode,
 } from "./WidgetRenderer";
-import { CodeEditor, type CodeLang } from "./CodeEditor";
+import { CodeEditor, CodePreview, type CodeLang } from "./CodeEditor";
 
 /* ========================================================================== */
 /* Constants & helpers                                                        */
 /* ========================================================================== */
 
 const genId = () => `el_${Math.random().toString(36).slice(2, 10)}`;
+const genSlotKey = (prefix: string) =>
+  `${prefix}_${Math.random().toString(36).slice(2, 6)}`;
 const DEVICES = { desktop: 1200, tablet: 768, mobile: 375 } as const;
 type Device = keyof typeof DEVICES;
 
@@ -66,7 +82,7 @@ const REGISTRY: Record<string, WidgetDefinition> = Object.fromEntries(
   WIDGET_REGISTRY.map((w) => [w.type, w]),
 );
 const CATEGORIES = Array.from(new Set(WIDGET_REGISTRY.map((w) => w.category)));
-const ICON_NAMES = Object.keys(icons);
+const ICON_NAMES: string[] = Object.keys(icons);
 
 type Asset = {
   url: string;
@@ -75,6 +91,7 @@ type Asset = {
   at: number;
 };
 const ASSET_KEY = "riwainvite:recent-assets";
+const PLACEHOLDER_IMG = "https://placehold.co/600x400/png?text=Photo";
 
 const ANIMATIONS: Record<string, { initial: any; animate: any }> = {
   none: { initial: {}, animate: {} },
@@ -97,7 +114,9 @@ function parseCss(raw: string): Record<string, string> {
     const v = d.slice(i + 1).trim();
     if (!k || !v) return;
     out[
-      k.startsWith("--") ? k : k.replace(/-([a-z])/g, (_, c) => c.toUpperCase())
+      k.startsWith("--")
+        ? k
+        : k.replace(/-([a-z])/g, (_m: string, c: string) => c.toUpperCase())
     ] = v;
   });
   return out;
@@ -128,6 +147,121 @@ const labelOf = (k: string) =>
     .replace(/[_-]/g, " ")
     .replace(/^\w/, (c) => c.toUpperCase());
 
+/* ---- Dynamic (data-bound) widgets --------------------------------------- */
+type IconCmp = React.ComponentType<{ className?: string }>;
+type DynItem = {
+  id: string;
+  name: string;
+  icon: IconCmp;
+  /** Base widget type from WIDGET_REGISTRY this is built on. */
+  type: string;
+  make: () => Record<string, unknown>;
+};
+
+const GALLERY_HTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">
+{{#each gallery}}
+  <img src="{{this}}" alt="" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px" />
+{{/each}}
+</div>`;
+
+const DYNAMIC: DynItem[] = [
+  {
+    id: "couple",
+    name: "Couple names",
+    icon: Users,
+    type: "heading",
+    make: () => ({ text: "{{names.bride}} & {{names.groom}}", _bind: "names" }),
+  },
+  {
+    id: "bride",
+    name: "Bride name",
+    icon: Type,
+    type: "heading",
+    make: () => ({ text: "{{names.bride}}", _bind: "names.bride" }),
+  },
+  {
+    id: "groom",
+    name: "Groom name",
+    icon: Type,
+    type: "heading",
+    make: () => ({ text: "{{names.groom}}", _bind: "names.groom" }),
+  },
+  {
+    id: "date",
+    name: "Event date",
+    icon: CalendarDays,
+    type: "text",
+    make: () => ({ text: "{{event.date}}", _bind: "event.date" }),
+  },
+  {
+    id: "venue",
+    name: "Venue",
+    icon: MapPin,
+    type: "text",
+    make: () => ({ text: "{{venue.name}}", _bind: "venue.name" }),
+  },
+  {
+    id: "cover",
+    name: "Thumbnail image",
+    icon: ImageIcon,
+    type: "image",
+    make: () => ({ _bind: "thumbnail" }),
+  },
+  {
+    id: "gallery",
+    name: "Gallery images",
+    icon: Images,
+    type: "html",
+    make: () => ({ code: GALLERY_HTML, lang: "html", _bind: "gallery" }),
+  },
+  {
+    id: "music",
+    name: "Main music",
+    icon: Music,
+    type: "audio",
+    make: () => ({ _bind: "music.0" }),
+  },
+  {
+    id: "video",
+    name: "Background video",
+    icon: Video,
+    type: "video",
+    make: () => ({ _bind: "videos.0" }),
+  },
+  {
+    id: "slotImage",
+    name: "Image slot",
+    icon: ImagePlus,
+    type: "image",
+    make: () => ({
+      src: PLACEHOLDER_IMG,
+      _bind: `slot.${genSlotKey("image")}`,
+      _label: "Photo",
+    }),
+  },
+  {
+    id: "slotText",
+    name: "Text slot",
+    icon: Type,
+    type: "text",
+    make: () => ({
+      text: "Your text here",
+      _bind: `slot.${genSlotKey("text")}`,
+      _label: "Custom text",
+    }),
+  },
+];
+const DYNAMIC_AVAILABLE = DYNAMIC.filter((d) => !!REGISTRY[d.type]);
+
+/** Dropdown choices for the "Bind to" inspector field. */
+const BIND_CHOICES = [
+  { label: "None (static)", value: "" },
+  ...BINDING_OPTIONS,
+  { label: "Couple names (both)", value: "names" },
+  { label: "Gallery (all images)", value: "gallery" },
+  { label: "Custom slot (buyer can edit)", value: "slot" },
+];
+
 /* ---- Cloudinary --------------------------------------------------------- */
 function useCloudinary() {
   const [busy, setBusy] = React.useState(0);
@@ -135,7 +269,7 @@ function useCloudinary() {
 
   React.useEffect(() => {
     try {
-      setAssets(JSON.parse(localStorage.getItem(ASSET_KEY) || "[]"));
+      setAssets(JSON.parse(localStorage.getItem(ASSET_KEY) || "[]") as Asset[]);
     } catch {
       /* ignore */
     }
@@ -313,8 +447,10 @@ function SpacingBox({
   onChange: (v: string) => void;
 }) {
   const p = (value || "").trim().split(/\s+/).filter(Boolean);
-  const [t = "", r = t, b = t, l = r] =
-    p.length <= 1 ? [p[0]] : p.length === 2 ? [p[0], p[1]] : p;
+  const t = p[0] ?? "";
+  const r = p[1] ?? (p.length ? t : "");
+  const b = p[2] ?? (p.length ? t : "");
+  const l = p[3] ?? (p.length ? r : "");
   const vals = [t, r, b, l];
   const set = (i: number, v: string) => {
     const a = [...vals];
@@ -329,7 +465,7 @@ function SpacingBox({
           <div key={s}>
             <input
               className={`${inputCls} px-1.5 text-center`}
-              value={vals[i]}
+              value={vals[i] ?? ""}
               onChange={(e) => set(i, e.target.value)}
               placeholder="0"
               aria-label={`${label} ${s}`}
@@ -393,7 +529,7 @@ function MediaField({
           hidden
           accept={`${kind}/*`}
           onChange={(e) => {
-            pick(e.target.files?.[0]);
+            void pick(e.target.files?.[0]);
             e.target.value = "";
           }}
         />
@@ -485,48 +621,87 @@ function GalleryField({
   };
   return (
     <Field label="Gallery images">
-      <input
-        ref={input}
-        type="file"
-        hidden
-        multiple
-        accept="image/*"
-        onChange={(e) => {
-          add(e.target.files);
-          e.target.value = "";
-        }}
-      />
-      <div className="grid grid-cols-4 gap-1.5">
-        {urls.map((u) => (
-          <div
-            key={u}
-            className="group relative aspect-square overflow-hidden rounded-lg border border-slate-200"
-          >
-            <img src={u} alt="" className="size-full object-cover" />
-            <button
-              type="button"
-              aria-label="Remove image"
-              onClick={() => onChange(urls.filter((x) => x !== u))}
-              className="absolute inset-0 grid place-items-center bg-black/40 text-white opacity-0 transition group-hover:opacity-100"
+      <div>
+        <input
+          ref={input}
+          type="file"
+          hidden
+          multiple
+          accept="image/*"
+          onChange={(e) => {
+            void add(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        <div className="grid grid-cols-4 gap-1.5">
+          {urls.map((u) => (
+            <div
+              key={u}
+              className="group relative aspect-square overflow-hidden rounded-lg border border-slate-200"
             >
-              <X className="size-4" />
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => input.current?.click()}
-          disabled={cloud.uploading}
-          className="grid aspect-square place-items-center rounded-lg border border-dashed border-slate-300 text-slate-400 hover:border-orange-400 hover:text-orange-500"
-        >
-          {cloud.uploading ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Plus className="size-4" />
-          )}
-        </button>
+              <img src={u} alt="" className="size-full object-cover" />
+              <button
+                type="button"
+                aria-label="Remove image"
+                onClick={() => onChange(urls.filter((x) => x !== u))}
+                className="absolute inset-0 grid place-items-center bg-black/40 text-white opacity-0 transition group-hover:opacity-100"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => input.current?.click()}
+            disabled={cloud.uploading}
+            className="grid aspect-square place-items-center rounded-lg border border-dashed border-slate-300 text-slate-400 hover:border-orange-400 hover:text-orange-500"
+          >
+            {cloud.uploading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Plus className="size-4" />
+            )}
+          </button>
+        </div>
       </div>
     </Field>
+  );
+}
+
+function PaletteButton({
+  dragId,
+  icon: Icon,
+  name,
+  accent,
+  onAdd,
+  onDragEnd,
+}: {
+  dragId: string;
+  icon: IconCmp;
+  name: string;
+  accent?: boolean;
+  onAdd: () => void;
+  onDragEnd: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData("application/x-widget", dragId);
+        e.dataTransfer.effectAllowed = "copy";
+      }}
+      onDragEnd={onDragEnd}
+      onClick={onAdd}
+      className={`flex cursor-grab flex-col items-center justify-center rounded-xl border p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-orange-300 hover:bg-white hover:shadow-md active:cursor-grabbing ${accent ? "border-orange-100 bg-orange-50/60" : "border-slate-100 bg-slate-50/60"}`}
+    >
+      <Icon
+        className={`mb-1.5 size-5 ${accent ? "text-orange-500" : "text-slate-600"}`}
+      />
+      <span className="text-center text-[10px] leading-tight text-slate-500">
+        {name}
+      </span>
+    </button>
   );
 }
 
@@ -592,7 +767,10 @@ const FONTS = [
   "Verdana, sans-serif",
   "'Courier New', monospace",
   "fantasy",
-].map((f) => ({ value: f, label: f.split(",")[0].replace(/['"]/g, "") }));
+].map((f) => ({
+  value: f,
+  label: (f.split(",")[0] ?? f).replace(/['"]/g, ""),
+}));
 
 function BackgroundSection({ api, cloud }: { api: StyleApi; cloud: Cloud }) {
   const bi = api.get("backgroundImage");
@@ -604,11 +782,9 @@ function BackgroundSection({ api, cloud }: { api: StyleApi; cloud: Cloud }) {
         : "color",
   );
   const g = /linear-gradient\((\d+)deg,\s*([^,]+),\s*([^)]+)\)/.exec(bi);
-  const [angle, c1, c2] = [
-    g?.[1] ?? "135",
-    g?.[2] ?? "#f97316",
-    g?.[3] ?? "#fde68a",
-  ];
+  const angle = g?.[1] ?? "135";
+  const c1 = g?.[2] ?? "#f97316";
+  const c2 = g?.[3] ?? "#fde68a";
   const setG = (a: string, x: string, y: string) =>
     api.set("backgroundImage", `linear-gradient(${a}deg, ${x}, ${y})`);
   const img = /url\("?([^")]+)"?\)/.exec(bi)?.[1] ?? "";
@@ -703,13 +879,11 @@ function ShadowSection({ api }: { api: StyleApi }) {
   const m = /(-?\d+)px\s+(-?\d+)px\s+(\d+)px\s+(-?\d+)px\s+(.+)/.exec(
     api.get("boxShadow"),
   );
-  const [x, y, b, s, c] = [
-    m?.[1] ?? "0",
-    m?.[2] ?? "8",
-    m?.[3] ?? "24",
-    m?.[4] ?? "0",
-    m?.[5] ?? "rgba(0,0,0,0.12)",
-  ];
+  const x = m?.[1] ?? "0";
+  const y = m?.[2] ?? "8";
+  const b = m?.[3] ?? "24";
+  const s = m?.[4] ?? "0";
+  const c = m?.[5] ?? "rgba(0,0,0,0.12)";
   const set = (nx = x, ny = y, nb = b, ns = s, nc = c) =>
     api.set("boxShadow", `${nx}px ${ny}px ${nb}px ${ns}px ${nc}`);
   const items: [string, string, (v: string) => void][] = [
@@ -754,13 +928,11 @@ function ShadowSection({ api }: { api: StyleApi }) {
 /* Builder                                                                    */
 /* ========================================================================== */
 
-// 1. ADDED initialTemplateId prop
 export function ElementorBuilder({
   initialTemplateId,
 }: {
   initialTemplateId?: string;
 }) {
-  const router = useRouter();
   const cloud = useCloudinary();
   const { categories, refetch: refetchCats } = useCategories();
 
@@ -794,8 +966,8 @@ export function ElementorBuilder({
     const next = fn(cur);
     if (next === cur) return;
     const now = Date.now();
-    const coalesce =
-      !!key && last.current?.k === key && now - last.current.t < 700; // typing = one undo step
+    const prev = last.current;
+    const coalesce = !!key && prev !== null && prev.k === key && now - prev.t < 700; // typing = one undo step
     last.current = key ? { k: key, t: now } : null;
     if (!coalesce) {
       past.current.push(cur);
@@ -828,7 +1000,6 @@ export function ElementorBuilder({
   const def = selected ? REGISTRY[selected.type] : undefined;
 
   // ---- template meta (database fields) ----
-  // 2. INITIALIZE with initialTemplateId
   const [templateId, setTemplateId] = React.useState<string | null>(
     initialTemplateId || null,
   );
@@ -859,7 +1030,33 @@ export function ElementorBuilder({
   const [dropIndex, setDropIndex] = React.useState<number | null>(null);
   const canvasRef = React.useRef<HTMLDivElement>(null);
 
-  // 3. ADDED Fetch Template Logic
+  // ---- live sample data used to resolve dynamic widgets in the canvas ----
+  const previewData = React.useMemo<InvitationData>(
+    () =>
+      normalizeData({
+        names: {
+          bride: coreNames.bride || "Bride",
+          groom: coreNames.groom || "Groom",
+        },
+        title: name,
+        event: { date: "2026-12-12", time: "18:00" },
+        venue: {
+          name: "Grand Ballroom",
+          address: "Main Boulevard, Lahore",
+          mapUrl: "",
+        },
+        thumbnail: thumbnailUrl || PLACEHOLDER_IMG,
+        gallery: galleryUrls.length
+          ? galleryUrls
+          : [PLACEHOLDER_IMG, PLACEHOLDER_IMG, PLACEHOLDER_IMG],
+        videos: videoUrls,
+        music: musicUrls,
+        slots: {},
+      }),
+    [coreNames, name, thumbnailUrl, galleryUrls, videoUrls, musicUrls],
+  );
+
+  // ---- load existing template ----
   React.useEffect(() => {
     if (!initialTemplateId) return;
 
@@ -875,16 +1072,16 @@ export function ElementorBuilder({
         setCategoryId(data.category_id || "");
         setThumbnailUrl(data.thumbnail_url || "");
         setStatus(data.status === "published" ? "published" : "draft");
-        setIsPremium(data.is_premium || false);
+        setIsPremium(Boolean(data.is_premium));
         setPrice(String(data.price || 0));
         setGalleryUrls(data.gallery_urls || []);
         setVideoUrls(data.video_urls || []);
         setMusicUrls(data.music_urls || []);
 
-        if (data.core_names_config?.bride) {
+        if (data.core_names_config) {
           setCoreNames({
-            bride: data.core_names_config.bride.label || "",
-            groom: data.core_names_config.groom.label || "",
+            bride: data.core_names_config.bride?.label || "",
+            groom: data.core_names_config.groom?.label || "",
           });
         }
 
@@ -916,22 +1113,28 @@ export function ElementorBuilder({
       }
     };
 
-    fetchTemplate();
+    void fetchTemplate();
   }, [initialTemplateId]);
 
   /* ---- element mutations ---- */
-  const insertAt = (w: WidgetDefinition, index: number) => {
-    const el: BuilderElement = {
+  const makeEl = (
+    type: string,
+    content: Record<string, unknown>,
+  ): BuilderElement => {
+    const w = REGISTRY[type];
+    return {
       id: genId(),
-      type: w.type,
-      content: structuredClone(w.defaultContent ?? {}),
+      type,
+      content: { ...structuredClone(w?.defaultContent ?? {}), ...content },
       styles: {
         margin: "0px",
         padding: "10px",
-        ...(w.defaultStyles ?? {}),
+        ...(w?.defaultStyles ?? {}),
       } as Record<string, string>,
       customCode: null,
     };
+  };
+  const insertEl = (el: BuilderElement, index: number) => {
     commit((els) => {
       const n = [...els];
       n.splice(index, 0, el);
@@ -940,12 +1143,18 @@ export function ElementorBuilder({
     setSelectedId(el.id);
     setInspectorTab("content");
   };
+  const insertAt = (w: WidgetDefinition, index: number) =>
+    insertEl(makeEl(w.type, {}), index);
+  const insertDynamic = (d: DynItem, index: number) =>
+    insertEl(makeEl(d.type, d.make()), index);
+
   const moveTo = (id: string, index: number) =>
     commit((els) => {
       const from = els.findIndex((e) => e.id === id);
       if (from < 0) return els;
       const n = [...els];
       const [it] = n.splice(from, 1);
+      if (!it) return els;
       n.splice(index > from ? index - 1 : index, 0, it);
       return n;
     });
@@ -955,8 +1164,9 @@ export function ElementorBuilder({
   };
   const duplicate = (id: string) => {
     const i = elRef.current.findIndex((e) => e.id === id);
-    if (i < 0) return;
-    const copy = { ...structuredClone(elRef.current[i]), id: genId() };
+    const src = elRef.current[i];
+    if (i < 0 || !src) return;
+    const copy: BuilderElement = { ...structuredClone(src), id: genId() };
     commit((els) => {
       const n = [...els];
       n.splice(i + 1, 0, copy);
@@ -969,13 +1179,21 @@ export function ElementorBuilder({
     fn: (e: BuilderElement) => BuilderElement,
     key?: string,
   ) => commit((els) => els.map((e) => (e.id === id ? fn(e) : e)), key);
-  const setContent = (k: string, v: any) =>
-    selected &&
+  const setContent = (k: string, v: any) => {
+    if (!selected) return;
     patchEl(
       selected.id,
       (e) => ({ ...e, content: { ...e.content, [k]: v } }),
       `c:${selected.id}:${k}`,
     );
+  };
+  const setContents = (patch: Record<string, any>) => {
+    if (!selected) return;
+    patchEl(selected.id, (e) => ({
+      ...e,
+      content: { ...e.content, ...patch },
+    }));
+  };
 
   const toggleHidden = (id: string) =>
     patchEl(id, (e) => ({
@@ -986,35 +1204,37 @@ export function ElementorBuilder({
   // Style edits go to the base (desktop) styles, or to the tablet/mobile override bucket for the active device.
   const bucketOf = (e: BuilderElement) =>
     (e.content._r?.[device] ?? {}) as Record<string, string>;
-  const styleApi: StyleApi | null = selected && {
-    get: (k) =>
-      device === "desktop"
-        ? (selected.styles[k] ?? "")
-        : (bucketOf(selected)[k] ?? ""),
-    set: (k, v) =>
-      patchEl(
-        selected.id,
-        (e) => {
-          if (device === "desktop") {
-            const s = { ...e.styles };
-            if (!v) delete s[k];
-            else s[k] = v;
-            return { ...e, styles: s };
-          }
-          const b = { ...bucketOf(e) };
-          if (!v) delete b[k];
-          else b[k] = v;
-          return {
-            ...e,
-            content: {
-              ...e.content,
-              _r: { ...(e.content._r ?? {}), [device]: b },
+  const styleApi: StyleApi | null = selected
+    ? {
+        get: (k) =>
+          device === "desktop"
+            ? (selected.styles[k] ?? "")
+            : (bucketOf(selected)[k] ?? ""),
+        set: (k, v) =>
+          patchEl(
+            selected.id,
+            (e) => {
+              if (device === "desktop") {
+                const s = { ...e.styles };
+                if (!v) delete s[k];
+                else s[k] = v;
+                return { ...e, styles: s };
+              }
+              const b = { ...bucketOf(e) };
+              if (!v) delete b[k];
+              else b[k] = v;
+              return {
+                ...e,
+                content: {
+                  ...e.content,
+                  _r: { ...(e.content._r ?? {}), [device]: b },
+                },
+              };
             },
-          };
-        },
-        `s:${device}:${selected.id}:${k}`,
-      ),
-  };
+            `s:${device}:${selected.id}:${k}`,
+          ),
+      }
+    : null;
 
   /* ---- keyboard ---- */
   React.useEffect(() => {
@@ -1028,7 +1248,8 @@ export function ElementorBuilder({
       if (typing) return;
       if (mod && e.key.toLowerCase() === "z") {
         e.preventDefault();
-        e.shiftKey ? redo() : undo();
+        if (e.shiftKey) redo();
+        else undo();
       } else if (mod && e.key.toLowerCase() === "y") {
         e.preventDefault();
         redo();
@@ -1066,7 +1287,9 @@ export function ElementorBuilder({
       canvasRef.current?.querySelectorAll<HTMLElement>("[data-wrap]") ?? [],
     );
     for (let i = 0; i < wraps.length; i++) {
-      const r = wraps[i].getBoundingClientRect();
+      const wrap = wraps[i];
+      if (!wrap) continue;
+      const r = wrap.getBoundingClientRect();
       if (y < r.top + r.height / 2) return i;
     }
     return wraps.length;
@@ -1087,8 +1310,14 @@ export function ElementorBuilder({
     const idx = computeIndex(e.clientY);
     const w = e.dataTransfer.getData("application/x-widget");
     const el = e.dataTransfer.getData("application/x-element");
-    if (w && REGISTRY[w]) insertAt(REGISTRY[w], idx);
-    else if (el) moveTo(el, idx);
+    if (w.startsWith("dyn:")) {
+      const d = DYNAMIC_AVAILABLE.find((x) => `dyn:${x.id}` === w);
+      if (d) insertDynamic(d, idx);
+    } else {
+      const def2 = w ? REGISTRY[w] : undefined;
+      if (def2) insertAt(def2, idx);
+      else if (el) moveTo(el, idx);
+    }
     setDropIndex(null);
   };
 
@@ -1103,19 +1332,30 @@ export function ElementorBuilder({
         w.type.includes(q),
     );
   }, [search]);
+  const dynFiltered = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return DYNAMIC_AVAILABLE.filter(
+      (d) => !q || d.name.toLowerCase().includes(q) || "dynamic".includes(q),
+    );
+  }, [search]);
 
   /* ---- code tab ---- */
   const selectedIsCode = selected?.type === "html";
-  const codeValue = selectedIsCode
-    ? (selected!.content.code ?? "")
+  const codeValue: string = selected && selectedIsCode
+    ? String(selected.content.code ?? "")
     : pageSettings.customCode;
-  const codeLang: CodeLang = selectedIsCode
-    ? (selected!.content.lang as CodeLang) || "html"
-    : pageSettings.customCodeLang;
-  const onCodeChange = (v: string) =>
-    selectedIsCode ? setContent("code", v) : patchPage({ customCode: v });
-  const onLangChange = (l: CodeLang) =>
-    selectedIsCode ? setContent("lang", l) : patchPage({ customCodeLang: l });
+  const codeLang: CodeLang =
+    selected && selectedIsCode
+      ? ((selected.content.lang as CodeLang | undefined) ?? "html")
+      : pageSettings.customCodeLang;
+  const onCodeChange = (v: string) => {
+    if (selectedIsCode) setContent("code", v);
+    else patchPage({ customCode: v });
+  };
+  const onLangChange = (l: CodeLang) => {
+    if (selectedIsCode) setContent("lang", l);
+    else patchPage({ customCodeLang: l });
+  };
   const insertCodeBlock = () => {
     const w = REGISTRY["html"];
     const el: BuilderElement = {
@@ -1129,7 +1369,7 @@ export function ElementorBuilder({
         margin: "0px",
         padding: "0px",
         ...(w?.defaultStyles ?? {}),
-      } as any,
+      } as Record<string, string>,
       customCode: null,
     };
     commit((els) => [...els, el]);
@@ -1152,18 +1392,20 @@ export function ElementorBuilder({
     if (missing.length > 0) {
       setSelectedId(null);
       setInspectorTab("content");
-      return toast.add({
+      toast.add({
         title: "Missing required fields",
         description: `Please fill in: ${missing.join(", ")}.`,
         type: "error",
       });
+      return;
     }
     if (cloud.uploading) {
-      return toast.add({
+      toast.add({
         title: "Uploads in progress",
         description: "Wait for uploads to finish.",
         type: "error",
       });
+      return;
     }
 
     setIsSaving(true);
@@ -1172,7 +1414,7 @@ export function ElementorBuilder({
       name: name.trim(),
       description: description || null,
       category_id: categoryId,
-      thumbnail_url: thumbnailUrl || "https://placehold.co/600x400/png",
+      thumbnail_url: thumbnailUrl || PLACEHOLDER_IMG,
       is_premium: isPremium,
       price: parseFloat(price) || 0,
       custom_slug_price: 1000.0,
@@ -1193,9 +1435,12 @@ export function ElementorBuilder({
         },
       },
 
-      status: status,
+      status,
       design_schema: {
+        version: 2,
         pageSettings,
+        // Buyer-editable custom slots -> auto-generates the buyer's edit form
+        slots: collectSlots(elements),
         elements: elements.map((e) => ({
           id: e.id,
           type: e.type,
@@ -1203,10 +1448,10 @@ export function ElementorBuilder({
           styles: e.styles,
           customCode:
             e.type === "html"
-              ? {
-                  language: (e.content.lang as CodeLang) || "html",
-                  code: e.content.code || "",
-                }
+              ? ({
+                  language: (e.content.lang as CodeLang | undefined) ?? "html",
+                  code: String(e.content.code ?? ""),
+                } as unknown as CustomCode)
               : (e.customCode ?? null),
         })),
       },
@@ -1214,7 +1459,6 @@ export function ElementorBuilder({
 
     try {
       if (templateId) {
-        // --- UPDATE EXISTING ---
         await apiClient.patch(
           `/admin/dashboard/templates/${templateId}`,
           payload,
@@ -1225,10 +1469,8 @@ export function ElementorBuilder({
           type: "success",
         });
       } else {
-        // --- CREATE NEW ---
         const res = await apiClient.post("/admin/dashboard/templates", payload);
-        // Save the ID so the next click updates instead of creating
-        const newId = res.data?.data?.template?.id;
+        const newId: string | undefined = res.data?.data?.template?.id;
         if (newId) setTemplateId(newId);
 
         toast.add({
@@ -1242,7 +1484,7 @@ export function ElementorBuilder({
         "SAVE ERROR DETAILS:",
         error.response?.data || error.message,
       );
-      const errorMsg =
+      const errorMsg: string =
         error.response?.data?.error?.[0]?.message ||
         error.response?.data?.message ||
         "Failed to save template.";
@@ -1257,10 +1499,109 @@ export function ElementorBuilder({
     }
   };
 
+  /* ---- data binding (inspector) ---- */
+  const bind: string =
+    selected && typeof selected.content._bind === "string"
+      ? selected.content._bind
+      : "";
+  const bindSel = bind.startsWith("slot.") ? "slot" : bind;
+  const boundProp: string | null =
+    selected &&
+    bind &&
+    !bind.startsWith("slot.") &&
+    bind !== "gallery" &&
+    bind !== "names"
+      ? String(selected.content._bindProp ?? defaultBindProp(selected.type))
+      : null;
+
+  const onBindChange = (v: string) => {
+    if (!selected) return;
+    if (v === "slot") {
+      const kind =
+        selected.type === "image" ||
+        selected.type === "video" ||
+        selected.type === "audio"
+          ? selected.type
+          : "text";
+      setContents({
+        _bind: `slot.${genSlotKey(kind)}`,
+        _bindProp: defaultBindProp(selected.type),
+      });
+    } else {
+      setContents({
+        _bind: v,
+        _bindProp: v ? defaultBindProp(selected.type) : "",
+      });
+    }
+  };
+
+  const renderBoundEditor = () => {
+    if (bind === "thumbnail")
+      return (
+        <MediaField
+          label="Template thumbnail"
+          kind="image"
+          value={thumbnailUrl}
+          onChange={setThumbnailUrl}
+          cloud={cloud}
+        />
+      );
+    if (bind === "gallery" || /^gallery\.\d+$/.test(bind))
+      return (
+        <GalleryField
+          urls={galleryUrls}
+          onChange={setGalleryUrls}
+          cloud={cloud}
+        />
+      );
+    if (bind === "videos.0")
+      return (
+        <MediaField
+          label="Background video"
+          kind="video"
+          value={videoUrls[0] ?? ""}
+          onChange={(u) => setVideoUrls(u ? [u] : [])}
+          cloud={cloud}
+        />
+      );
+    if (bind === "music.0")
+      return (
+        <MediaField
+          label="Main music"
+          kind="audio"
+          value={musicUrls[0] ?? ""}
+          onChange={(u) => setMusicUrls(u ? [u] : [])}
+          cloud={cloud}
+        />
+      );
+    if (bind === "names" || bind === "names.bride" || bind === "names.groom")
+      return (
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            value={coreNames.bride}
+            onChange={(e) =>
+              setCoreNames({ ...coreNames, bride: e.target.value })
+            }
+            placeholder="Bride name"
+            className={inputCls}
+          />
+          <input
+            value={coreNames.groom}
+            onChange={(e) =>
+              setCoreNames({ ...coreNames, groom: e.target.value })
+            }
+            placeholder="Groom name"
+            className={inputCls}
+          />
+        </div>
+      );
+    return null;
+  };
+
   /* ---- content-tab fields inferred from the element's content ---- */
   const renderContentField = (k: string) => {
     if (!selected) return null;
-    const v = selected.content[k] ?? "";
+    const v: string = selected.content[k] ?? "";
     const t = selected.type;
     if (/^src\d*$/.test(k) || k === "poster" || k === "image")
       return (
@@ -1349,7 +1690,9 @@ export function ElementorBuilder({
       ).filter((k) => !k.startsWith("_"))
     : [];
   const visibleKeys = contentKeys.filter(
-    (k) => !(k === "lang" && selected?.type === "html"),
+    (k) =>
+      !(k === "lang" && selected?.type === "html") &&
+      !(boundProp !== null && k === boundProp),
   );
 
   const anim = ANIMATIONS[pageSettings.entranceAnimation] ?? ANIMATIONS.none;
@@ -1445,7 +1788,7 @@ export function ElementorBuilder({
           <div className="w-36">
             <AceternitySelect
               value={status}
-              onChange={(v) => setStatus(v as "draft" | "published")}
+              onChange={(v) => setStatus(v === "published" ? "published" : "draft")}
               options={[
                 { label: "Draft", value: "draft" },
                 { label: "Published", value: "published" },
@@ -1454,7 +1797,7 @@ export function ElementorBuilder({
           </div>
           <button
             type="button"
-            onClick={handleSave}
+            onClick={() => void handleSave()}
             disabled={isSaving || cloud.uploading}
             className="flex cursor-pointer items-center gap-2 rounded-xl bg-gradient-to-b from-orange-400 to-orange-600 px-5 py-2 text-sm font-medium text-white shadow-lg shadow-orange-500/30 transition hover:opacity-90 disabled:opacity-60"
           >
@@ -1501,12 +1844,40 @@ export function ElementorBuilder({
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder={`Search ${WIDGET_REGISTRY.length} widgets…`}
+                    placeholder={`Search ${WIDGET_REGISTRY.length + DYNAMIC_AVAILABLE.length} widgets…`}
                     className={`${inputCls} pl-9`}
                   />
                 </div>
               </div>
               <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
+                {dynFiltered.length > 0 && (
+                  <section>
+                    <h3 className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-orange-600">
+                      <Link2 className="size-3.5" />
+                      Dynamic fields{" "}
+                      <span className="font-normal text-slate-400">
+                        ({dynFiltered.length})
+                      </span>
+                    </h3>
+                    <p className="mb-2.5 text-[10px] leading-snug text-slate-400">
+                      Linked to template data. Buyers replace these with their
+                      own names, photos, video and music.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {dynFiltered.map((d) => (
+                        <PaletteButton
+                          key={d.id}
+                          dragId={`dyn:${d.id}`}
+                          icon={d.icon}
+                          name={d.name}
+                          accent
+                          onAdd={() => insertDynamic(d, elRef.current.length)}
+                          onDragEnd={() => setDropIndex(null)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
                 {CATEGORIES.map((cat) => {
                   const list = filtered.filter((w) => w.category === cat);
                   if (!list.length) return null;
@@ -1520,32 +1891,20 @@ export function ElementorBuilder({
                       </h3>
                       <div className="grid grid-cols-2 gap-2">
                         {list.map((w) => (
-                          <button
+                          <PaletteButton
                             key={w.type}
-                            type="button"
-                            draggable
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData(
-                                "application/x-widget",
-                                w.type,
-                              );
-                              e.dataTransfer.effectAllowed = "copy";
-                            }}
+                            dragId={w.type}
+                            icon={w.icon}
+                            name={w.name}
+                            onAdd={() => insertAt(w, elRef.current.length)}
                             onDragEnd={() => setDropIndex(null)}
-                            onClick={() => insertAt(w, elRef.current.length)}
-                            className="flex cursor-grab flex-col items-center justify-center rounded-xl border border-slate-100 bg-slate-50/60 p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-orange-300 hover:bg-white hover:shadow-md active:cursor-grabbing"
-                          >
-                            <w.icon className="mb-1.5 size-5 text-slate-600" />
-                            <span className="text-center text-[10px] leading-tight text-slate-500">
-                              {w.name}
-                            </span>
-                          </button>
+                          />
                         ))}
                       </div>
                     </section>
                   );
                 })}
-                {filtered.length === 0 && (
+                {filtered.length === 0 && dynFiltered.length === 0 && (
                   <p className="py-10 text-center text-sm text-slate-400">
                     No widgets match “{search}”.
                   </p>
@@ -1573,6 +1932,8 @@ export function ElementorBuilder({
                 {elements.map((el, i) => {
                   const d = REGISTRY[el.type];
                   const hidden = !!el.content._hidden;
+                  const isBound =
+                    typeof el.content._bind === "string" && !!el.content._bind;
                   return (
                     <li key={el.id}>
                       {layerDrop === i && (
@@ -1622,6 +1983,12 @@ export function ElementorBuilder({
                         <span className="min-w-0 flex-1 truncate">
                           {layerName(el)}
                         </span>
+                        {isBound && (
+                          <Link2
+                            className="size-3 shrink-0 text-orange-400"
+                            aria-label="Dynamic"
+                          />
+                        )}
                         <button
                           type="button"
                           title={hidden ? "Show" : "Hide"}
@@ -1751,7 +2118,7 @@ export function ElementorBuilder({
                       type="button"
                       title={`${a.name} — copy URL`}
                       onClick={() => {
-                        navigator.clipboard?.writeText(a.url);
+                        void navigator.clipboard?.writeText(a.url);
                         toast.add({
                           title: "Copied",
                           description: "Asset URL copied.",
@@ -1796,7 +2163,7 @@ export function ElementorBuilder({
         >
           <div className="flex min-h-full justify-center p-8">
             <motion.div
-              ref={canvasRef as any}
+              ref={canvasRef}
               animate={{ width: DEVICES[device] }}
               transition={{ type: "spring", stiffness: 260, damping: 30 }}
               style={{
@@ -1842,7 +2209,7 @@ export function ElementorBuilder({
                       className={`group relative rounded-sm outline outline-2 outline-offset-0 transition-[outline-color] ${preview ? "outline-transparent" : selectedId === el.id ? "cursor-pointer outline-orange-500" : "cursor-pointer outline-transparent hover:outline-orange-300"}`}
                     >
                       <WidgetRenderer
-                        element={el}
+                        element={resolveElement(el, previewData)}
                         editing={!preview}
                         device={device}
                       />
@@ -1850,7 +2217,7 @@ export function ElementorBuilder({
                         <>
                           <span className="absolute -top-5 left-0 z-10 rounded-t-md bg-orange-500 px-2 py-0.5 text-[10px] font-medium text-white">
                             {el.type === "html"
-                              ? (el.content.lang || "html").toUpperCase()
+                              ? String(el.content.lang || "html").toUpperCase()
                               : (REGISTRY[el.type]?.name ?? el.type)}
                           </span>
                           <div className="absolute -top-5 right-0 z-10 flex items-center rounded-t-md bg-orange-500 text-white">
@@ -1905,9 +2272,10 @@ export function ElementorBuilder({
                 {pageSettings.customCode.trim() &&
                   pageSettings.customCodeLang !== "css" && (
                     <div className="pointer-events-none mt-2 border-t border-dashed border-orange-200 pt-2">
-                      <PageCode
+                      <CodePreview
                         lang={pageSettings.customCodeLang}
                         code={pageSettings.customCode}
+                        data={previewData}
                       />
                     </div>
                   )}
@@ -1955,6 +2323,58 @@ export function ElementorBuilder({
 
                 {inspectorTab === "content" && (
                   <div className="space-y-4 p-4">
+                    {/* ---- Dynamic data binding ---- */}
+                    <div className="space-y-3 rounded-xl border border-orange-100 bg-orange-50/50 p-3">
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-orange-700">
+                        <Link2 className="size-3.5" />
+                        Dynamic data
+                      </span>
+                      <Field label="Bind to">
+                        <AceternitySelect
+                          value={bindSel}
+                          onChange={onBindChange}
+                          options={BIND_CHOICES}
+                          placeholder="None (static)"
+                        />
+                      </Field>
+                      {bind.startsWith("slot.") && (
+                        <>
+                          <Field label="Slot key (unique)">
+                            <input
+                              className={inputCls}
+                              value={bind.slice(5)}
+                              onChange={(e) => {
+                                const key = e.target.value.replace(/[^\w]/g, "_");
+                                setContent("_bind", key ? `slot.${key}` : "slot.");
+                              }}
+                            />
+                          </Field>
+                          <Field label="Label shown to the buyer">
+                            <input
+                              className={inputCls}
+                              value={String(selected.content._label ?? "")}
+                              placeholder="e.g. Hero photo"
+                              onChange={(e) =>
+                                setContent("_label", e.target.value)
+                              }
+                            />
+                          </Field>
+                          <p className="text-[11px] leading-snug text-slate-500">
+                            The value below is the default. Buyers can replace
+                            it from their editor.
+                          </p>
+                        </>
+                      )}
+                      {bind && !bind.startsWith("slot.") && (
+                        <div className="space-y-2 border-t border-orange-100 pt-3">
+                          <span className="block text-[11px] font-medium text-slate-500">
+                            Template default (shared)
+                          </span>
+                          {renderBoundEditor()}
+                        </div>
+                      )}
+                    </div>
+
                     {visibleKeys.length === 0 && (
                       <p className="text-sm text-slate-400">
                         This widget has no content fields. Use the Style tab.
@@ -1963,7 +2383,7 @@ export function ElementorBuilder({
                     {selected.type === "html" && (
                       <Field label="Language">
                         <AceternitySelect
-                          value={(selected.content.lang as string) || "html"}
+                          value={String(selected.content.lang || "html")}
                           onChange={(v) => setContent("lang", v)}
                           options={["html", "css", "jsx", "tsx"]}
                         />
@@ -2267,7 +2687,7 @@ export function ElementorBuilder({
                       </span>
                       <Field label="Entrance animation">
                         <AceternitySelect
-                          value={(selected.content._anim as string) ?? ""}
+                          value={String(selected.content._anim ?? "")}
                           onChange={(v) => setContent("_anim", v)}
                           options={[
                             { label: "None", value: "" },
@@ -2288,7 +2708,7 @@ export function ElementorBuilder({
                             min="0.1"
                             step="0.1"
                             className={inputCls}
-                            value={selected.content._animDuration ?? ""}
+                            value={String(selected.content._animDuration ?? "")}
                             placeholder="0.6"
                             onChange={(e) =>
                               setContent("_animDuration", e.target.value)
@@ -2301,7 +2721,7 @@ export function ElementorBuilder({
                             min="0"
                             step="0.1"
                             className={inputCls}
-                            value={selected.content._animDelay ?? ""}
+                            value={String(selected.content._animDelay ?? "")}
                             placeholder="0"
                             onChange={(e) =>
                               setContent("_animDelay", e.target.value)
@@ -2323,7 +2743,7 @@ export function ElementorBuilder({
                       <Field label="CSS classes">
                         <input
                           className={inputCls}
-                          value={selected.content._className ?? ""}
+                          value={String(selected.content._className ?? "")}
                           onChange={(e) =>
                             setContent("_className", e.target.value)
                           }
@@ -2333,7 +2753,7 @@ export function ElementorBuilder({
                       <Field label="Element ID">
                         <input
                           className={inputCls}
-                          value={selected.content._htmlId ?? ""}
+                          value={String(selected.content._htmlId ?? "")}
                           onChange={(e) =>
                             setContent(
                               "_htmlId",
@@ -2429,8 +2849,8 @@ export function ElementorBuilder({
                           value={categoryId}
                           onChange={setCategoryId}
                           options={categories.map((c: any) => ({
-                            label: c.name,
-                            value: c.id,
+                            label: String(c.name),
+                            value: String(c.id),
                           }))}
                           placeholder="Select category"
                         />
@@ -2611,15 +3031,6 @@ export function ElementorBuilder({
       />
     </div>
   );
-}
-
-/** Page-level code preview (lazy import keeps the editor bundle out of the canvas path). */
-function PageCode({ lang, code }: { lang: CodeLang; code: string }) {
-  const [Cmp, setCmp] = React.useState<null | React.ComponentType<any>>(null);
-  React.useEffect(() => {
-    import("./CodeEditor").then((m) => setCmp(() => m.CodePreview));
-  }, []);
-  return Cmp ? <Cmp lang={lang} code={code} /> : null;
 }
 
 export default ElementorBuilder;
