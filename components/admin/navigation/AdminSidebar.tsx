@@ -42,30 +42,37 @@ type NavGroup = { label: string; items: NavItem[] };
 
 export const NAV: NavGroup[] = [
   {
-    label: "Overview",
+    label: "Workspace",
     items: [
       { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+      { label: "AI Studio", href: "/admin/dashboard/ai-studio", icon: Sparkles },
     ],
   },
   {
     label: "Catalog",
     items: [
-      { label: "Templates", href: "/admin/dashboard/templates", icon: LayoutTemplate },
-      { label: "New Template", href: "/admin/dashboard/templates/new", icon: PlusSquare },
-      { label: "Categories", href: "/admin/dashboard/categories", icon: FolderTree },
-    ],
-  },
-  {
-    label: "AI Tools",
-    items: [
-      { label: "AI Studio", href: "/admin/dashboard/ai-studio", icon: Sparkles },
+      {
+        label: "Templates",
+        href: "/admin/dashboard/templates",
+        icon: LayoutTemplate,
+      },
+      {
+        label: "New Template",
+        href: "/admin/dashboard/templates/new",
+        icon: PlusSquare,
+      },
+      {
+        label: "Categories",
+        href: "/admin/dashboard/categories",
+        icon: FolderTree,
+      },
     ],
   },
   {
     label: "Business",
     items: [
-      { label: "Plans", href: "/admin/dashboard/plans", icon: CreditCard }, 
-      { label: "Subscriptions", href: "/admin/dashboard/subscriptions", icon: RefreshCcw }, 
+      { label: "Plans", href: "/admin/dashboard/plans", icon: CreditCard },
+      { label: "Subscriptions", href: "/admin/dashboard/subscriptions", icon: RefreshCcw },
       { label: "Orders", href: "/admin/dashboard/orders", icon: ShoppingBag },
       { label: "Users", href: "/admin/dashboard/users", icon: Users },
     ],
@@ -73,10 +80,26 @@ export const NAV: NavGroup[] = [
   {
     label: "Management",
     items: [
-      { label: "Invitations", href: "/admin/dashboard/invitations", icon: Mail },
-      { label: "Guests / RSVPs", href: "/admin/dashboard/guests", icon: CalendarCheck },  
-      { label: "Notifications", href: "/admin/dashboard/notifications", icon: Bell },
-      { label: "Account Settings", href: "/admin/dashboard/account-settings", icon: Settings },
+      {
+        label: "Invitations",
+        href: "/admin/dashboard/invitations",
+        icon: Mail,
+      },
+      {
+        label: "Guests / RSVPs",
+        href: "/admin/dashboard/guests",
+        icon: CalendarCheck,
+      },
+      {
+        label: "Notifications",
+        href: "/admin/dashboard/notifications",
+        icon: Bell,
+      },
+      {
+        label: "Account Settings",
+        href: "/admin/dashboard/account-settings",
+        icon: Settings,
+      },
     ],
   },
 ];
