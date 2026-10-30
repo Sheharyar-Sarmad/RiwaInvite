@@ -4,9 +4,9 @@ import "./globals.css";
 import settings from "@/config/settings_config";
 import { Toaster } from "@/components/ui/toast";
 import { SmoothScroll } from "@/components/providers/SmoothScroll";
-import { PublicShell } from "@/components/user/sections/PublicShell"; 
+import { PublicShell } from "@/components/user/sections/PublicShell";
+import { CustomCursor } from "@/components/providers/CustomCursor"; // Import
 
-// Display: characterful grotesque with optical sizing, for headings and brand moments
 const display = Bricolage_Grotesque({
   subsets: ["latin"],
   display: "swap",
@@ -14,7 +14,6 @@ const display = Bricolage_Grotesque({
   axes: ["opsz"],
 });
 
-// Body/UI: crisp, modern product sans
 const body = Geist({
   subsets: ["latin"],
   display: "swap",
@@ -38,7 +37,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Riwainvite",
     description: "Create, send, and track beautiful event invitations.",
-    images: [{ url: "/logo.png" }], 
+    images: [{ url: "/logo.png" }],
   },
 };
 
@@ -58,13 +57,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body
         suppressHydrationWarning
-        className="flex min-h-full flex-col bg-background font-[family-name:var(--font-body)] text-foreground selection:bg-orange-500/25 selection:text-orange-900"
+        className="flex min-h-full flex-col bg-background font-[family-name:var(--font-body)] text-foreground selection:bg-orange-500/25 selection:text-orange-900 cursor-default"
       >
+        {/* Add Cursor globally */}
+        <CustomCursor />
+        
         <SmoothScroll>
-          {/* Wrap children with PublicShell */}
-          <PublicShell>
-            {children}
-          </PublicShell>
+          <PublicShell>{children}</PublicShell>
         </SmoothScroll>
         <Toaster />
       </body>

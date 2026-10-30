@@ -1,8 +1,8 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Navbar } from "@/components/user/navigation/Navbar";
-import { Footer } from "@/components/user/navigation/Footer";
+import { Navbar } from "@/components/public/navigation/Navbar";
+import { Footer } from "@/components/public/navigation/Footer";
 
 export function PublicShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

@@ -21,11 +21,15 @@ export function WhatsAppNavButton() {
       rel="noopener noreferrer"
       aria-label="Chat with Riwainvite support on WhatsApp"
       title="Chat on WhatsApp"
-      whileHover={{ scale: 1.1 }}
+      whileHover={{ scale: 1.05, y: -2 }}
       whileTap={{ scale: 0.95 }}
-      className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_8px_20px_-6px_rgba(37,211,102,0.6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366] focus-visible:ring-offset-2"
+      // 🟢 Classy Orange Gradient & Shadow
+      className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-orange-400 to-orange-600 text-white shadow-[0_8px_20px_-6px_rgba(249,115,22,0.6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 transition-shadow hover:shadow-[0_10px_25px_-6px_rgba(249,115,22,0.8)] group"
     >
-      <WhatsAppIcon className="h-5 w-5" />
+      {/* Internal subtle glow on hover */}
+      <div className="absolute inset-0 rounded-full bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      
+      <WhatsAppIcon className="h-5 w-5 relative z-10" />
     </motion.a>
   );
 }

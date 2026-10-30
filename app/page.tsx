@@ -1,11 +1,13 @@
-import { Navbar } from "@/components/user/navigation/Navbar";
+import { Navbar } from "@/components/public/navigation/Navbar";
+import { HomeHero } from "@/components/public/sections/home/HomeHero";
+import { WhyRiwainvite } from "@/components/public/sections/home/WhyRiwainvite";
 
 
 export default function Home() {
   return (
     <div className="" >
-      <Navbar />
-      
+      <HomeHero />
+      <WhyRiwainvite />
     </div>
   )
 }
