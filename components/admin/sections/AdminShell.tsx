@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bell, CornerDownLeft, Search } from "lucide-react";
+import Lenis from "lenis";
 import {
   AdminSidebar,
   AdminMobileNav,
@@ -15,9 +16,15 @@ import {
   type AdminSession,
 } from "../navigation/AdminSidebar";
 import { useAdminNotifications } from "@/hooks/useAdminNotifications";
-import { toast } from "@/components/ui/toast"; // 🟢 Import toast
+import { toast } from "@/components/ui/toast";
 
-export function AdminShell({ admin, children }: { admin: AdminSession; children: React.ReactNode }) {
+export function AdminShell({
+  admin,
+  children,
+}: {
+  admin: AdminSession;
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
   const isBuilder = pathname?.includes("/builder");
 
@@ -27,9 +34,38 @@ export function AdminShell({ admin, children }: { admin: AdminSession; children:
   const rootRef = useRef<HTMLDivElement>(null);
   const raf = useRef(0);
 
+  // LENIS REFS
+  const mainRef = useRef<HTMLElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // INITIALIZE LENIS
+  useEffect(() => {
+    if (isBuilder || !mainRef.current || !contentRef.current) return;
+
+    const lenis = new Lenis({
+      wrapper: mainRef.current,
+      content: contentRef.current,
+      lerp: 0.09,
+      smoothWheel: true,
+    });
+
+    let animationFrameId: number;
+    function raf(time: number) {
+      lenis.raf(time);
+      animationFrameId = requestAnimationFrame(raf);
+    }
+    animationFrameId = requestAnimationFrame(raf);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      lenis.destroy();
+    };
+  }, [isBuilder]);
+
   useEffect(() => {
     try {
-      if (localStorage.getItem("admin:sidebar-collapsed") === "true") setCollapsed(true);
+      if (localStorage.getItem("admin:sidebar-collapsed") === "true")
+        setCollapsed(true);
     } catch {}
     setHydrated(true);
   }, []);
@@ -62,10 +98,15 @@ export function AdminShell({ admin, children }: { admin: AdminSession; children:
     });
   }, []);
 
-  const mask = "radial-gradient(230px circle at var(--mx,-999px) var(--my,-999px), #000 0%, transparent 100%)";
+  const mask =
+    "radial-gradient(230px circle at var(--mx,-999px) var(--my,-999px), #000 0%, transparent 100%)";
 
   if (isBuilder) {
-    return <div className="h-[100dvh] w-full overflow-hidden bg-[#f3f4f6]">{children}</div>;
+    return (
+      <div className="h-[100dvh] w-full overflow-hidden bg-[#f3f4f6]">
+        {children}
+      </div>
+    );
   }
 
   return (
@@ -74,22 +115,64 @@ export function AdminShell({ admin, children }: { admin: AdminSession; children:
       onPointerMove={onMove}
       className="relative isolate h-[100dvh] w-full overflow-hidden bg-white font-[family-name:var(--font-body)] text-neutral-900"
     >
-      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
+      >
         <div className="absolute inset-0 bg-gradient-to-br from-orange-50 via-white to-orange-50/70" />
-        <div className="absolute inset-0" style={{ backgroundImage: "radial-gradient(circle, rgba(249,115,22,0.28) 1.5px, transparent 1.5px)", backgroundSize: "24px 24px" }} />
-        <div className="absolute inset-0" style={{ backgroundImage: "radial-gradient(circle, rgba(234,88,12,0.95) 2px, transparent 2px)", backgroundSize: "24px 24px", maskImage: mask, WebkitMaskImage: mask }} />
-        <div className="absolute inset-0" style={{ background: "radial-gradient(420px circle at var(--mx,-999px) var(--my,-999px), rgba(249,115,22,0.10), transparent 70%)" }} />
-        <div className="absolute -right-32 -top-48 h-[620px] w-[620px] rounded-full blur-3xl" style={{ background: "radial-gradient(circle, rgba(249,115,22,0.22), transparent 65%)" }} />
-        <div className="absolute -bottom-48 -left-32 h-[560px] w-[560px] rounded-full blur-3xl" style={{ background: "radial-gradient(circle, rgba(255,138,76,0.20), transparent 70%)" }} />
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle, rgba(249,115,22,0.28) 1.5px, transparent 1.5px)",
+            backgroundSize: "24px 24px",
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle, rgba(234,88,12,0.95) 2px, transparent 2px)",
+            backgroundSize: "24px 24px",
+            maskImage: mask,
+            WebkitMaskImage: mask,
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(420px circle at var(--mx,-999px) var(--my,-999px), rgba(249,115,22,0.10), transparent 70%)",
+          }}
+        />
+        <div
+          className="absolute -right-32 -top-48 h-[620px] w-[620px] rounded-full blur-3xl"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(249,115,22,0.22), transparent 65%)",
+          }}
+        />
+        <div
+          className="absolute -bottom-48 -left-32 h-[560px] w-[560px] rounded-full blur-3xl"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(255,138,76,0.20), transparent 70%)",
+          }}
+        />
       </div>
 
-      <AdminSidebar 
-        admin={admin} 
-        collapsed={collapsed} 
-        onToggleCollapsed={() => setCollapsed((v) => !v)} 
-      />
+      {/* PREVENT LENIS FROM HIJACKING THE SIDEBAR */}
+      <div data-lenis-prevent>
+        <AdminSidebar
+          admin={admin}
+          collapsed={collapsed}
+          onToggleCollapsed={() => setCollapsed((v) => !v)}
+        />
+      </div>
 
-      <div className={`flex h-full min-w-0 flex-col overflow-hidden transition-[padding] duration-300 ease-out ${collapsed ? "lg:pl-[96px]" : "lg:pl-[284px]"}`}>
+      <div
+        className={`flex h-full min-w-0 flex-col overflow-hidden transition-[padding] duration-300 ease-out ${collapsed ? "lg:pl-[96px]" : "lg:pl-[284px]"}`}
+      >
         <header className="shrink-0 px-2 pt-2 sm:px-5 sm:pt-3 lg:px-6">
           <div className="flex h-14 items-center gap-2 rounded-2xl border border-white bg-white/80 px-2 backdrop-blur-xl sm:gap-3 sm:px-3 shadow-[inset_0_1px_0_#fff,0_1px_2px_rgba(15,23,42,0.05),0_14px_30px_-14px_rgba(249,115,22,0.35)]">
             <AdminMobileNav admin={admin} />
@@ -101,28 +184,45 @@ export function AdminShell({ admin, children }: { admin: AdminSession; children:
               aria-label="Search or jump to"
               className={`flex items-center gap-2 rounded-xl p-2 text-sm text-neutral-500 sm:w-60 sm:px-3 sm:py-1.5 ${RAISED_BTN} ${FOCUS}`}
             >
-              <Search className="h-4 w-4 shrink-0 text-orange-500" strokeWidth={1.75} aria-hidden />
-              <span className="hidden flex-1 text-left sm:inline">Search or jump to…</span>
-              <kbd className="hidden rounded-md border border-orange-100 bg-white px-1.5 py-0.5 text-[10px] font-medium text-neutral-400 sm:inline">Ctrl K</kbd>
+              <Search
+                className="h-4 w-4 shrink-0 text-orange-500"
+                strokeWidth={1.75}
+                aria-hidden
+              />
+              <span className="hidden flex-1 text-left sm:inline">
+                Search or jump to…
+              </span>
+              <kbd className="hidden rounded-md border border-orange-100 bg-white px-1.5 py-0.5 text-[10px] font-medium text-neutral-400 sm:inline">
+                Ctrl K
+              </kbd>
             </button>
             <NotificationBell />
           </div>
         </header>
 
-        <main className="relative flex-1 overflow-y-auto px-3 py-5 sm:px-6 sm:py-6 lg:px-8">
-          <motion.div
-            key="content"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
-            className="mx-auto max-w-7xl"
-          >
-            {children}
-          </motion.div>
+        {/* ATTACH THE REFS HERE */}
+        <main
+          ref={mainRef}
+          className="relative flex-1 overflow-y-auto px-3 py-5 sm:px-6 sm:py-6 lg:px-8"
+        >
+          <div ref={contentRef}>
+            <motion.div
+              key="content"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className="mx-auto max-w-7xl"
+            >
+              {children}
+            </motion.div>
+          </div>
         </main>
       </div>
 
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+      />
     </div>
   );
 }
@@ -133,17 +233,26 @@ function Crumbs() {
     .replace(/^\/admin\/?/, "")
     .split("/")
     .filter(Boolean)
-    .filter((p, i) => !(i === 0 && p === "dashboard" && pathname.split("/").length > 3));
-  const cap = (s: string) => s.replace(/[-_]/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+    .filter(
+      (p, i) =>
+        !(i === 0 && p === "dashboard" && pathname.split("/").length > 3),
+    );
+  const cap = (s: string) =>
+    s.replace(/[-_]/g, " ").replace(/^\w/, (c) => c.toUpperCase());
   const last = parts[parts.length - 1] ?? "dashboard";
   const before = parts.slice(0, -1);
 
   return (
     <div className="flex min-w-0 items-center gap-1.5 pl-1 text-sm">
       {before.map((p) => (
-        <span key={p} className="hidden items-center gap-1.5 text-neutral-400 sm:flex">
+        <span
+          key={p}
+          className="hidden items-center gap-1.5 text-neutral-400 sm:flex"
+        >
           {cap(p)}
-          <span aria-hidden className="text-orange-300">/</span>
+          <span aria-hidden className="text-orange-300">
+            /
+          </span>
         </span>
       ))}
       <span className="truncate font-semibold text-neutral-900 font-[family-name:var(--font-display)]">
@@ -153,14 +262,24 @@ function Crumbs() {
   );
 }
 
-function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+function CommandPalette({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [idx, setIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const items = NAV.flatMap((g) => g.items.map((i) => ({ ...i, group: g.label })));
-  const results = items.filter((i) => `${i.label} ${i.group}`.toLowerCase().includes(q.trim().toLowerCase()));
+  const items = NAV.flatMap((g) =>
+    g.items.map((i) => ({ ...i, group: g.label })),
+  );
+  const results = items.filter((i) =>
+    `${i.label} ${i.group}`.toLowerCase().includes(q.trim().toLowerCase()),
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -219,11 +338,19 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
                 placeholder="Jump to a page…"
                 className="h-14 flex-1 bg-transparent text-sm text-neutral-900 outline-none placeholder:text-neutral-400"
               />
-              <kbd className="rounded-md border border-orange-100 bg-white px-1.5 py-0.5 text-[10px] text-neutral-400">Esc</kbd>
+              <kbd className="rounded-md border border-orange-100 bg-white px-1.5 py-0.5 text-[10px] text-neutral-400">
+                Esc
+              </kbd>
             </div>
-            <ul className="scroll-ember max-h-[50vh] overflow-y-auto p-2">
+            {/* 🟢 PREVENT LENIS FROM HIJACKING THE PALETTE SCROLL */}
+            <ul
+              data-lenis-prevent
+              className="scroll-ember max-h-[50vh] overflow-y-auto p-2"
+            >
               {results.length === 0 && (
-                <li className="px-3 py-8 text-center text-sm text-neutral-500">No pages match “{q}”.</li>
+                <li className="px-3 py-8 text-center text-sm text-neutral-500">
+                  No pages match “{q}”.
+                </li>
               )}
               {results.map((r, i) => {
                 const Icon = r.icon;
@@ -240,12 +367,25 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
                           : "border border-transparent text-neutral-700"
                       }`}
                     >
-                      <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${on ? "bg-gradient-to-b from-orange-400 to-orange-600 text-white" : "border border-orange-100/70 bg-white text-neutral-400"}`}>
-                        <Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+                      <span
+                        className={`flex h-7 w-7 items-center justify-center rounded-lg ${on ? "bg-gradient-to-b from-orange-400 to-orange-600 text-white" : "border border-orange-100/70 bg-white text-neutral-400"}`}
+                      >
+                        <Icon
+                          className="h-4 w-4"
+                          strokeWidth={1.75}
+                          aria-hidden
+                        />
                       </span>
                       <span className="flex-1 font-medium">{r.label}</span>
-                      <span className="text-xs text-neutral-400">{r.group}</span>
-                      {on && <CornerDownLeft className="h-3.5 w-3.5 text-orange-500" aria-hidden />}
+                      <span className="text-xs text-neutral-400">
+                        {r.group}
+                      </span>
+                      {on && (
+                        <CornerDownLeft
+                          className="h-3.5 w-3.5 text-orange-500"
+                          aria-hidden
+                        />
+                      )}
                     </button>
                   </li>
                 );
@@ -258,18 +398,15 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
   );
 }
 
-// 🟢 UPDATED: Real-time Toast + Count Bell
 function NotificationBell() {
-  // Assuming your hook now returns the latest notification object
   const { unreadCount, latestNotification } = useAdminNotifications();
 
-  // Listen for new notifications and fire the toast
   useEffect(() => {
     if (latestNotification) {
       toast.add({
         title: latestNotification.title,
         description: latestNotification.message,
-        type: "info", // You can map this to 'success', 'error', etc.
+        type: "info",
       });
     }
   }, [latestNotification]);

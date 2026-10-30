@@ -47,7 +47,8 @@ export function PlanGuideModal({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+    // 🟢 FIX 1: Add data-lenis-prevent to the outer wrapper
+    <div data-lenis-prevent className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -61,6 +62,8 @@ export function PlanGuideModal({
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        // 🟢 FIX 2: Add data-lenis-prevent to the scrollable modal container
+        data-lenis-prevent
         className="relative w-[95vw] md:w-full max-w-4xl bg-[#fffafb] rounded-[2rem] shadow-2xl shadow-orange-900/20 z-10 border border-white max-h-[90vh] overflow-y-auto no-scrollbar flex flex-col"
       >
         <div

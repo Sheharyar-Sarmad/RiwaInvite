@@ -277,12 +277,13 @@ export function PlanModal({ mode, plan, onClose, onSuccess, onOpenGuide }: PlanM
   const reveal = { h: { opacity: 0, y: 10 }, v: { opacity: 1, y: 0 } };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
+    <div data-lenis-prevent className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
+        data-lenis-prevent
         className="absolute inset-0 bg-gray-900/60 backdrop-blur-md cursor-pointer"
       />
 
@@ -290,6 +291,7 @@ export function PlanModal({ mode, plan, onClose, onSuccess, onOpenGuide }: PlanM
         initial={{ opacity: 0, scale: 0.94, y: 24 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 16 }}
+        data-lenis-prevent
         transition={{ type: "spring", stiffness: 380, damping: 32 }}
         className="relative bg-[#fffafb] rounded-[2rem] w-full max-w-lg shadow-2xl shadow-orange-900/20 z-10 border border-white max-h-[90vh] overflow-y-auto no-scrollbar flex flex-col"
       >

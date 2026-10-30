@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
-import { CheckCheck, BellOff, Search, X, Check, ChevronRight } from "lucide-react";
+import { CheckCheck, BellOff, Search, X, Check, ChevronRight, Trash2 } from "lucide-react";
 import { apiClient } from "@/lib/api/api_base";
 import { formatDistanceToNow, isToday, isYesterday, isThisWeek } from "date-fns";
 import { toast } from "@/components/ui/toast";
@@ -13,6 +13,7 @@ import {
   type NotificationItem,
   type NotificationKind,
 } from "@/components/admin/models/NotificationModal";
+import { DeleteNotificationModal } from "@/components/admin/models/DeleteNotificationModal"; // 🟢 Import new modal
 
 type Filter = "all" | "unread";
 type KindFilter = "all" | NotificationKind;
@@ -73,27 +74,27 @@ export function NotificationsClient() {
   const [query, setQuery] = useState("");
   const [live, setLive] = useState<Live>("connecting");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // Ids frozen at the moment the modal opens, so ↑/↓ browsing stays stable even
-  // when optimistic read-updates remove items from the "Unread" view.
   const [navIds, setNavIds] = useState<string[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
   const searchRef = useRef<HTMLInputElement>(null);
   const seenIds = useRef<Set<string>>(new Set());
   const notificationsRef = useRef<NotificationItem[]>([]);
 
-  /* ───────── single source of truth ───────── */
+  // 🟢 NEW: Delete Modal State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<"all" | string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read_at).length, [notifications]);
 
   useEffect(() => { notificationsRef.current = notifications; }, [notifications]);
 
-  /* ───────── data ───────── */
   useEffect(() => {
     (async () => {
       try {
         const res = await apiClient.get("/admin/dashboard/notifications");
         const server: NotificationItem[] = res.data.notifications;
         server.forEach((n) => seenIds.current.add(n.id));
-        // Merge, so anything the SSE stream delivered before this response landed isn't lost
         setNotifications((prev) => {
           const serverIds = new Set(server.map((n) => n.id));
           return [...prev.filter((n) => !serverIds.has(n.id)), ...server];
@@ -124,15 +125,15 @@ export function NotificationsClient() {
     return () => es.close();
   }, []);
 
-  /* ───────── actions (optimistic, with rollback) ───────── */
+  /* ───────── actions ───────── */
   const markRead = useCallback(async (id: string) => {
     const target = notificationsRef.current.find((n) => n.id === id);
     if (!target || target.read_at) return;
 
     const stamp = new Date().toISOString();
     const apply = (list: NotificationItem[]) => list.map((n) => (n.id === id ? { ...n, read_at: stamp } : n));
-    notificationsRef.current = apply(notificationsRef.current); // guards rapid double-clicks
-    setNotifications(apply);                                    // badge + filters update instantly
+    notificationsRef.current = apply(notificationsRef.current); 
+    setNotifications(apply);                                    
 
     try {
       await apiClient.patch("/admin/dashboard/notifications/read", { id });
@@ -154,6 +155,55 @@ export function NotificationsClient() {
     } catch {
       setNotifications((prev) => prev.map((n) => (flipped.has(n.id) && n.read_at === stamp ? { ...n, read_at: null } : n)));
       toast.add({ title: "Couldn't mark all as read", description: "Nothing was changed. Try again.", type: "error" });
+    }
+  };
+
+  // 🟢 UPDATED: Open Modal for Single Delete
+  const handleDeleteOne = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation(); // Prevent opening the detail modal
+    setDeleteTarget(id);
+    setIsDeleteModalOpen(true);
+  };
+
+  // 🟢 UPDATED: Open Modal for Delete All
+  const handleDeleteAll = () => {
+    setDeleteTarget("all");
+    setIsDeleteModalOpen(true);
+  };
+
+  // 🟢 NEW: The actual deletion logic (called by the Modal)
+  const executeDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    const backup = [...notificationsRef.current];
+    
+    // Optimistic update
+    if (deleteTarget === "all") {
+      setNotifications([]);
+      notificationsRef.current = [];
+      setSelectedId(null); // Close detail modal if open
+    } else {
+      setNotifications((prev) => prev.filter((n) => n.id !== deleteTarget));
+      notificationsRef.current = notificationsRef.current.filter((n) => n.id !== deleteTarget);
+    }
+
+    try {
+      if (deleteTarget === "all") {
+        await apiClient.delete("/admin/dashboard/notifications");
+        toast.add({ title: "Cleared", description: "All notifications deleted.", type: "success" });
+      } else {
+        await apiClient.delete(`/admin/dashboard/notifications/${deleteTarget}`);
+        toast.add({ title: "Deleted", description: "Notification removed.", type: "success" });
+      }
+      setIsDeleteModalOpen(false);
+    } catch {
+      // Rollback on failure
+      setNotifications(backup);
+      notificationsRef.current = backup;
+      toast.add({ title: "Error", description: "Failed to delete.", type: "error" });
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
     }
   };
 
@@ -187,8 +237,6 @@ export function NotificationsClient() {
     return GROUP_ORDER.filter((g) => map.has(g)).map((g) => ({ label: g, items: map.get(g)! }));
   }, [filtered]);
 
-  // Resolve the open notification from the full list (not `filtered`), so it
-  // stays open when marking it read removes it from the Unread view.
   const selected = selectedId ? notifications.find((n) => n.id === selectedId) ?? null : null;
   const selectedIndex = selectedId ? navIds.indexOf(selectedId) : -1;
 
@@ -205,10 +253,9 @@ export function NotificationsClient() {
     markRead(nextId);
   }, [navIds, selectedIndex, markRead]);
 
-  /* ───────── keyboard: / search · j/k move · Enter open ───────── */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (selectedId) return;
+      if (selectedId || isDeleteModalOpen) return; // Disable shortcuts when modals are open
       const tag = (e.target as HTMLElement)?.tagName;
       const typing = tag === "INPUT" || tag === "TEXTAREA";
       if (e.key === "/" && !typing) { e.preventDefault(); searchRef.current?.focus(); return; }
@@ -219,7 +266,7 @@ export function NotificationsClient() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedId, filtered, activeIndex, open]);
+  }, [selectedId, isDeleteModalOpen, filtered, activeIndex, open]);
 
   useEffect(() => { setActiveIndex(-1); }, [filter, kindFilter, query]);
 
@@ -315,6 +362,16 @@ export function NotificationsClient() {
                 </motion.button>
               )}
             </AnimatePresence>
+
+            {notifications.length > 0 && (
+              <button
+                onClick={handleDeleteAll}
+                title="Delete all notifications"
+                className="flex shrink-0 cursor-pointer items-center justify-center rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-red-600 transition-colors hover:bg-red-100 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -404,7 +461,6 @@ export function NotificationsClient() {
                         active ? "bg-orange-50/70" : unread ? "bg-orange-50/25 hover:bg-orange-50/60" : "hover:bg-gray-50/80"
                       }`}
                     >
-                      {/* unread accent */}
                       <span className={`absolute inset-y-3 left-0 w-[3px] rounded-r-full transition-opacity ${tone.bar} ${unread ? "opacity-100" : "opacity-0"}`} />
 
                       <div className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-xl ring-1 transition-transform group-hover:scale-105 ${tone.tile} ${tone.ring} ${unread ? "" : "opacity-70"}`}>
@@ -425,7 +481,7 @@ export function NotificationsClient() {
                         </p>
                       </div>
 
-                      <div className="flex w-12 shrink-0 items-center justify-end gap-1.5">
+                      <div className="flex w-16 shrink-0 items-center justify-end gap-1.5">
                         {unread && (
                           <button
                             onClick={(e) => { e.stopPropagation(); markRead(notif.id); }}
@@ -436,10 +492,20 @@ export function NotificationsClient() {
                             <Check className="h-3.5 w-3.5" />
                           </button>
                         )}
+
+                        <button
+                          onClick={(e) => handleDeleteOne(e, notif.id)}
+                          aria-label="Delete notification"
+                          title="Delete notification"
+                          className="rounded-full border border-gray-200 bg-white p-1.5 text-gray-400 opacity-0 shadow-sm transition-all hover:border-red-200 hover:text-red-600 focus-visible:opacity-100 group-hover:opacity-100"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+
                         {unread ? (
                           <span className="h-2.5 w-2.5 rounded-full bg-orange-500 shadow-[0_0_0_4px_rgba(249,115,22,0.15)] group-hover:hidden" />
                         ) : (
-                          <ChevronRight className="h-4 w-4 text-gray-300 transition-transform group-hover:translate-x-0.5 group-hover:text-gray-500" />
+                          <ChevronRight className="h-4 w-4 text-gray-300 transition-transform group-hover:translate-x-0.5 group-hover:text-gray-500 group-hover:hidden" />
                         )}
                       </div>
                     </motion.div>
@@ -469,6 +535,26 @@ export function NotificationsClient() {
             onPrev={selectedIndex > 0 ? () => step(-1) : undefined}
             onNext={selectedIndex < navIds.length - 1 ? () => step(1) : undefined}
             position={{ index: selectedIndex, total: navIds.length }}
+            // 🟢 Wire up the delete button inside the detail modal
+            onDelete={(id) => {
+              setSelectedId(null); // Close details first
+              setDeleteTarget(id);
+              setIsDeleteModalOpen(true);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* 🟢 Delete Confirmation Modal */}
+      <AnimatePresence>
+        {isDeleteModalOpen && deleteTarget && (
+          <DeleteNotificationModal
+            targetType={deleteTarget === "all" ? "all" : "single"}
+            onClose={() => {
+              if (!isDeleting) setIsDeleteModalOpen(false);
+            }}
+            onConfirm={executeDelete}
+            isDeleting={isDeleting}
           />
         )}
       </AnimatePresence>

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
-  X, Loader2, CreditCard, ShoppingBag, Save, AlertCircle, Calendar
+  X, Loader2, CreditCard, ShoppingBag, Save, AlertCircle
 } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { apiClient } from "@/lib/api/api_base";
@@ -24,12 +24,10 @@ const UPDATE_STATUS_OPTIONS = [
 ];
 
 export function OrderModal({ order, onClose, onUpdate }: { order: Order; onClose: () => void; onUpdate: () => void }) {
-  // We initialize items as null, so we can show a mini-loader just for the items
   const [items, setItems] = useState<OrderItem[] | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [newStatus, setNewStatus] = useState<string>(order.status);
 
-  // We only fetch the order_items in the background, because the main list API doesn't return them.
   useEffect(() => {
     const fetchItems = async () => {
       try {
@@ -57,7 +55,8 @@ export function OrderModal({ order, onClose, onUpdate }: { order: Order; onClose
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+    // 🟢 FIX 1: Add data-lenis-prevent to the outer wrapper
+    <div data-lenis-prevent className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <motion.div 
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}
@@ -68,6 +67,8 @@ export function OrderModal({ order, onClose, onUpdate }: { order: Order; onClose
         initial={{ opacity: 0, scale: 0.95, y: 20 }} 
         animate={{ opacity: 1, scale: 1, y: 0 }} 
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        // 🟢 FIX 2: Add data-lenis-prevent to the scrollable modal body
+        data-lenis-prevent
         className="relative bg-[#fffafb] rounded-[2rem] p-6 md:p-8 w-full max-w-xl shadow-2xl z-10 border border-white max-h-[90vh] overflow-y-auto no-scrollbar flex flex-col"
       >
         <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none rounded-[2rem]" 

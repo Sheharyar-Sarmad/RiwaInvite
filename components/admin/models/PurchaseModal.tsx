@@ -37,7 +37,7 @@ export function PurchaseModal({ id, onClose }: { id: string; onClose: () => void
   }, [id]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+    <div data-lenis-prevent className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <motion.div 
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}
@@ -48,6 +48,7 @@ export function PurchaseModal({ id, onClose }: { id: string; onClose: () => void
         initial={{ opacity: 0, scale: 0.95, y: 20 }} 
         animate={{ opacity: 1, scale: 1, y: 0 }} 
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        data-lenis-prevent
         className="relative bg-[#fffafb] rounded-[2rem] p-6 md:p-8 w-full max-w-lg shadow-2xl z-10 border border-white max-h-[90vh] overflow-y-auto no-scrollbar"
       >
         <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none rounded-[2rem]" 

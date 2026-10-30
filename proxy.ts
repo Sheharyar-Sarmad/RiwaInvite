@@ -23,8 +23,10 @@ export async function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete("x-admin-id");
   requestHeaders.delete("x-admin-email");
+  requestHeaders.delete("x-admin-name"); 
   requestHeaders.delete("x-user-id");
   requestHeaders.delete("x-user-email");
+  requestHeaders.delete("x-user-name");  
 
   // 2. ROUTE CLASSIFICATION
   const isAdminApi = pathname.startsWith("/api/v1/admin") && !pathname.includes("/auth");
@@ -58,6 +60,7 @@ export async function proxy(request: NextRequest) {
     // SUCCESS: Inject headers and proceed
     if (admin.id) requestHeaders.set("x-admin-id", String(admin.id));
     if (admin.email) requestHeaders.set("x-admin-email", String(admin.email));
+    if (admin.account_name) requestHeaders.set("x-admin-name", String(admin.account_name)); // 🟢 Inject account name
 
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
@@ -88,6 +91,7 @@ export async function proxy(request: NextRequest) {
     // SUCCESS: Inject headers and proceed
     if (user.id) requestHeaders.set("x-user-id", String(user.id));
     if (user.email) requestHeaders.set("x-user-email", String(user.email));
+    if (user.first_name) requestHeaders.set("x-user-name", String(user.first_name)); // 🟢 Inject user name (if available)
 
     return NextResponse.next({ request: { headers: requestHeaders } });
   }

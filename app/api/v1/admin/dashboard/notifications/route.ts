@@ -1,11 +1,11 @@
 export const instant = false;
 
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { headers } from "next/headers";
 import { sql } from "@/db/connections/postgres_connection";
 import { getRedisClient } from "@/db/connections/redis_connection";
 import { STATUS_CODE } from "@/lib/status_codes";
-import { pgErrorToResponse } from "@/lib/api/errors";
+import { errorResponse, pgErrorToResponse } from "@/lib/api/errors";
 
 export async function GET() {
   try {
@@ -62,5 +62,20 @@ export async function GET() {
 
   } catch (error) {
     return pgErrorToResponse(error);
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const adminId = req.headers.get("x-admin-id");
+  if (!adminId) return errorResponse(STATUS_CODE.UNAUTHORIZED, "UNAUTHORIZED", "Missing Admin ID.");
+
+  try {
+    await sql`
+      DELETE FROM admin_notifications
+      WHERE admin_id = ${adminId} OR admin_id IS NULL
+    `;
+    return NextResponse.json({ status: "success" }, { status: STATUS_CODE.OK });
+  } catch (err) {
+    return pgErrorToResponse(err);
   }
 }

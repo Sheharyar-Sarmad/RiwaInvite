@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   X, Bell, ShoppingBag, User, ShieldAlert, Clock, CheckCircle2,
-  ChevronUp, ChevronDown, Copy, Check, type LucideIcon,
-} from "lucide-react";
+  ChevronUp, ChevronDown, Copy, Check, Trash2, type LucideIcon,
+} from "lucide-react"; // 🟢 Imported Trash2
 import { format, formatDistanceToNow } from "date-fns";
 
 export type NotificationItem = {
@@ -29,7 +29,6 @@ type Tone = {
   bar: string;
 };
 
-/** Single source of truth for icon + colour per notification kind (shared with the list). */
 export const NOTIFICATION_TONES: Record<NotificationKind, Tone> = {
   order:  { label: "Order",  Icon: ShoppingBag, text: "text-emerald-600", tile: "bg-emerald-50",  ring: "ring-emerald-200/70", glow: "from-emerald-400/25", bar: "bg-emerald-500" },
   user:   { label: "User",   Icon: User,        text: "text-sky-600",     tile: "bg-sky-50",      ring: "ring-sky-200/70",     glow: "from-sky-400/25",     bar: "bg-sky-500" },
@@ -37,10 +36,6 @@ export const NOTIFICATION_TONES: Record<NotificationKind, Tone> = {
   system: { label: "System", Icon: Bell,        text: "text-orange-600",  tile: "bg-orange-50",   ring: "ring-orange-200/70",  glow: "from-orange-400/25",  bar: "bg-orange-500" },
 };
 
-/**
- * The backend's `type` field is unreliable (e.g. order updates arrive as "system"),
- * so the kind is derived purely from the title + message text.
- */
 export function resolveKind(title: string, message: string): NotificationKind {
   const text = `${title} ${message}`.toLowerCase();
   if (text.includes("order")) return "order";
@@ -55,16 +50,16 @@ type Props = {
   onPrev?: () => void;
   onNext?: () => void;
   position?: { index: number; total: number };
+  onDelete?: (id: string) => void; // 🟢 Added onDelete
 };
 
-export function NotificationModal({ notification, onClose, onPrev, onNext, position }: Props) {
+export function NotificationModal({ notification, onClose, onPrev, onNext, position, onDelete }: Props) {
   const kind = resolveKind(notification.title, notification.message);
   const tone = NOTIFICATION_TONES[kind];
   const { Icon } = tone;
   const [copied, setCopied] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
 
-  // Keyboard: Esc closes, ↑/↓ or k/j step through notifications
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -75,7 +70,6 @@ export function NotificationModal({ notification, onClose, onPrev, onNext, posit
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, onNext, onPrev]);
 
-  // Lock page scroll + move focus into the dialog
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -88,7 +82,7 @@ export function NotificationModal({ notification, onClose, onPrev, onNext, posit
       await navigator.clipboard.writeText(notification.id);
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
-    } catch { /* clipboard unavailable */ }
+    } catch {}
   };
 
   const created = new Date(notification.created_at);
@@ -114,7 +108,6 @@ export function NotificationModal({ notification, onClose, onPrev, onNext, posit
         transition={{ type: "spring", stiffness: 380, damping: 32 }}
         className="relative z-10 w-full max-w-lg overflow-hidden rounded-t-[2rem] border border-white/80 bg-[#fffdfb] shadow-[0_40px_120px_-20px_rgba(17,24,39,0.45)] sm:rounded-[2rem]"
       >
-        {/* Ambient tone glow */}
         <div className={`pointer-events-none absolute -top-32 left-1/2 h-64 w-[130%] -translate-x-1/2 rounded-full bg-gradient-to-b ${tone.glow} to-transparent blur-3xl`} />
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.035]"
@@ -122,7 +115,6 @@ export function NotificationModal({ notification, onClose, onPrev, onNext, posit
         />
 
         <div className="relative p-6 sm:p-8">
-          {/* Top bar */}
           <div className="mb-7 flex items-start justify-between">
             <div className="flex items-center gap-3.5">
               <motion.div
@@ -175,7 +167,6 @@ export function NotificationModal({ notification, onClose, onPrev, onNext, posit
             </div>
           </div>
 
-          {/* Content */}
           <motion.div
             key={notification.id}
             initial={{ opacity: 0, y: 8 }}
@@ -206,7 +197,6 @@ export function NotificationModal({ notification, onClose, onPrev, onNext, posit
             </div>
           </motion.div>
 
-          {/* Meta */}
           <div className="mt-5 flex items-center justify-between rounded-xl border border-gray-200/80 bg-gray-50/70 px-4 py-3">
             <div className="flex items-center gap-2">
               <CheckCircle2 className={`h-4 w-4 ${isRead ? "text-emerald-500" : "text-gray-300"}`} />
@@ -226,12 +216,24 @@ export function NotificationModal({ notification, onClose, onPrev, onNext, posit
             </button>
           </div>
 
-          <button
-            onClick={onClose}
-            className="mt-5 w-full rounded-xl bg-gray-900 py-3.5 text-sm font-bold text-white shadow-lg shadow-gray-900/20 transition-all hover:-translate-y-0.5 hover:bg-gray-800 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 font-[family-name:var(--font-display)]"
-          >
-            Done
-          </button>
+          {/* 🟢 NEW: Delete & Done Buttons */}
+          <div className="mt-5 flex gap-3">
+            {onDelete && (
+              <button
+                onClick={() => onDelete(notification.id)}
+                className="flex items-center justify-center rounded-xl border border-red-200 bg-red-50 px-4 py-3.5 text-red-600 transition-colors hover:bg-red-100 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                title="Delete notification"
+              >
+                <Trash2 className="h-5 w-5" />
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="flex-1 rounded-xl bg-gray-900 py-3.5 text-sm font-bold text-white shadow-lg shadow-gray-900/20 transition-all hover:-translate-y-0.5 hover:bg-gray-800 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 font-[family-name:var(--font-display)]"
+            >
+              Done
+            </button>
+          </div>
 
           {(onPrev || onNext) && (
             <p className="mt-3 text-center text-[11px] text-gray-400">
