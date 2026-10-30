@@ -9,7 +9,7 @@ import {
 } from "@/hooks/useAdminAnalytics";
 import { MetricCard } from "@/components/admin/cards/MetricCard";
 import { DashboardCard } from "@/components/admin/cards/DashboardCard";
-import { RevenueSection } from "@/components/admin/sections/RevenueSection";
+import { RevenueSection } from "@/components/admin/sections/dashboard/RevenueSection";
 import { ACCENTS, Accent } from "@/components/admin/cards/CardFrame";
 import { CustomAreaChart, CustomPieChart, CustomBarChart } from "@/components/admin/charts/AllCharts";
 import {

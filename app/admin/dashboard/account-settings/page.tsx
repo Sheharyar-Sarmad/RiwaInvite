@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { headers, cookies } from "next/headers";
-import { AccountTabs, type AccountTab } from "@/components/admin/sections/AccountTabs";
+import { AccountTabs, type AccountTab } from "@/components/admin/sections/account/AccountTabs";
 import { ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
 import settings from "@/config/settings_config";

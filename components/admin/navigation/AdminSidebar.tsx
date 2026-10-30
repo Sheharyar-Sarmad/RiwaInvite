@@ -101,11 +101,6 @@ export const NAV: NavGroup[] = [
         icon: Mail,
       },
       {
-        label: "Guests / RSVPs",
-        href: "/admin/dashboard/guests",
-        icon: CalendarCheck,
-      },
-      {
         label: "Notifications",
         href: "/admin/dashboard/notifications",
         icon: Bell,

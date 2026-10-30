@@ -15,10 +15,11 @@ import {
   type AdminSession,
 } from "../navigation/AdminSidebar";
 import { useAdminNotifications } from "@/hooks/useAdminNotifications";
+import { toast } from "@/components/ui/toast"; // 🟢 Import toast
 
 export function AdminShell({ admin, children }: { admin: AdminSession; children: React.ReactNode }) {
   const pathname = usePathname();
-  const isBuilder = pathname?.includes("/builder"); // <--- NEW CHECK
+  const isBuilder = pathname?.includes("/builder");
 
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -63,9 +64,6 @@ export function AdminShell({ admin, children }: { admin: AdminSession; children:
 
   const mask = "radial-gradient(230px circle at var(--mx,-999px) var(--my,-999px), #000 0%, transparent 100%)";
 
-  // ==========================================
-  // THE MAGIC: If in builder, strip the shell!
-  // ==========================================
   if (isBuilder) {
     return <div className="h-[100dvh] w-full overflow-hidden bg-[#f3f4f6]">{children}</div>;
   }
@@ -260,8 +258,21 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
   );
 }
 
+// 🟢 UPDATED: Real-time Toast + Count Bell
 function NotificationBell() {
-  const { unreadCount } = useAdminNotifications();
+  // Assuming your hook now returns the latest notification object
+  const { unreadCount, latestNotification } = useAdminNotifications();
+
+  // Listen for new notifications and fire the toast
+  useEffect(() => {
+    if (latestNotification) {
+      toast.add({
+        title: latestNotification.title,
+        description: latestNotification.message,
+        type: "info", // You can map this to 'success', 'error', etc.
+      });
+    }
+  }, [latestNotification]);
 
   return (
     <Link
@@ -271,7 +282,7 @@ function NotificationBell() {
     >
       <Bell className="h-5 w-5" strokeWidth={1.75} aria-hidden />
       {unreadCount > 0 && (
-        <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
+        <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white ring-2 ring-white animate-in zoom-in">
           {unreadCount > 99 ? "99+" : unreadCount}
         </span>
       )}

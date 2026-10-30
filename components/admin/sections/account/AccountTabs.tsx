@@ -4,7 +4,7 @@ import { KeyboardEvent, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import Link from "next/link";
 import { ArrowUpRight, Check, Copy, ShieldAlert, UserCog, UserPlus } from "lucide-react";
-import { AccountSettingsForm, Panel } from "../forms/AccountSettingsForm";
+import { AccountSettingsForm, Panel } from "../../forms/AccountSettingsForm";
 
 export type AccountTab = "account" | "register";
 

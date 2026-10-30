@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { apiClient } from "@/lib/api/api_base";
 
 export type AdminNotification = {
@@ -15,6 +15,9 @@ export type AdminNotification = {
 export function useAdminNotifications() {
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  
+  // 1. Add state for the latest notification to trigger toasts
+  const [latestNotification, setLatestNotification] = useState<AdminNotification | null>(null);
 
   // Initial Fetch
   const fetchNotifications = useCallback(async () => {
@@ -35,8 +38,12 @@ export function useAdminNotifications() {
 
     eventSource.addEventListener("notification", (e) => {
       const newNotif = JSON.parse(e.data) as AdminNotification;
+      
       setNotifications((prev) => [newNotif, ...prev]);
       setUnreadCount((prev) => prev + 1);
+      
+      // 2. Set the latest notification so the UI knows to show a toast
+      setLatestNotification(newNotif);
     });
 
     return () => {
@@ -62,5 +69,11 @@ export function useAdminNotifications() {
     }
   };
 
-  return { notifications, unreadCount, markAsRead };
+  // 3. Return latestNotification so AdminShell can use it
+  return { 
+    notifications, 
+    unreadCount, 
+    latestNotification, 
+    markAsRead 
+  };
 }

@@ -2,7 +2,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { DashboardAnalytics } from "@/components/admin/sections/DashboardAnalytics";
+import { DashboardAnalytics } from "@/components/admin/sections/dashboard/DashboardAnalytics";
 import settings from "@/config/settings_config";
 
 export const metadata: Metadata = {
