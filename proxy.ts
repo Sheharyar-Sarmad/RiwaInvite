@@ -6,133 +6,86 @@ import { verifyUserSession } from "@/middlewares/verify_user";
 
 const appConfig = settings();
 
+// Reusable response helpers to avoid creating new objects unnecessarily
+const unauthorizedResponse = (message: string) => 
+  NextResponse.json({ status: "error", message, data: null, error: "Unauthorized" }, { status: 401 });
+
+const clearCookieAndRedirect = (url: string, request: NextRequest) => {
+  const response = NextResponse.redirect(new URL(url, request.url));
+  response.cookies.delete(appConfig.sessionCookieName);
+  return response;
+};
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Safely extract the first IP from x-forwarded-for (handles comma-separated lists)
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  const ip = forwardedFor ? forwardedFor.split(",")[0].trim() : "unknown";
-
-  // 1. INITIALIZE HEADERS & STRIP SPOOFING ATTEMPTS
+  // 1. STRIP SPOOFED HEADERS IMMEDIATELY (Security First)
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete("x-admin-id");
   requestHeaders.delete("x-admin-email");
   requestHeaders.delete("x-user-id");
   requestHeaders.delete("x-user-email");
 
-  // ADMIN ROUTE LOGIC
-  const isAdminApi =
-    pathname.startsWith("/api/v1/admin") && !pathname.includes("/auth");
+  // 2. ROUTE CLASSIFICATION
+  const isAdminApi = pathname.startsWith("/api/v1/admin") && !pathname.includes("/auth");
   const isAdminPage = pathname.startsWith("/admin/dashboard");
+  
+  const isUserApi = pathname.startsWith("/api/v1/user") && !pathname.includes("/auth");
+  const isUserDashboardPage = pathname.startsWith("/user/dashboard");
+  const isRootDashboardPage = pathname === "/dashboard";
 
+  // ADMIN LOGIC
   if (isAdminApi || isAdminPage) {
-    const sessionCookie = request.cookies.get(
-      appConfig.sessionCookieName,
-    )?.value;
+    const sessionCookie = request.cookies.get(appConfig.sessionCookieName)?.value;
 
-    // 1. FAIL: Missing Cookie
+    // FAST FAIL: No cookie? Don't touch the database.
     if (!sessionCookie) {
-      if (isAdminApi) {
-        return NextResponse.json(
-          {
-            status: "error",
-            message: "No admin access. Session missing.",
-            data: null,
-            error: "Unauthorized",
-          },
-          { status: 401 },
-        );
-      }
-      return NextResponse.redirect(new URL("/admin/login", request.url));
+      return isAdminApi 
+        ? unauthorizedResponse("No admin access. Session missing.")
+        : NextResponse.redirect(new URL("/admin/login", request.url));
     }
 
-    // 2. Check Session
+    // Verify Session (Hits Redis with a strict 50ms timeout, then Postgres)
     const admin = await verifyAdminSession(sessionCookie);
 
-    // 3. FAIL: Invalid Session
+    // FAST FAIL: Invalid session
     if (!admin) {
-      if (isAdminApi) {
-        const response = NextResponse.json(
-          {
-            status: "error",
-            message: "No admin access. Session invalid or expired.",
-            data: null,
-            error: "Unauthorized",
-          },
-          { status: 401 },
-        );
-        response.cookies.delete(appConfig.sessionCookieName);
-        return response;
-      }
-      const response = NextResponse.redirect(
-        new URL("/admin/login", request.url),
-      );
-      response.cookies.delete(appConfig.sessionCookieName);
-      return response;
+      return isAdminApi 
+        ? unauthorizedResponse("No admin access. Session invalid or expired.")
+        : clearCookieAndRedirect("/admin/login", request);
     }
 
-    // 4. SUCCESS: Attach Headers
+    // SUCCESS: Inject headers and proceed
     if (admin.id) requestHeaders.set("x-admin-id", String(admin.id));
     if (admin.email) requestHeaders.set("x-admin-email", String(admin.email));
 
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
-  // USER ROUTE LOGIC
-  const isUserApi =
-    pathname.startsWith("/api/v1/user") && !pathname.includes("/auth");
-  const isUserDashboardPage = pathname.startsWith("/user/dashboard");
-  const isRootDashboardPage = pathname === "/dashboard";
-
+  // USER LOGIC
   if (isUserApi || isUserDashboardPage || isRootDashboardPage) {
-    const sessionCookie = request.cookies.get(
-      appConfig.sessionCookieName,
-    )?.value;
+    const sessionCookie = request.cookies.get(appConfig.sessionCookieName)?.value;
 
-    // 1. FAIL: Missing Cookie
+    // FAST FAIL: No cookie?
     if (!sessionCookie) {
-      if (isUserApi) {
-        return NextResponse.json(
-          {
-            status: "error",
-            message: "No user access. Session missing.",
-            data: null,
-            error: "Unauthorized",
-          },
-          { status: 401 },
-        );
-      }
-      if (isRootDashboardPage) {
-        return NextResponse.redirect(new URL("/", request.url));
-      }
-      return NextResponse.redirect(new URL("/login", request.url));
+      if (isUserApi) return unauthorizedResponse("No user access. Session missing.");
+      return NextResponse.redirect(new URL(isRootDashboardPage ? "/" : "/login", request.url));
     }
 
-    // 2. Check Session (Redis -> Postgres)
+    // Safely extract IP for rate limiting/session tracking
+    const forwardedFor = request.headers.get("x-forwarded-for");
+    const ip = forwardedFor ? forwardedFor.split(",")[0].trim() : "unknown";
+
+    // Verify Session
     const user = await verifyUserSession(sessionCookie, ip);
 
-    // 3. FAIL: Invalid Session
+    // FAST FAIL: Invalid session
     if (!user) {
-      if (isUserApi) {
-        const response = NextResponse.json(
-          {
-            status: "error",
-            message: "No user access. Session invalid or expired.",
-            data: null,
-            error: "Unauthorized",
-          },
-          { status: 401 },
-        );
-        response.cookies.delete(appConfig.sessionCookieName);
-        return response;
-      }
-      const redirectUrl = isRootDashboardPage ? "/" : "/login";
-      const response = NextResponse.redirect(new URL(redirectUrl, request.url));
-      response.cookies.delete(appConfig.sessionCookieName);
-      return response;
+      if (isUserApi) return unauthorizedResponse("No user access. Session invalid or expired.");
+      return clearCookieAndRedirect(isRootDashboardPage ? "/" : "/login", request);
     }
 
-    // 4. SUCCESS: Attach Headers
+    // SUCCESS: Inject headers and proceed
     if (user.id) requestHeaders.set("x-user-id", String(user.id));
     if (user.email) requestHeaders.set("x-user-email", String(user.email));
 
@@ -140,7 +93,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // PUBLIC ROUTES
-  // Allow public routes to pass through, but still strip spoofed headers just in case
+  // Pass through instantly with stripped headers
   return NextResponse.next({ request: { headers: requestHeaders } });
 }
 

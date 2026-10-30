@@ -5,20 +5,32 @@ import { hashSessionToken } from "@/lib/auth";
 export async function verifyAdminSession(rawToken: string) {
   if (!rawToken) return null;
 
+  const start = Date.now(); // For performance logging
   const hashedToken = hashSessionToken(rawToken);
   const cacheKey = `admin_session:${hashedToken}`;
 
+  // 1. Redis Check with a strict 50ms Timeout
   try {
-    // 1. Redis Check
     const redis = await getRedisClient();
-    const cachedAdminString = await redis.get(cacheKey);
     
-    if (cachedAdminString) {
-      // FIX: Parse the full JSON object
-      return JSON.parse(cachedAdminString); 
-    }
+    // Force Redis to resolve within 50ms, otherwise resolve to null
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 50));
+    
+    const cachedAdminString = await Promise.race([
+      redis.get(cacheKey),
+      timeoutPromise
+    ]);
 
-    // 2. Postgres Check
+    if (cachedAdminString) {
+      console.log(`[Auth] Redis Hit: ${Date.now() - start}ms`);
+      return JSON.parse(cachedAdminString);
+    }
+  } catch (error) {
+    console.warn("[Auth] Redis error, falling back to Postgres");
+  }
+
+  // 2. Postgres Check (Fallback)
+  try {
     const sessions = await sql`
       SELECT a.id, a.email, a.account_name 
       FROM admin_sessions s
@@ -34,14 +46,16 @@ export async function verifyAdminSession(rawToken: string) {
     }
 
     const admin = sessions[0];
+    console.log(`[Auth] Postgres Hit: ${Date.now() - start}ms`);
 
-    // 3. Re-cache to Redis (expire in 15 mins)
-    // FIX: Stringify the whole object so email is available on Redis hits
-    await redis.setEx(cacheKey, 900, JSON.stringify(admin));
+    // 3. Re-cache to Redis (FIRE & FORGET - Don't await this!)
+    getRedisClient().then(redis => {
+      redis.setEx(cacheKey, 900, JSON.stringify(admin)).catch(() => {});
+    }).catch(() => {});
 
     return admin;
   } catch (error) {
-    console.error("Admin Session verification error:", error);
+    console.error("[Auth] Postgres verification error:", error);
     return null;
   }
 }
