@@ -4,6 +4,7 @@ import "./globals.css";
 import settings from "@/config/settings_config";
 import { Toaster } from "@/components/ui/toast";
 import { SmoothScroll } from "@/components/providers/SmoothScroll";
+import { PublicShell } from "@/components/user/sections/PublicShell"; 
 
 // Display: characterful grotesque with optical sizing, for headings and brand moments
 const display = Bricolage_Grotesque({
@@ -32,12 +33,12 @@ export const metadata: Metadata = {
   icons: {
     icon: [{ url: "/logo.png", type: "image/png" }],
     shortcut: "/logo.png",
-    apple: "/logo.png", // iOS home screen
+    apple: "/logo.png",
   },
   openGraph: {
     title: "Riwainvite",
     description: "Create, send, and track beautiful event invitations.",
-    images: [{ url: "/logo.png" }], // optional: link previews on WhatsApp, X and others
+    images: [{ url: "/logo.png" }], 
   },
 };
 
@@ -59,7 +60,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         suppressHydrationWarning
         className="flex min-h-full flex-col bg-background font-[family-name:var(--font-body)] text-foreground selection:bg-orange-500/25 selection:text-orange-900"
       >
-        <SmoothScroll>{children}</SmoothScroll>
+        <SmoothScroll>
+          {/* Wrap children with PublicShell */}
+          <PublicShell>
+            {children}
+          </PublicShell>
+        </SmoothScroll>
         <Toaster />
       </body>
     </html>
