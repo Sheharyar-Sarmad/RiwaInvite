@@ -464,3 +464,92 @@ CREATE INDEX IF NOT EXISTS idx_user_subs_created_at
 -- 2. Superpower Index: Speeds up filtering by status AND sorting by date in one step
 CREATE INDEX IF NOT EXISTS idx_user_subs_status_created 
   ON user_subscriptions (status, created_at DESC);
+
+-- 1. Create the Materialized View
+CREATE MATERIALIZED VIEW IF NOT EXISTS public_marquee_templates_view AS
+SELECT
+  t.id,
+  t.name,
+  t.description,
+  t.thumbnail_url AS "thumbnailUrl",
+  t.gallery_urls AS "galleryUrls",
+  t.video_urls AS "videoUrls",
+  t.music_urls AS "musicUrls",
+  t.is_premium AS "isPremium",
+  (t.price)::float AS "price",
+  c.name AS "categoryName",
+  tb.design_schema AS "design_schema",
+  t.created_at
+FROM templates t
+JOIN template_categories c ON t.category_id = c.id
+LEFT JOIN LATERAL (
+  SELECT design_schema 
+  FROM template_bodies 
+  WHERE template_id = t.id 
+  ORDER BY version DESC 
+  LIMIT 1
+) tb ON true
+WHERE t.status = 'published';
+
+-- 2. Create a UNIQUE index (Required for CONCURRENTLY refreshing)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_public_marquee_view_id 
+ON public_marquee_templates_view (id);
+
+-- 3. Create the Trigger Function to refresh the view
+CREATE OR REPLACE FUNCTION refresh_public_marquee_templates()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- CONCURRENTLY prevents the table from locking while it refreshes
+  REFRESH MATERIALIZED VIEW CONCURRENTLY public_marquee_templates_view;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 4. Attach the Trigger to the tables
+DROP TRIGGER IF EXISTS trg_refresh_marquee_templates ON templates;
+CREATE TRIGGER trg_refresh_marquee_templates
+AFTER INSERT OR UPDATE OR DELETE ON templates
+FOR EACH STATEMENT EXECUTE FUNCTION refresh_public_marquee_templates();
+
+DROP TRIGGER IF EXISTS trg_refresh_marquee_bodies ON template_bodies;
+CREATE TRIGGER trg_refresh_marquee_bodies
+AFTER INSERT OR UPDATE OR DELETE ON template_bodies
+FOR EACH STATEMENT EXECUTE FUNCTION refresh_public_marquee_templates();
+
+DROP TRIGGER IF EXISTS trg_refresh_marquee_categories ON template_categories;
+CREATE TRIGGER trg_refresh_marquee_categories
+AFTER UPDATE ON template_categories
+FOR EACH STATEMENT EXECUTE FUNCTION refresh_public_marquee_templates();
+
+-- 1. Create the Materialized View for Active Plans
+CREATE MATERIALIZED VIEW IF NOT EXISTS public_active_plans_view AS
+SELECT 
+  id, 
+  name, 
+  description, 
+  price, 
+  duration_days, 
+  max_simple_templates, 
+  max_premium_templates, 
+  allows_custom_slug
+FROM plans
+WHERE is_active = true;
+
+-- 2. Unique index for CONCURRENTLY refreshing
+CREATE UNIQUE INDEX IF NOT EXISTS idx_public_plans_view_id 
+ON public_active_plans_view (id);
+
+-- 3. Trigger Function to refresh
+CREATE OR REPLACE FUNCTION refresh_public_plans()
+RETURNS TRIGGER AS $$
+BEGIN
+  REFRESH MATERIALIZED VIEW CONCURRENTLY public_active_plans_view;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 4. Attach the Trigger to the plans table
+DROP TRIGGER IF EXISTS trg_refresh_public_plans ON plans;
+CREATE TRIGGER trg_refresh_public_plans
+AFTER INSERT OR UPDATE OR DELETE ON plans
+FOR EACH STATEMENT EXECUTE FUNCTION refresh_public_plans();
