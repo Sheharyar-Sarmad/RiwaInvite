@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import Image from "next/image";
 import {
   motion,
@@ -64,8 +70,8 @@ const STEPS: Step[] = [
         <span className="rounded-md bg-orange-100 px-1.5 py-0.5 font-medium text-orange-700 [overflow-wrap:anywhere]">
           {SAMPLE_URL}
         </span>
-        . Send it via WhatsApp, text, or email. It looks impossibly expensive and loads in
-        milliseconds on any device.
+        . Send it via WhatsApp, text, or email. It looks impossibly expensive
+        and loads in milliseconds on any device.
       </>
     ),
     image: "/how-step-3.png",
@@ -198,7 +204,11 @@ function CursorOrb({ animated }: { animated: boolean }) {
 
   if (!animated) {
     return (
-      <div aria-hidden className="absolute -ml-3.5 -mt-3.5" style={{ left: "62%", top: "40%" }}>
+      <div
+        aria-hidden
+        className="absolute -ml-3.5 -mt-3.5"
+        style={{ left: "62%", top: "40%" }}
+      >
         {orb}
       </div>
     );
@@ -234,19 +244,32 @@ function LiveBadge({ pulsing }: { pulsing: boolean }) {
   );
 }
 
-function RsvpNotification({ visible, reduce }: { visible: boolean; reduce: boolean }) {
+function RsvpNotification({
+  visible,
+  reduce,
+}: {
+  visible: boolean;
+  reduce: boolean;
+}) {
   return (
-    <div aria-hidden className="absolute inset-x-4 bottom-4 flex justify-center sm:justify-start">
+    <div
+      aria-hidden
+      className="absolute inset-x-4 bottom-4 flex justify-center sm:justify-start"
+    >
       <motion.div
         className="flex items-center gap-3 rounded-2xl border border-white/70 bg-white/75 py-2.5 pl-2.5 pr-5 shadow-xl shadow-orange-900/10 backdrop-blur-xl"
         initial={{ opacity: 0, y: reduce ? 0 : 40 }}
-        animate={visible ? { opacity: 1, y: 0 } : { opacity: 0, y: reduce ? 0 : 40 }}
+        animate={
+          visible ? { opacity: 1, y: 0 } : { opacity: 0, y: reduce ? 0 : 40 }
+        }
         transition={{ duration: 0.6, ease: EASE_OUT, delay: visible ? 0.5 : 0 }}
       >
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white shadow-[0_0_16px_rgba(16,185,129,0.55)]">
           <Check className="h-4 w-4" strokeWidth={3} />
         </span>
-        <span className="text-sm font-semibold text-neutral-900">{RSVP_SAMPLE_MESSAGE}</span>
+        <span className="text-sm font-semibold text-neutral-900">
+          {RSVP_SAMPLE_MESSAGE}
+        </span>
       </motion.div>
     </div>
   );
@@ -299,13 +322,17 @@ function StepVisual({ step }: { step: Step }) {
         )}
 
         {/* Step 02: floating cursor orb */}
-        {step.kind === "builder" && (inView || reduce) && <CursorOrb animated={loopsActive} />}
+        {step.kind === "builder" && (inView || reduce) && (
+          <CursorOrb animated={loopsActive} />
+        )}
 
         {/* Step 03: live badge */}
         {step.kind === "publish" && <LiveBadge pulsing={loopsActive} />}
 
         {/* Step 04: RSVP notification */}
-        {step.kind === "rsvp" && <RsvpNotification visible={inView} reduce={reduce} />}
+        {step.kind === "rsvp" && (
+          <RsvpNotification visible={inView} reduce={reduce} />
+        )}
       </motion.div>
     </div>
   );
@@ -315,7 +342,15 @@ function StepVisual({ step }: { step: Step }) {
 /*  Step row                                                                  */
 /* -------------------------------------------------------------------------- */
 
-function StepRow({ step, index, showNode }: { step: Step; index: number; showNode: boolean }) {
+function StepRow({
+  step,
+  index,
+  showNode,
+}: {
+  step: Step;
+  index: number;
+  showNode: boolean;
+}) {
   const reversed = index % 2 === 1;
 
   return (
@@ -341,7 +376,9 @@ function StepRow({ step, index, showNode }: { step: Step; index: number; showNod
         >
           {step.headline}
         </RevealHeading>
-        <p className="mt-2 text-lg font-medium text-orange-600">{step.subheadline}</p>
+        <p className="mt-2 text-lg font-medium text-orange-600">
+          {step.subheadline}
+        </p>
         <p
           className={`mt-4 max-w-md font-[family-name:var(--font-body)] text-base leading-relaxed text-neutral-600 ${
             reversed ? "lg:ml-auto" : ""
@@ -416,7 +453,8 @@ function DotGridBackground({
       <div
         className="absolute inset-0"
         style={{
-          backgroundImage: "radial-gradient(circle, rgba(194,65,12,0.2) 1.5px, transparent 1.5px)",
+          backgroundImage:
+            "radial-gradient(circle, rgba(194,65,12,0.2) 1.5px, transparent 1.5px)",
           backgroundSize: "24px 24px",
         }}
       />
@@ -424,7 +462,8 @@ function DotGridBackground({
         <div
           className="absolute inset-0"
           style={{
-            backgroundImage: "radial-gradient(circle, rgba(234,88,12,0.95) 2px, transparent 2px)",
+            backgroundImage:
+              "radial-gradient(circle, rgba(234,88,12,0.95) 2px, transparent 2px)",
             backgroundSize: "24px 24px",
             maskImage: LIT_MASK,
             WebkitMaskImage: LIT_MASK,
@@ -480,7 +519,11 @@ export default function HowItWorks() {
     target: listRef,
     offset: ["start 70%", "end 60%"],
   });
-  const progress = useSpring(scrollYProgress, { stiffness: 120, damping: 28, mass: 0.4 });
+  const progress = useSpring(scrollYProgress, {
+    stiffness: 120,
+    damping: 28,
+    mass: 0.4,
+  });
 
   return (
     <section
@@ -488,9 +531,13 @@ export default function HowItWorks() {
       ref={sectionRef}
       onPointerMove={finePointer && !reduce ? onPointerMove : undefined}
       onPointerLeave={onPointerLeave}
-      className="relative isolate overflow-hidden bg-[#fdeadb] py-24 sm:py-32"
+      className="relative isolate w-full overflow-hidden bg-[#fffafb] pt-12 pb-24 sm:pt-16 sm:pb-32"
     >
-      <DotGridBackground active={sectionInView} reduce={reduce} lit={finePointer && !reduce} />
+      <DotGridBackground
+        active={sectionInView}
+        reduce={reduce}
+        lit={finePointer && !reduce}
+      />
 
       <div className="relative z-10 mx-auto max-w-6xl px-6">
         <header className="mx-auto max-w-2xl text-center">
@@ -504,8 +551,8 @@ export default function HowItWorks() {
             From idea to published in minutes.
           </RevealHeading>
           <p className="mt-5 font-[family-name:var(--font-body)] text-lg leading-relaxed text-neutral-600">
-            You don&apos;t need a designer or a developer. Here is exactly how Riwainvite turns your
-            vision into a live, interactive invitation.
+            You don&apos;t need a designer or a developer. Here is exactly how
+            Riwainvite turns your vision into a live, interactive invitation.
           </p>
         </header>
 
@@ -528,7 +575,12 @@ export default function HowItWorks() {
           )}
 
           {STEPS.map((step, i) => (
-            <StepRow key={step.number} step={step} index={i} showNode={isWide} />
+            <StepRow
+              key={step.number}
+              step={step}
+              index={i}
+              showNode={isWide}
+            />
           ))}
         </ol>
       </div>

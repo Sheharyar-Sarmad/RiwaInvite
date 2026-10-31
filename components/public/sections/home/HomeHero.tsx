@@ -457,7 +457,7 @@ export function HomeHero() {
     <section
       ref={sectionRef}
       onPointerMove={onPointerMove}
-      className="relative flex min-h-[100dvh] w-full items-center justify-center overflow-hidden bg-[#fffafb]"
+      className="relative flex min-h-[80vh] w-full items-center justify-center overflow-hidden bg-[#fffafb]"
     >
       {/* Desktop: the full photograph, with cursor and scroll parallax */}
       <motion.div
