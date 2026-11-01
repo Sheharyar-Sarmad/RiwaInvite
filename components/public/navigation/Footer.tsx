@@ -46,8 +46,6 @@ import {
 /* -------------------------------------------------------------------------- */
 
 const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "info.riwainvite@gmail.com";
-
-/** Digits only, with country code (e.g. 923001234567). */
 const WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? "";
 
 const display = "font-[family-name:var(--font-display)]";
@@ -55,7 +53,7 @@ const body = "font-[family-name:var(--font-body)]";
 const ease: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 const focusRing =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]";
 
 /* -------------------------------------------------------------------------- */
 /*  Icons                                                                     */
@@ -116,7 +114,6 @@ const FOOTER_LINKS: Record<"product" | "company" | "legal", FooterLinkItem[]> = 
   ],
 };
 
-/** Replace the Facebook, Instagram and YouTube fallbacks with your real profile URLs (or set the env vars). */
 const SOCIALS = [
   { label: "Facebook", href: process.env.NEXT_PUBLIC_FACEBOOK_URL || "https://facebook.com", icon: FacebookIcon },
   { label: "Instagram", href: process.env.NEXT_PUBLIC_INSTAGRAM_URL || "https://instagram.com", icon: InstagramIcon },
@@ -138,7 +135,6 @@ const MARQUEE_ITEMS: { label: string; icon: LucideIcon }[] = [
   { label: "Festive greetings", icon: PartyPopper },
 ];
 
-/** All taken from what the product already promises elsewhere on the site. */
 const CTA_PERKS = ["Free account", "No-code builder", "Live RSVP tracking", "24/7 WhatsApp support"];
 
 /* -------------------------------------------------------------------------- */
@@ -159,7 +155,6 @@ const popIn: Variants = {
 };
 const VIEWPORT = { once: true, margin: "-60px" } as const;
 
-/** JS-side media query so size and input dependent effects aren't left to CSS alone. */
 function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState(false);
   useEffect(() => {
@@ -172,7 +167,6 @@ function useMediaQuery(query: string): boolean {
   return matches;
 }
 
-/** GSAP magnetic pull. Fine pointers only, and never with reduced motion. */
 function useMagnetic<T extends HTMLElement>(strength = 0.3) {
   const ref = useRef<T>(null);
   useEffect(() => {
@@ -184,7 +178,6 @@ function useMagnetic<T extends HTMLElement>(strength = 0.3) {
     ) {
       return;
     }
-
     const onMove = (e: MouseEvent) => {
       const r = el.getBoundingClientRect();
       gsap.to(el, {
@@ -195,7 +188,6 @@ function useMagnetic<T extends HTMLElement>(strength = 0.3) {
       });
     };
     const onLeave = () => gsap.to(el, { x: 0, y: 0, duration: 0.9, ease: "elastic.out(1, 0.3)" });
-
     el.addEventListener("mousemove", onMove);
     el.addEventListener("mouseleave", onLeave);
     return () => {
@@ -207,10 +199,6 @@ function useMagnetic<T extends HTMLElement>(strength = 0.3) {
   return ref;
 }
 
-/**
- * Looping decoration. The animated version is mounted only while `live`
- * (footer on screen and motion allowed); otherwise a plain static element is rendered.
- */
 function Loop({
   live,
   className,
@@ -254,13 +242,11 @@ function CtaBanner({ live, reduce }: { live: boolean; reduce: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const ctaRef = useMagnetic<HTMLAnchorElement>(0.25);
 
-  // Subtle 3D tilt, capped at 3 degrees
   const mx = useMotionValue(0);
   const my = useMotionValue(0);
   const rotateX = useSpring(useTransform(my, [-0.5, 0.5], [3, -3]), { stiffness: 150, damping: 20 });
   const rotateY = useSpring(useTransform(mx, [-0.5, 0.5], [-3, 3]), { stiffness: 150, damping: 20 });
 
-  // The banner settles into place as it scrolls into view
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "start 0.55"] });
   const settle = useTransform(scrollYProgress, [0, 1], [0.94, 1]);
 
@@ -304,7 +290,6 @@ function CtaBanner({ live, reduce }: { live: boolean; reduce: boolean }) {
       style={{ rotateX, rotateY, scale: reduce ? 1 : settle, transformPerspective: 1200 }}
       className="group relative mb-16 overflow-hidden rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(249,115,22,0.45)]"
     >
-      {/* Gradient base: it flows only while the footer is on screen */}
       {live ? (
         <motion.div
           aria-hidden
@@ -319,13 +304,11 @@ function CtaBanner({ live, reduce }: { live: boolean; reduce: boolean }) {
         />
       )}
 
-      {/* Grid texture */}
       <div
         aria-hidden
         className="absolute inset-0 opacity-60 [background-image:linear-gradient(rgba(255,255,255,.09)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.09)_1px,transparent_1px)] [background-size:36px_36px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]"
       />
 
-      {/* Drifting light */}
       <Loop
         live={live}
         {...orbMotion([0, 40, -20, 0], [0, 30, -10, 0], 14)}
@@ -337,7 +320,6 @@ function CtaBanner({ live, reduce }: { live: boolean; reduce: boolean }) {
         className="absolute -bottom-40 -left-24 h-[24rem] w-[24rem] rounded-full bg-amber-200/25 blur-[90px]"
       />
 
-      {/* Cursor glare */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
@@ -347,7 +329,6 @@ function CtaBanner({ live, reduce }: { live: boolean; reduce: boolean }) {
         }}
       />
 
-      {/* Floating rings and dots */}
       <Loop
         live={live}
         animate={{ y: [0, -14, 0], scale: [1, 1.08, 1] }}
@@ -437,10 +418,10 @@ function CtaBanner({ live, reduce }: { live: boolean; reduce: boolean }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Marquee: drives itself, and eases down when you hover it                  */
+/*  Marquee                                                                   */
 /* -------------------------------------------------------------------------- */
 
-const MARQUEE_SPEED = 0.045; // px per ms
+const MARQUEE_SPEED = 0.045;
 
 function MarqueeDriver({
   x,
@@ -486,16 +467,16 @@ function Marquee({ live }: { live: boolean }) {
       {MARQUEE_ITEMS.map(({ label, icon: Icon }) => (
         <span key={label} className="group/item flex items-center gap-10">
           <span className="flex items-center gap-4">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-orange-100 bg-white text-orange-400 shadow-sm transition-colors duration-300 group-hover/item:border-orange-300 group-hover/item:text-orange-500 md:h-12 md:w-12">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-orange-400 shadow-sm transition-colors duration-300 group-hover/item:border-orange-500/50 group-hover/item:text-orange-500 md:h-12 md:w-12">
               <Icon className="h-5 w-5 md:h-6 md:w-6" />
             </span>
             <span
-              className={`cursor-default whitespace-nowrap text-3xl font-semibold text-stone-300 transition-colors duration-300 group-hover/item:text-orange-500 md:text-5xl ${display}`}
+              className={`cursor-default whitespace-nowrap text-3xl font-semibold text-white/20 transition-colors duration-300 group-hover/item:text-white/60 md:text-5xl ${display}`}
             >
               {label}
             </span>
           </span>
-          <span className="h-2 w-2 shrink-0 rotate-45 rounded-[2px] bg-orange-300/70" />
+          <span className="h-2 w-2 shrink-0 rotate-45 rounded-[2px] bg-orange-500/40" />
         </span>
       ))}
     </div>
@@ -526,10 +507,11 @@ function FooterLink({ href, label, icon: Icon }: FooterLinkItem) {
     <motion.li variants={rise}>
       <Link
         href={href}
-        className={`group relative inline-flex w-fit items-center gap-2 rounded py-0.5 text-sm font-medium text-stone-500 transition-all duration-300 hover:translate-x-1 hover:text-orange-600 ${focusRing}`}
+        // CHANGED: flex w-full to ensure all items start exactly at the same x-axis
+        className={`group relative flex w-full items-center gap-2 rounded py-0.5 text-sm font-medium text-neutral-400 transition-all duration-300 hover:translate-x-1 hover:text-orange-400 ${focusRing}`}
       >
         {Icon && (
-          <Icon className="h-4 w-4 text-stone-400 transition-all duration-300 group-hover:-rotate-12 group-hover:scale-125 group-hover:text-orange-500" />
+          <Icon className="h-4 w-4 shrink-0 text-neutral-500 transition-all duration-300 group-hover:-rotate-12 group-hover:scale-125 group-hover:text-orange-400" />
         )}
         <span className="relative">
           {label}
@@ -541,18 +523,19 @@ function FooterLink({ href, label, icon: Icon }: FooterLinkItem) {
   );
 }
 
-function FooterColumn({ title, children }: { title: string; children: ReactNode }) {
+function FooterColumn({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (
-    <motion.div variants={rise}>
-      <h3 className={`relative mb-7 inline-block text-sm font-bold text-stone-900 ${display}`}>
+    <motion.div variants={rise} className={className}>
+      <h3 className={`relative mb-7 inline-block text-sm font-bold text-white ${display}`}>
         {title}
         <motion.span
           aria-hidden
           variants={{ hidden: { scaleX: 0 }, show: { scaleX: 1, transition: { duration: 0.8, ease, delay: 0.35 } } }}
-          className="absolute -bottom-2 left-0 h-[2px] w-full origin-left rounded-full bg-gradient-to-r from-orange-500 to-orange-200"
+          className="absolute -bottom-2 left-0 h-[2px] w-full origin-left rounded-full bg-gradient-to-r from-orange-500 to-orange-300/30"
         />
       </h3>
-      <motion.ul variants={stagger} className="space-y-3.5">
+      {/* CHANGED: flex flex-col space-y-3.5 text-left to guarantee block-level left alignment */}
+      <motion.ul variants={stagger} className="flex flex-col space-y-3.5 text-left">
         {children}
       </motion.ul>
     </motion.div>
@@ -581,7 +564,7 @@ function SocialLink({ label, href, icon: Icon }: (typeof SOCIALS)[number]) {
         aria-label={label}
         whileHover={{ y: -6, scale: 1.1 }}
         whileTap={{ scale: 0.92 }}
-        className={`relative flex h-11 w-11 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-orange-100 bg-white text-stone-500 shadow-sm transition-colors duration-300 hover:border-orange-500 hover:text-white ${focusRing}`}
+        className={`relative flex h-11 w-11 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/5 text-neutral-400 shadow-sm transition-colors duration-300 hover:border-orange-500 hover:text-white ${focusRing}`}
       >
         <motion.span
           aria-hidden
@@ -593,7 +576,6 @@ function SocialLink({ label, href, icon: Icon }: (typeof SOCIALS)[number]) {
         <Icon className="relative h-5 w-5" />
       </motion.a>
 
-      {/* A plain wrapper owns the centering, so it can't clash with the motion transform inside */}
       <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-3 -translate-x-1/2">
         <AnimatePresence>
           {hovered && (
@@ -602,10 +584,10 @@ function SocialLink({ label, href, icon: Icon }: (typeof SOCIALS)[number]) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 6, scale: 0.9 }}
               transition={{ duration: 0.18 }}
-              className="relative whitespace-nowrap rounded-lg bg-stone-900 px-3 py-1.5 text-[11px] font-bold text-white shadow-xl"
+              className="relative whitespace-nowrap rounded-lg bg-white px-3 py-1.5 text-[11px] font-bold text-neutral-900 shadow-xl"
             >
               {label}
-              <span className="absolute -bottom-1 left-1/2 -ml-1 h-2 w-2 rotate-45 bg-stone-900" />
+              <span className="absolute -bottom-1 left-1/2 -ml-1 h-2 w-2 rotate-45 bg-white" />
             </motion.div>
           )}
         </AnimatePresence>
@@ -634,12 +616,12 @@ function CopyEmail() {
   return (
     <motion.div
       variants={rise}
-      className="mt-8 flex w-full max-w-sm items-center gap-3 rounded-2xl border border-orange-100 bg-white/80 p-1.5 pl-4 shadow-sm backdrop-blur"
+      className="mt-8 flex w-full max-w-sm items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-1.5 pl-4 shadow-sm backdrop-blur"
     >
-      <Mail className="h-4 w-4 shrink-0 text-orange-500" aria-hidden />
+      <Mail className="h-4 w-4 shrink-0 text-orange-400" aria-hidden />
       <a
         href={`mailto:${SUPPORT_EMAIL}`}
-        className={`min-w-0 flex-1 truncate rounded text-left text-sm font-medium text-stone-700 transition-colors hover:text-orange-600 ${body} ${focusRing}`}
+        className={`min-w-0 flex-1 truncate rounded text-left text-sm font-medium text-neutral-300 transition-colors hover:text-white ${body} ${focusRing}`}
       >
         {SUPPORT_EMAIL}
       </a>
@@ -648,7 +630,7 @@ function CopyEmail() {
         onClick={copy}
         whileTap={{ scale: 0.94 }}
         aria-label={copied ? "Email copied" : "Copy support email"}
-        className={`relative flex h-9 min-w-[5.5rem] cursor-pointer items-center justify-center overflow-hidden rounded-xl bg-orange-50 px-3 text-xs font-bold text-orange-600 transition-colors hover:bg-orange-100 ${display} ${focusRing}`}
+        className={`relative flex h-9 min-w-[5.5rem] cursor-pointer items-center justify-center overflow-hidden rounded-xl bg-orange-500/20 px-3 text-xs font-bold text-orange-400 transition-colors hover:bg-orange-500/30 hover:text-orange-300 ${display} ${focusRing}`}
       >
         <AnimatePresence mode="wait" initial={false}>
           {copied ? (
@@ -681,7 +663,7 @@ function CopyEmail() {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Watermark: scroll parallax, per-letter reveal, cursor flashlight          */
+/*  Watermark                                                                 */
 /* -------------------------------------------------------------------------- */
 
 function WatermarkLayer({
@@ -699,12 +681,13 @@ function WatermarkLayer({
       initial="hidden"
       whileInView="show"
       viewport={{ once: true }}
-      className="pointer-events-none absolute inset-0 z-0 flex items-end justify-center overflow-hidden"
+      className="pointer-events-none absolute inset-x-0 bottom-0 z-0 flex items-end justify-center overflow-hidden"
       style={style}
     >
       <motion.div
         style={{ x }}
-        className={`flex select-none whitespace-nowrap text-[20vw] font-black leading-[0.8] tracking-tighter ${display} ${className}`}
+        // REDUCED SIZE ON MOBILE: text-[12vw] fits the screen perfectly without getting cut off
+        className={`flex select-none whitespace-nowrap text-[12vw] font-black leading-[0.8] tracking-tighter sm:text-[18vw] ${display} ${className}`}
       >
         {"Riwainvite".split("").map((letter, i) => (
           <motion.span
@@ -724,7 +707,7 @@ function WatermarkLayer({
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Back to top, with scroll progress ring                                    */
+/*  Back to top                                                               */
 /* -------------------------------------------------------------------------- */
 
 function BackToTop({ reduce }: { reduce: boolean }) {
@@ -733,7 +716,6 @@ function BackToTop({ reduce }: { reduce: boolean }) {
   const progress = useSpring(scrollYProgress, { stiffness: 120, damping: 25 });
   const magnet = useMagnetic<HTMLButtonElement>(0.25);
 
-  // Go through Lenis when it's active: a native smooth scroll would fight it.
   const toTop = () => {
     if (lenis) lenis.scrollTo(0, { duration: 1.4, immediate: reduce });
     else window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
@@ -745,12 +727,12 @@ function BackToTop({ reduce }: { reduce: boolean }) {
       type="button"
       onClick={toTop}
       aria-label="Back to top"
-      className={`group flex cursor-pointer items-center gap-3 rounded-full border border-orange-100 bg-white py-1.5 pl-4 pr-1.5 text-stone-500 shadow-sm transition-all duration-300 hover:border-orange-200 hover:text-orange-600 hover:shadow-[0_10px_25px_-10px_rgba(249,115,22,0.5)] ${focusRing}`}
+      className={`group flex cursor-pointer items-center gap-3 rounded-full border border-white/10 bg-white/5 py-1.5 pl-4 pr-1.5 text-neutral-400 shadow-sm transition-all duration-300 hover:border-orange-500/50 hover:text-white hover:shadow-[0_10px_25px_-10px_rgba(249,115,22,0.5)] ${focusRing}`}
     >
       <span className={`text-xs font-bold ${display}`}>Back to top</span>
-      <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-orange-50 transition-colors group-hover:bg-orange-500 group-hover:text-white">
+      <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white/10 transition-colors group-hover:bg-orange-500 group-hover:text-white">
         <svg className="absolute inset-0 -rotate-90" viewBox="0 0 36 36" aria-hidden>
-          <circle cx="18" cy="18" r="16" fill="none" stroke="rgba(249,115,22,0.15)" strokeWidth="2" />
+          <circle cx="18" cy="18" r="16" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="2" />
           <motion.circle
             cx="18"
             cy="18"
@@ -778,13 +760,13 @@ export function Footer() {
   const footerRef = useRef<HTMLElement>(null);
   const raf = useRef(0);
 
-  // Every looping effect below runs only while the footer is on screen
   const footerInView = useInView(footerRef, { amount: 0.05 });
   const live = footerInView && !reduce;
   const lit = finePointer && !reduce;
 
   const { scrollYProgress } = useScroll({ target: footerRef, offset: ["start end", "end end"] });
-  const watermarkX = useTransform(scrollYProgress, [0, 1], [60, -60]);
+  // Reduced x-axis movement so watermark stays centered
+  const watermarkX = useTransform(scrollYProgress, [0, 1], [30, -30]);
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLElement>) => {
     if (e.pointerType !== "mouse") return;
@@ -814,9 +796,19 @@ export function Footer() {
       ref={footerRef}
       onPointerMove={lit ? onPointerMove : undefined}
       onPointerLeave={onPointerLeave}
-      className="relative overflow-hidden border-t border-orange-100/50 bg-[#fffafb] pb-10 pt-24"
+      className="relative overflow-hidden border-t border-white/5 bg-[#0a0a0a] pb-10 pt-24"
     >
-      {/* Travelling light on the top border */}
+      {/* Background Image */}
+      <div className="absolute inset-0 z-0">
+        <Image
+          src="/home_hero_bg.png"
+          alt=""
+          fill
+          className="object-cover object-center opacity-15"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a]/80 via-[#0a0a0a]/95 to-[#0a0a0a]" />
+      </div>
+
       {live && (
         <motion.div
           aria-hidden
@@ -826,36 +818,33 @@ export function Footer() {
         />
       )}
 
-      {/* Aurora and orb (margins centre the aurora, so no Tailwind translate clashes with the motion x) */}
       <Loop
         live={live}
         animate={{ x: [0, 80, -60, 0], opacity: [0.5, 0.9, 0.5] }}
         transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
-        className="pointer-events-none absolute -top-40 left-1/2 -ml-[28rem] h-72 w-[56rem] rounded-full bg-orange-300/20 blur-3xl"
+        className="pointer-events-none absolute -top-40 left-1/2 -ml-[28rem] h-72 w-[56rem] rounded-full bg-orange-500/10 blur-3xl"
       />
       <Loop
         live={live}
         animate={{ y: [0, -40, 20, 0], x: [0, 30, -20, 0] }}
         transition={{ duration: 24, repeat: Infinity, ease: "easeInOut" }}
-        className="pointer-events-none absolute -right-24 top-1/3 h-80 w-80 rounded-full bg-amber-200/20 blur-3xl"
+        className="pointer-events-none absolute -right-24 top-1/3 h-80 w-80 rounded-full bg-amber-500/10 blur-3xl"
       />
 
-      {/* Dot pattern */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-0 opacity-[0.035]"
+        className="pointer-events-none absolute inset-0 z-0 opacity-10"
         style={{ backgroundImage: "radial-gradient(#f97316 1px, transparent 1px)", backgroundSize: "24px 24px" }}
       />
 
-      {/* Watermark: faint base, plus a layer the cursor reveals */}
       <WatermarkLayer
         x={watermarkX}
-        className="text-orange-200/45 [mask-image:linear-gradient(to_bottom,black_30%,transparent_100%)]"
+        className="text-white/[0.03] [mask-image:linear-gradient(to_top,black_40%,transparent_100%)]"
       />
       {lit && (
         <WatermarkLayer
           x={watermarkX}
-          className="text-orange-400/60"
+          className="text-orange-500/20"
           style={{ maskImage: flashlight, WebkitMaskImage: flashlight }}
         />
       )}
@@ -875,14 +864,14 @@ export function Footer() {
           >
             <motion.div variants={rise}>
               <Link href="/" className="group mb-6 flex w-fit items-center gap-4" aria-label="Riwainvite home">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-orange-100 bg-white shadow-[0_8px_20px_-8px_rgba(249,115,22,0.3)] transition-transform duration-300 group-hover:rotate-6 group-hover:scale-110">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 shadow-[0_8px_20px_-8px_rgba(249,115,22,0.5)] transition-transform duration-300 group-hover:rotate-6 group-hover:scale-110">
                   <Image src="/logo.png" alt="" width={28} height={28} className="object-contain" />
                 </span>
-                <span className={`text-3xl font-bold tracking-tight text-stone-900 ${display}`}>Riwainvite</span>
+                <span className={`text-3xl font-bold tracking-tight text-white ${display}`}>Riwainvite</span>
               </Link>
             </motion.div>
 
-            <motion.p variants={rise} className={`mb-10 max-w-sm text-sm leading-relaxed text-stone-500 ${body}`}>
+            <motion.p variants={rise} className={`mb-10 max-w-sm text-sm leading-relaxed text-neutral-400 ${body}`}>
               Create, share and track beautiful digital invitations for weddings, birthdays and corporate events.
             </motion.p>
 
@@ -902,7 +891,7 @@ export function Footer() {
             initial="hidden"
             whileInView="show"
             viewport={VIEWPORT}
-            className="grid grid-cols-1 gap-10 sm:grid-cols-3 lg:col-span-8 lg:gap-12"
+            className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 lg:col-span-8 lg:gap-12"
           >
             <FooterColumn title="Product">
               {FOOTER_LINKS.product.map((l) => (
@@ -917,7 +906,7 @@ export function Footer() {
               <motion.li variants={rise}>
                 <a
                   href={`mailto:${SUPPORT_EMAIL}`}
-                  className={`group inline-flex w-fit cursor-pointer items-center gap-2 rounded text-sm font-bold text-orange-500 transition-colors hover:text-orange-600 ${focusRing}`}
+                  className={`group inline-flex w-fit cursor-pointer items-center gap-2 rounded text-sm font-bold text-orange-500 transition-colors hover:text-orange-400 ${focusRing}`}
                 >
                   <Mail className="h-4 w-4 transition-transform duration-300 group-hover:-rotate-12 group-hover:scale-125" />
                   Contact concierge
@@ -925,7 +914,11 @@ export function Footer() {
               </motion.li>
             </FooterColumn>
 
-            <FooterColumn title="Legal and trust">
+            {/* Centered 3rd Column */}
+            <FooterColumn 
+              title="Legal and trust" 
+              className="col-span-2 flex flex-col items-center sm:col-span-1 sm:items-start mt-4 sm:mt-0"
+            >
               {FOOTER_LINKS.legal.map((l) => (
                 <FooterLink key={l.label} {...l} />
               ))}
@@ -939,13 +932,13 @@ export function Footer() {
           initial="hidden"
           whileInView="show"
           viewport={{ once: true }}
-          className="flex flex-col items-center justify-between gap-6 border-t border-orange-100/70 pt-8 md:flex-row"
+          className="flex flex-col items-center justify-between gap-6 border-t border-white/10 pt-8 md:flex-row"
         >
           <div className="flex flex-col items-center gap-3 md:flex-row md:gap-8">
-            <motion.p variants={rise} className={`text-xs font-medium text-stone-400 ${body}`}>
+            <motion.p variants={rise} className={`text-center text-xs font-medium text-neutral-500 md:text-left ${body}`}>
               © <span suppressHydrationWarning>{new Date().getFullYear()}</span> Riwainvite. All rights reserved.
             </motion.p>
-            <motion.span variants={rise} className="flex items-center gap-1.5 text-xs font-medium text-stone-400">
+            <motion.span variants={rise} className="flex items-center justify-center gap-1.5 text-xs font-medium text-neutral-500">
               Made in Pakistan with love
               {live ? (
                 <motion.span
