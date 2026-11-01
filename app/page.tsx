@@ -19,10 +19,39 @@ export const metadata: Metadata = {
     template: "%s · Riwainvite",
   },
   description:
-    "Create, send, and track beautiful event invitations. Design, customize, and watch RSVPs roll in.",
+    "Create, send, and track beautiful event invitations. Design, customize, and watch RSVPs roll in. The paperless, eco-friendly way to invite guests.",
+  keywords: [
+    "digital invitations",
+    "event invitations",
+    "paperless invitations",
+    "RSVP tracking",
+    "wedding invitations",
+    "party invitations",
+    "Riwainvite",
+    "online invitations",
+    "eco-friendly events",
+  ],
+  authors: [{ name: "Riwainvite", url: config.appUrl }],
+  creator: "Riwainvite",
+  publisher: "Riwainvite",
+  alternates: {
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
   openGraph: {
     title: "Riwainvite | Premium Digital Invitations",
-    description: "Create, send, and track beautiful event invitations.",
+    description:
+      "Create, send, and track beautiful event invitations. Design, customize, and watch RSVPs roll in.",
     url: config.appUrl,
     siteName: "Riwainvite",
     images: [
@@ -31,6 +60,7 @@ export const metadata: Metadata = {
         width: 1200,
         height: 630,
         alt: "Riwainvite 3D Envelope Logo",
+        type: "image/jpeg",
       },
     ],
     locale: "en_US",
@@ -39,8 +69,21 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Riwainvite | Premium Digital Invitations",
-    description: "Create, send, and track beautiful event invitations.",
+    description:
+      "Create, send, and track beautiful event invitations. Design, customize, and watch RSVPs roll in.",
     images: ["/og-home-image.jpg"],
+    creator: "@riwainvite", // replace with your actual Twitter/X handle
+  },
+  themeColor: "#fdeadb",
+  category: "technology",
+  applicationName: "Riwainvite",
+  appleWebApp: {
+    capable: true,
+    title: "Riwainvite",
+    statusBarStyle: "default",
+  },
+  formatDetection: {
+    telephone: false,
   },
 };
 
