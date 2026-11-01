@@ -9,6 +9,8 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
+  // Prevents ScrollTrigger from refreshing on mobile URL bar resize
+  ScrollTrigger.config({ ignoreMobileResize: true }); 
 }
 
 const LOCK_SELECTOR = '[aria-modal="true"], [data-scroll-lock]';
@@ -21,10 +23,8 @@ function LenisGuard() {
   useEffect(() => {
     if (!lenis) return;
 
-    // 1. Tell ScrollTrigger to update when Lenis scrolls
     lenis.on("scroll", ScrollTrigger.update);
 
-    // 2. Tell GSAP to drive Lenis's raf loop
     const updateTicker = (time: number) => {
       lenis.raf(time * 1000);
     };
@@ -46,12 +46,10 @@ function LenisGuard() {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         lenis.resize();
-        ScrollTrigger.refresh(); // Tell GSAP to recalculate pin distances
+        ScrollTrigger.refresh();
       });
     };
 
-    // We only listen to window resize, NOT ResizeObserver on body
-    // (ResizeObserver on body conflicts with GSAP pin-spacers)
     window.addEventListener("resize", resize);
     resize();
 
@@ -61,16 +59,24 @@ function LenisGuard() {
     };
   }, [lenis, pathname]);
 
-  // Self-heal
+  // Self-heal (Fixes Brave Shields occasionally blocking the scroll)
   useEffect(() => {
     if (!lenis) return;
 
     const heal = () => {
+      // If a modal is open, don't interfere
       if (document.querySelector(LOCK_SELECTOR)) return;
+      
+      // Force Lenis to restart if it got stuck
       if (lenis.isStopped) lenis.start();
-      if (document.body.style.overflow === "hidden") document.body.style.overflow = "";
+      
+      // Ensure body overflow is clean
+      if (document.body.style.overflow === "hidden") {
+        document.body.style.overflow = "";
+      }
     };
 
+    // Capture wheel events to self-heal as soon as the user tries to scroll
     window.addEventListener("wheel", heal, { passive: true, capture: true });
     return () => window.removeEventListener("wheel", heal, { capture: true });
   }, [lenis]);
@@ -84,9 +90,12 @@ export function SmoothScroll({ children }: { children: React.ReactNode }) {
 
   const options = useMemo(
     () => ({
-      lerp: 0.08,
-      wheelMultiplier: 0.85,
+      lerp: 0.1, 
+      wheelMultiplier: 1, 
+      touchMultiplier: 1.5, 
       smoothWheel: !reduce,
+      // Add this to handle Brave's aggressive event handling
+      syncTouch: true, 
     }),
     [reduce],
   );

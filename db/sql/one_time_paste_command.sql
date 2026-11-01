@@ -503,6 +503,7 @@ SELECT
   max_simple_templates, 
   max_premium_templates, 
   allows_custom_slug
+  created_at 
 FROM plans
 WHERE is_active = true;
 

@@ -25,9 +25,10 @@ const CLICKABLE =
 /** Put data-cursor-label="Preview" on any element to show a label next to the cursor. */
 const LABELLED = "[data-cursor-label]";
 
-const DOT_SPRING = { damping: 34, stiffness: 900, mass: 0.3 };
-const RING_SPRING = { damping: 22, stiffness: 320, mass: 0.5 };
-const TORCH_SPRING = { damping: 30, stiffness: 90, mass: 1 };
+// FIXED: Lowered stiffness and increased mass for a slower, smoother, "magnetic" trail
+const DOT_SPRING = { damping: 28, stiffness: 350, mass: 0.5 };
+const RING_SPRING = { damping: 20, stiffness: 150, mass: 0.8 };
+const TORCH_SPRING = { damping: 25, stiffness: 60, mass: 1.2 };
 
 const TORCH_SIZE = 720;
 const RING_SIZE = 36;
@@ -184,7 +185,9 @@ export function CustomCursor() {
   const ty = reduce ? mouseY : torchY;
 
   const hasLabel = label !== "";
-  const springy = reduce ? { duration: 0 } : { type: "spring" as const, stiffness: 400, damping: 28 };
+  
+  // FIXED: Slowed down the hover state transition slightly so it blooms smoothly
+  const springy = reduce ? { duration: 0 } : { type: "spring" as const, stiffness: 300, damping: 25 };
 
   const ringAnimate = pressed
     ? { scale: 0.8, backgroundColor: "rgba(249,115,22,0.25)", borderColor: "rgba(249,115,22,0.9)" }
@@ -256,7 +259,8 @@ export function CustomCursor() {
           }}
           initial={{ scale: 0.3, opacity: 0.7 }}
           animate={{ scale: 2.6, opacity: 0 }}
-          transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
+          // FIXED: Increased duration for a smoother, slower ripple
+          transition={{ duration: 0.85, ease: "easeOut" }} 
           onAnimationComplete={() => setRipples((list) => list.filter((x) => x.id !== r.id))}
         />
       ))}

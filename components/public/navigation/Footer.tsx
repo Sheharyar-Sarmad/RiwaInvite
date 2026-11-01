@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject, type SVGProps } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+  type SVGProps,
+} from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -45,7 +53,8 @@ import {
 /*  Config                                                                    */
 /* -------------------------------------------------------------------------- */
 
-const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "info.riwainvite@gmail.com";
+const SUPPORT_EMAIL =
+  process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "info.riwainvite@gmail.com";
 const WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? "";
 
 const display = "font-[family-name:var(--font-display)]";
@@ -62,12 +71,28 @@ const focusRing =
 type IconProps = SVGProps<SVGSVGElement>;
 
 const FacebookIcon = (props: IconProps) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
     <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
   </svg>
 );
 const InstagramIcon = (props: IconProps) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
     <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
     <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
     <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
@@ -79,7 +104,15 @@ const WhatsAppIcon = (props: IconProps) => (
   </svg>
 );
 const YoutubeIcon = (props: IconProps) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
     <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.33 29 29 0 0 0-.46-5.33z" />
     <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" />
   </svg>
@@ -95,34 +128,49 @@ interface FooterLinkItem {
   icon?: LucideIcon;
 }
 
-const FOOTER_LINKS: Record<"product" | "company" | "legal", FooterLinkItem[]> = {
-  product: [
-    { label: "Templates", href: "/templates" },
-    { label: "Plans", href: "/plans" },
-    { label: "AI Studio", href: "/login" },
-  ],
-  company: [
-    { label: "Our ethos", href: "/ethos" },
-    { label: "The concierge", href: "/concierge" },
-    { label: "Designers", href: "/ethos#designers" },
-  ],
-  legal: [
-    { label: "Trust center", href: "/legal#trust", icon: Globe },
-    { label: "Privacy promise", href: "/legal#privacy", icon: ShieldCheck },
-    { label: "Terms of engagement", href: "/legal#terms", icon: Scale },
-    { label: "No-refund policy", href: "/legal#refunds", icon: Lock },
-  ],
-};
+const FOOTER_LINKS: Record<"product" | "company" | "legal", FooterLinkItem[]> =
+  {
+    product: [
+      { label: "Templates", href: "/templates" },
+      { label: "Plans", href: "/plans" },
+      { label: "AI Studio", href: "/login" },
+    ],
+    company: [
+      { label: "Our ethos", href: "/ethos" },
+      { label: "The concierge", href: "/concierge" },
+      { label: "Designers", href: "/ethos#designers" },
+    ],
+    legal: [
+      { label: "Trust center", href: "/legal#trust", icon: Globe },
+      { label: "Privacy promise", href: "/legal#privacy", icon: ShieldCheck },
+      { label: "Terms of engagement", href: "/legal#terms", icon: Scale },
+      { label: "No-refund policy", href: "/legal#refunds", icon: Lock },
+    ],
+  };
 
 const SOCIALS = [
-  { label: "Facebook", href: process.env.NEXT_PUBLIC_FACEBOOK_URL || "https://facebook.com", icon: FacebookIcon },
-  { label: "Instagram", href: process.env.NEXT_PUBLIC_INSTAGRAM_URL || "https://instagram.com", icon: InstagramIcon },
+  {
+    label: "Facebook",
+    href: process.env.NEXT_PUBLIC_FACEBOOK_URL || "https://facebook.com",
+    icon: FacebookIcon,
+  },
+  {
+    label: "Instagram",
+    href: process.env.NEXT_PUBLIC_INSTAGRAM_URL || "https://instagram.com",
+    icon: InstagramIcon,
+  },
   {
     label: "WhatsApp",
-    href: WHATSAPP_NUMBER ? `https://wa.me/${WHATSAPP_NUMBER}` : "https://wa.me/",
+    href: WHATSAPP_NUMBER
+      ? `https://wa.me/${WHATSAPP_NUMBER}`
+      : "https://wa.me/",
     icon: WhatsAppIcon,
   },
-  { label: "YouTube", href: process.env.NEXT_PUBLIC_YOUTUBE_URL || "https://youtube.com", icon: YoutubeIcon },
+  {
+    label: "YouTube",
+    href: process.env.NEXT_PUBLIC_YOUTUBE_URL || "https://youtube.com",
+    icon: YoutubeIcon,
+  },
 ];
 
 const MARQUEE_ITEMS: { label: string; icon: LucideIcon }[] = [
@@ -135,7 +183,12 @@ const MARQUEE_ITEMS: { label: string; icon: LucideIcon }[] = [
   { label: "Festive greetings", icon: PartyPopper },
 ];
 
-const CTA_PERKS = ["Free account", "No-code builder", "Live RSVP tracking", "24/7 WhatsApp support"];
+const CTA_PERKS = [
+  "Free account",
+  "No-code builder",
+  "Live RSVP tracking",
+  "24/7 WhatsApp support",
+];
 
 /* -------------------------------------------------------------------------- */
 /*  Shared motion                                                             */
@@ -151,7 +204,12 @@ const rise: Variants = {
 };
 const popIn: Variants = {
   hidden: { opacity: 0, scale: 0.4, y: 12 },
-  show: { opacity: 1, scale: 1, y: 0, transition: { type: "spring", stiffness: 380, damping: 18 } },
+  show: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: { type: "spring", stiffness: 380, damping: 18 },
+  },
 };
 const VIEWPORT = { once: true, margin: "-60px" } as const;
 
@@ -187,7 +245,8 @@ function useMagnetic<T extends HTMLElement>(strength = 0.3) {
         ease: "power2.out",
       });
     };
-    const onLeave = () => gsap.to(el, { x: 0, y: 0, duration: 0.9, ease: "elastic.out(1, 0.3)" });
+    const onLeave = () =>
+      gsap.to(el, { x: 0, y: 0, duration: 0.9, ease: "elastic.out(1, 0.3)" });
     el.addEventListener("mousemove", onMove);
     el.addEventListener("mouseleave", onLeave);
     return () => {
@@ -211,7 +270,14 @@ function Loop({
   transition: Transition;
 }) {
   if (!live) return <span aria-hidden className={className} />;
-  return <motion.span aria-hidden className={className} animate={animate} transition={transition} />;
+  return (
+    <motion.span
+      aria-hidden
+      className={className}
+      animate={animate}
+      transition={transition}
+    />
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -222,12 +288,18 @@ function SplitWords({ text }: { text: string }) {
   return (
     <>
       {text.split(" ").map((word, i) => (
-        <span key={i} className="inline-block overflow-hidden pb-1 align-bottom">
+        <span
+          key={i}
+          className="inline-block overflow-hidden pb-1 align-bottom"
+        >
           <motion.span
             className="inline-block"
             variants={{
               hidden: { y: "110%" },
-              show: { y: 0, transition: { duration: 0.7, ease, delay: i * 0.07 } },
+              show: {
+                y: 0,
+                transition: { duration: 0.7, ease, delay: i * 0.07 },
+              },
             }}
           >
             {word}&nbsp;
@@ -244,10 +316,19 @@ function CtaBanner({ live, reduce }: { live: boolean; reduce: boolean }) {
 
   const mx = useMotionValue(0);
   const my = useMotionValue(0);
-  const rotateX = useSpring(useTransform(my, [-0.5, 0.5], [3, -3]), { stiffness: 150, damping: 20 });
-  const rotateY = useSpring(useTransform(mx, [-0.5, 0.5], [-3, 3]), { stiffness: 150, damping: 20 });
+  const rotateX = useSpring(useTransform(my, [-0.5, 0.5], [3, -3]), {
+    stiffness: 150,
+    damping: 20,
+  });
+  const rotateY = useSpring(useTransform(mx, [-0.5, 0.5], [-3, 3]), {
+    stiffness: 150,
+    damping: 20,
+  });
 
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "start 0.55"] });
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start end", "start 0.55"],
+  });
   const settle = useTransform(scrollYProgress, [0, 1], [0.94, 1]);
 
   const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -287,7 +368,12 @@ function CtaBanner({ live, reduce }: { live: boolean; reduce: boolean }) {
       viewport={VIEWPORT}
       onPointerMove={onMove}
       onPointerLeave={onLeave}
-      style={{ rotateX, rotateY, scale: reduce ? 1 : settle, transformPerspective: 1200 }}
+      style={{
+        rotateX,
+        rotateY,
+        scale: reduce ? 1 : settle,
+        transformPerspective: 1200,
+      }}
       className="group relative mb-16 overflow-hidden rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(249,115,22,0.45)]"
     >
       {live ? (
@@ -338,19 +424,34 @@ function CtaBanner({ live, reduce }: { live: boolean; reduce: boolean }) {
       <Loop
         live={live}
         animate={{ y: [0, 12, 0] }}
-        transition={{ duration: 7, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+        transition={{
+          duration: 7,
+          repeat: Infinity,
+          ease: "easeInOut",
+          delay: 1,
+        }}
         className="pointer-events-none absolute bottom-[12%] right-[36%] h-9 w-9 rounded-full border-2 border-white/25"
       />
       <Loop
         live={live}
         animate={{ y: [0, -10, 0], opacity: [0.4, 0.9, 0.4] }}
-        transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+        transition={{
+          duration: 4.5,
+          repeat: Infinity,
+          ease: "easeInOut",
+          delay: 0.5,
+        }}
         className="pointer-events-none absolute right-[28%] top-[16%] h-2.5 w-2.5 rounded-full bg-white/70"
       />
       <Loop
         live={live}
         animate={{ y: [0, 10, 0], opacity: [0.3, 0.8, 0.3] }}
-        transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
+        transition={{
+          duration: 5.5,
+          repeat: Infinity,
+          ease: "easeInOut",
+          delay: 1.5,
+        }}
         className="pointer-events-none absolute left-[46%] top-[10%] h-2 w-2 rounded-full bg-white/60"
       />
 
@@ -361,18 +462,26 @@ function CtaBanner({ live, reduce }: { live: boolean; reduce: boolean }) {
             className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/20 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm"
           >
             <span className="relative flex h-2 w-2" aria-hidden>
-              {live && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/80" />}
+              {live && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/80" />
+              )}
               <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
             </span>
             Free to start
           </motion.div>
 
-          <h2 className={`mb-4 text-4xl font-bold leading-[1.1] text-white md:text-5xl lg:text-6xl ${display}`}>
+          <h2
+            className={`mb-4 text-4xl font-bold leading-[1.1] text-white md:text-5xl lg:text-6xl ${display}`}
+          >
             <SplitWords text="Ready to create something beautiful?" />
           </h2>
 
-          <motion.p variants={rise} className={`mx-auto max-w-lg text-lg text-orange-50 md:mx-0 ${body}`}>
-            Pick a template, make it yours, and share it in minutes. Then watch the RSVPs arrive live.
+          <motion.p
+            variants={rise}
+            className={`mx-auto max-w-lg text-lg text-orange-50 md:mx-0 ${body}`}
+          >
+            Pick a template, make it yours, and share it in minutes. Then watch
+            the RSVPs arrive live.
           </motion.p>
 
           <motion.ul
@@ -402,7 +511,12 @@ function CtaBanner({ live, reduce }: { live: boolean; reduce: boolean }) {
               <motion.span
                 aria-hidden
                 animate={{ x: ["-120%", "320%"] }}
-                transition={{ duration: 2.4, repeat: Infinity, repeatDelay: 1.6, ease: "easeInOut" }}
+                transition={{
+                  duration: 2.4,
+                  repeat: Infinity,
+                  repeatDelay: 1.6,
+                  ease: "easeInOut",
+                }}
                 className="pointer-events-none absolute inset-y-0 left-0 w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-orange-200/70 to-transparent"
               />
             )}
@@ -523,19 +637,38 @@ function FooterLink({ href, label, icon: Icon }: FooterLinkItem) {
   );
 }
 
-function FooterColumn({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
+function FooterColumn({
+  title,
+  children,
+  className,
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <motion.div variants={rise} className={className}>
-      <h3 className={`relative mb-7 inline-block text-sm font-bold text-white ${display}`}>
+      <h3
+        className={`relative mb-7 inline-block text-sm font-bold text-white ${display}`}
+      >
         {title}
         <motion.span
           aria-hidden
-          variants={{ hidden: { scaleX: 0 }, show: { scaleX: 1, transition: { duration: 0.8, ease, delay: 0.35 } } }}
+          variants={{
+            hidden: { scaleX: 0 },
+            show: {
+              scaleX: 1,
+              transition: { duration: 0.8, ease, delay: 0.35 },
+            },
+          }}
           className="absolute -bottom-2 left-0 h-[2px] w-full origin-left rounded-full bg-gradient-to-r from-orange-500 to-orange-300/30"
         />
       </h3>
       {/* CHANGED: flex flex-col space-y-3.5 text-left to guarantee block-level left alignment */}
-      <motion.ul variants={stagger} className="flex flex-col space-y-3.5 text-left">
+      <motion.ul
+        variants={stagger}
+        className="flex flex-col space-y-3.5 text-left"
+      >
         {children}
       </motion.ul>
     </motion.div>
@@ -695,7 +828,11 @@ function WatermarkLayer({
             className="inline-block"
             variants={{
               hidden: { y: "70%", opacity: 0 },
-              show: { y: 0, opacity: 1, transition: { delay: i * 0.05, duration: 0.9, ease } },
+              show: {
+                y: 0,
+                opacity: 1,
+                transition: { delay: i * 0.05, duration: 0.9, ease },
+              },
             }}
           >
             {letter}
@@ -731,8 +868,19 @@ function BackToTop({ reduce }: { reduce: boolean }) {
     >
       <span className={`text-xs font-bold ${display}`}>Back to top</span>
       <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white/10 transition-colors group-hover:bg-orange-500 group-hover:text-white">
-        <svg className="absolute inset-0 -rotate-90" viewBox="0 0 36 36" aria-hidden>
-          <circle cx="18" cy="18" r="16" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="2" />
+        <svg
+          className="absolute inset-0 -rotate-90"
+          viewBox="0 0 36 36"
+          aria-hidden
+        >
+          <circle
+            cx="18"
+            cy="18"
+            r="16"
+            fill="none"
+            stroke="rgba(255,255,255,0.1)"
+            strokeWidth="2"
+          />
           <motion.circle
             cx="18"
             cy="18"
@@ -764,9 +912,18 @@ export function Footer() {
   const live = footerInView && !reduce;
   const lit = finePointer && !reduce;
 
-  const { scrollYProgress } = useScroll({ target: footerRef, offset: ["start end", "end end"] });
+  const { scrollYProgress } = useScroll({
+    target: footerRef,
+    offset: ["start end", "end end"],
+  });
   // Reduced x-axis movement so watermark stays centered
   const watermarkX = useTransform(scrollYProgress, [0, 1], [30, -30]);
+
+  const [currentYear, setCurrentYear] = useState(2026);
+
+  useEffect(() => {
+    setCurrentYear(new Date().getFullYear());
+  }, []);
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLElement>) => {
     if (e.pointerType !== "mouse") return;
@@ -789,7 +946,8 @@ export function Footer() {
 
   useEffect(() => () => cancelAnimationFrame(raf.current), []);
 
-  const flashlight = "radial-gradient(280px circle at var(--mx, -999px) var(--my, -999px), black, transparent 70%)";
+  const flashlight =
+    "radial-gradient(280px circle at var(--mx, -999px) var(--my, -999px), black, transparent 70%)";
 
   return (
     <footer
@@ -834,7 +992,10 @@ export function Footer() {
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 z-0 opacity-10"
-        style={{ backgroundImage: "radial-gradient(#f97316 1px, transparent 1px)", backgroundSize: "24px 24px" }}
+        style={{
+          backgroundImage: "radial-gradient(#f97316 1px, transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
       />
 
       <WatermarkLayer
@@ -863,16 +1024,34 @@ export function Footer() {
             className="flex flex-col items-center text-center lg:col-span-4 lg:items-start lg:text-left"
           >
             <motion.div variants={rise}>
-              <Link href="/" className="group mb-6 flex w-fit items-center gap-4" aria-label="Riwainvite home">
+              <Link
+                href="/"
+                className="group mb-6 flex w-fit items-center gap-4"
+                aria-label="Riwainvite home"
+              >
                 <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 shadow-[0_8px_20px_-8px_rgba(249,115,22,0.5)] transition-transform duration-300 group-hover:rotate-6 group-hover:scale-110">
-                  <Image src="/logo.png" alt="" width={28} height={28} className="object-contain" />
+                  <Image
+                    src="/logo.png"
+                    alt=""
+                    width={28}
+                    height={28}
+                    className="object-contain"
+                  />
                 </span>
-                <span className={`text-3xl font-bold tracking-tight text-white ${display}`}>Riwainvite</span>
+                <span
+                  className={`text-3xl font-bold tracking-tight text-white ${display}`}
+                >
+                  Riwainvite
+                </span>
               </Link>
             </motion.div>
 
-            <motion.p variants={rise} className={`mb-10 max-w-sm text-sm leading-relaxed text-neutral-400 ${body}`}>
-              Create, share and track beautiful digital invitations for weddings, birthdays and corporate events.
+            <motion.p
+              variants={rise}
+              className={`mb-10 max-w-sm text-sm leading-relaxed text-neutral-400 ${body}`}
+            >
+              Create, share and track beautiful digital invitations for
+              weddings, birthdays and corporate events.
             </motion.p>
 
             <motion.div variants={stagger} className="flex items-center gap-4">
@@ -915,8 +1094,8 @@ export function Footer() {
             </FooterColumn>
 
             {/* Centered 3rd Column */}
-            <FooterColumn 
-              title="Legal and trust" 
+            <FooterColumn
+              title="Legal and trust"
               className="col-span-2 flex flex-col items-center sm:col-span-1 sm:items-start mt-4 sm:mt-0"
             >
               {FOOTER_LINKS.legal.map((l) => (
@@ -935,16 +1114,27 @@ export function Footer() {
           className="flex flex-col items-center justify-between gap-6 border-t border-white/10 pt-8 md:flex-row"
         >
           <div className="flex flex-col items-center gap-3 md:flex-row md:gap-8">
-            <motion.p variants={rise} className={`text-center text-xs font-medium text-neutral-500 md:text-left ${body}`}>
-              © <span suppressHydrationWarning>{new Date().getFullYear()}</span> Riwainvite. All rights reserved.
+            <motion.p
+              variants={rise}
+              className={`text-center text-xs font-medium text-neutral-500 md:text-left ${body}`}
+            >
+              © <span suppressHydrationWarning>{currentYear}</span>{" "}
+              Riwainvite. All rights reserved.
             </motion.p>
-            <motion.span variants={rise} className="flex items-center justify-center gap-1.5 text-xs font-medium text-neutral-500">
+            <motion.span
+              variants={rise}
+              className="flex items-center justify-center gap-1.5 text-xs font-medium text-neutral-500"
+            >
               Made in Pakistan with love
               {live ? (
                 <motion.span
                   aria-hidden
                   animate={{ scale: [1, 1.3, 1, 1.22, 1] }}
-                  transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+                  transition={{
+                    duration: 1.4,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
                   className="inline-flex text-orange-500"
                 >
                   <Heart className="h-3.5 w-3.5 fill-current" />

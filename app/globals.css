@@ -21,6 +21,8 @@
   /* No sideways scrolling, ever. `clip` (unlike `hidden`) keeps sticky headers working. */
   html {
     overflow-x: hidden;
+    /* CRITICAL: Prevents Brave/Chrome native smooth scroll from fighting Lenis */
+    scroll-behavior: auto !important; 
   }
 
   body {
@@ -56,4 +58,28 @@
   width: 0 !important;
   height: 0 !important;
   background: transparent !important;
+}
+
+/* ======================================================================
+   LENIS SMOOTH SCROLL CORE STYLES (Fixes Brave & Safari issues)
+   ====================================================================== */
+html.lenis, 
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
 }
