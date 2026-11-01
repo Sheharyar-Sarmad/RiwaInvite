@@ -44,7 +44,7 @@ if (typeof window !== "undefined") {
 }
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-const MAX_TILT = 10;
+const MAX_TILT = 8;
 const DUST_COUNT = 100;
 const DISPLAY = "font-[family-name:var(--font-display)]";
 const BODY = "font-[family-name:var(--font-body)]";
@@ -53,12 +53,13 @@ const cn = (...c: (string | false | undefined | null)[]) =>
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /**
- * The pinned horizontal-scroll experience only runs on screens that are
- * big enough to hold it. Everything else (phones, tablets, short laptop
- * windows) gets a normal page flow + a native swipe carousel, so there is
- * no pinning and therefore no scroll jumping.
+ * The section is ALWAYS pinned for exactly one screen (100svh) on every
+ * device. Vertical scroll drives the cards sideways inside the pinned
+ * screen, so the page itself never scrolls horizontally and the whole
+ * component never moves while the cards are travelling.
+ * DESKTOP only changes the layout (video left, cards right) and adds tilt.
  */
-const PIN_QUERY = "(min-width: 1024px) and (min-height: 700px)";
+const DESKTOP_QUERY = "(min-width: 1024px)";
 
 const SPOTLIGHT_MASK =
   "radial-gradient(230px circle at var(--mx,-999px) var(--my,-999px), #000 0%, transparent 100%)";
@@ -353,7 +354,7 @@ function TiltCard({
           : undefined
       }
       className={cn(
-        "group relative rounded-[1.5rem] transition-shadow duration-500 sm:rounded-[2rem]",
+        "group relative rounded-[1.5rem] transition-shadow duration-500 sm:rounded-[1.75rem]",
         SHELL[tone],
         className,
       )}
@@ -387,7 +388,7 @@ function TiltCard({
         )}
       </div>
       <div
-        className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit] p-4 sm:p-6"
+        className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit] p-3.5 sm:p-5"
         style={tilt ? { transform: "translateZ(24px)" } : undefined}
       >
         {children}
@@ -396,21 +397,21 @@ function TiltCard({
   );
 }
 
-function FlawBody({ flaw, pinned }: { flaw: Flaw; pinned: boolean }) {
+function FlawBody({ flaw }: { flaw: Flaw }) {
   const Icon = flaw.icon;
   const dark = flaw.tone === "dark";
   return (
     <>
-      <div className="order-1 flex items-center gap-3 sm:block">
+      <div className="order-1 flex items-center gap-3">
         <div
           className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm ring-1 sm:h-11 sm:w-11",
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-sm ring-1 sm:h-10 sm:w-10",
             dark ? "bg-white/10 ring-white/15" : "bg-white ring-black/5",
           )}
         >
           <Icon
             className={cn(
-              "h-5 w-5",
+              "h-[18px] w-[18px] sm:h-5 sm:w-5",
               dark ? "text-orange-300" : "text-[#f97316]",
             )}
           />
@@ -418,7 +419,7 @@ function FlawBody({ flaw, pinned }: { flaw: Flaw; pinned: boolean }) {
         <h3
           className={cn(
             DISPLAY,
-            "text-[17px] font-bold leading-tight tracking-tight sm:mt-4 sm:text-xl xl:text-[1.4rem]",
+            "text-base font-bold leading-tight tracking-tight sm:text-lg xl:text-[1.25rem]",
           )}
         >
           {flaw.title}
@@ -427,42 +428,14 @@ function FlawBody({ flaw, pinned }: { flaw: Flaw; pinned: boolean }) {
       <p
         className={cn(
           BODY,
-          "order-2 mt-2 text-[12.5px] font-medium leading-relaxed sm:mt-1.5 sm:text-[13px]",
+          "order-2 mt-2 text-[12px] font-medium leading-snug sm:text-[12.5px] sm:leading-relaxed",
           dark ? "text-slate-300" : "text-slate-700",
         )}
       >
         {flaw.desc}
       </p>
 
-      {/* Image area reserves space up front so nothing shifts when it loads */}
-      <div
-        className={cn(
-          "relative mt-3 min-h-[130px] flex-1 overflow-hidden rounded-2xl ring-1 ring-black/10",
-          pinned ? "order-4" : "order-3",
-        )}
-      >
-        <div className="h-parallax absolute inset-y-0 inset-x-[-12%]">
-          <Image
-            src={flaw.img}
-            alt=""
-            fill
-            sizes="(max-width: 640px) 80vw, 400px"
-            loading="eager"
-            className="object-cover transition-transform duration-700 group-hover:scale-[1.06]"
-          />
-        </div>
-        <div
-          aria-hidden
-          className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent"
-        />
-      </div>
-
-      <div
-        className={cn(
-          "pt-3",
-          pinned ? "order-3" : "order-4 mt-auto",
-        )}
-      >
+      <div className="order-3 pt-2.5 sm:pt-3">
         <span
           className={cn(
             "inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ring-1",
@@ -474,18 +447,36 @@ function FlawBody({ flaw, pinned }: { flaw: Flaw; pinned: boolean }) {
           <Check className="h-3.5 w-3.5" strokeWidth={3} /> {flaw.fix}
         </span>
       </div>
+
+      {/* Image takes all the remaining space; reserved up front so nothing shifts */}
+      <div className="relative order-4 mt-2.5 min-h-[110px] flex-1 overflow-hidden rounded-2xl ring-1 ring-black/10 sm:mt-3">
+        <div className="h-parallax absolute inset-y-0 inset-x-[-12%]">
+          <Image
+            src={flaw.img}
+            alt=""
+            fill
+            sizes="(max-width: 640px) 80vw, 420px"
+            loading="eager"
+            className="object-cover transition-transform duration-700 group-hover:scale-[1.06]"
+          />
+        </div>
+        <div
+          aria-hidden
+          className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent"
+        />
+      </div>
     </>
   );
 }
 
 function CtaBody() {
   return (
-    <div className="flex h-full min-h-0 flex-col justify-between gap-3 sm:gap-4">
+    <div className="flex h-full min-h-0 flex-col justify-between gap-3">
       <div>
         <h3
           className={cn(
             DISPLAY,
-            "text-2xl font-extrabold leading-[1.05] tracking-tighter sm:text-4xl lg:text-5xl",
+            "text-2xl font-extrabold leading-[1.05] tracking-tighter sm:text-3xl lg:text-4xl",
           )}
         >
           There is a better way.
@@ -493,14 +484,14 @@ function CtaBody() {
         <p
           className={cn(
             BODY,
-            "mt-2 max-w-md text-[13px] font-medium leading-relaxed text-white/90 sm:mt-3 sm:text-base",
+            "mt-2 max-w-md text-[13px] font-medium leading-relaxed text-white/90 sm:text-[15px]",
           )}
         >
           Six flaws, six fixes. Riwainvite replaces the broken system with
           something your guests will actually enjoy.
         </p>
       </div>
-      <ul className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-[12px] font-semibold sm:grid-cols-2 sm:gap-y-2 sm:text-[13px]">
+      <ul className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-[12px] font-semibold sm:grid-cols-2 sm:text-[12.5px]">
         {FLAWS.map((f) => (
           <li key={f.title} className="flex items-center gap-2">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-orange-600">
@@ -512,7 +503,7 @@ function CtaBody() {
       </ul>
       <a
         href="#why-riwainvite"
-        className="group/btn inline-flex w-fit items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-orange-700 shadow-xl shadow-orange-900/30 transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-orange-500 sm:px-6 sm:py-3"
+        className="group/btn inline-flex w-fit items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-orange-700 shadow-xl shadow-orange-900/30 transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-orange-500"
       >
         See how Riwainvite fixes it{" "}
         <ArrowRight className="h-4 w-4 transition-transform group-hover/btn:translate-x-1" />
@@ -536,10 +527,10 @@ function VisualPair({ reduce }: { reduce: boolean }) {
     <div className="relative isolate flex h-full w-full items-center justify-center">
       <div
         aria-hidden
-        className="absolute -inset-3 -z-10 rounded-[2.5rem] bg-gradient-to-br from-orange-400/30 to-red-400/20 blur-2xl lg:-inset-6 lg:rounded-[3.5rem]"
+        className="absolute -inset-3 -z-10 rounded-[2.5rem] bg-gradient-to-br from-orange-400/30 to-red-400/20 blur-2xl lg:-inset-5 lg:rounded-[3rem]"
       />
-      <div className="relative h-full w-full overflow-hidden rounded-[1.75rem] border border-white/60 bg-white/40 p-1.5 shadow-[0_30px_70px_-30px_rgba(154,52,18,0.55)] backdrop-blur-xl sm:rounded-[2.5rem] sm:p-2 lg:p-3">
-        <div className="h-vid relative h-full w-full overflow-hidden rounded-[1.4rem] border-2 border-white/70 bg-black shadow-xl sm:rounded-[2rem]">
+      <div className="relative h-full w-full overflow-hidden rounded-[1.25rem] border border-white/60 bg-white/40 p-1 shadow-[0_30px_70px_-30px_rgba(154,52,18,0.55)] backdrop-blur-xl sm:rounded-[2.25rem] sm:p-2 lg:p-2.5">
+        <div className="h-vid relative h-full w-full overflow-hidden rounded-[1rem] border-2 border-white/70 bg-black shadow-xl sm:rounded-[1.8rem]">
           <video
             ref={videoRef}
             src="/the-paper-problem.mp4"
@@ -559,10 +550,10 @@ function VisualPair({ reduce }: { reduce: boolean }) {
 
 function HeaderBlock({ className }: { className?: string }) {
   const badgeClass =
-    "mb-2 inline-flex items-center gap-1.5 rounded-full border border-orange-300/60 bg-white/70 px-3 py-1 text-[11px] font-bold tracking-wide text-orange-700 shadow-sm backdrop-blur-md sm:mb-3 sm:gap-2 sm:px-4 sm:py-1.5 sm:text-xs";
+    "mb-2 inline-flex items-center gap-1.5 rounded-full border border-orange-300/60 bg-white/70 px-3 py-1 text-[11px] font-bold tracking-wide text-orange-700 shadow-sm backdrop-blur-md sm:gap-2 sm:px-4 sm:py-1.5 sm:text-xs";
   const h2Class = cn(
     DISPLAY,
-    "font-extrabold leading-[1.08] tracking-tight text-gray-900 text-[length:clamp(1.25rem,5.4vw,2.6rem)] lg:text-[length:clamp(1.6rem,min(5.6vh,8vw),4rem)]",
+    "font-extrabold leading-[1.08] tracking-tight text-gray-900 text-[length:clamp(1.25rem,5.4vw,2.6rem)] lg:text-[length:clamp(1.5rem,min(5vh,6vw),3.4rem)]",
   );
   const accent =
     "inline-block bg-gradient-to-r from-[#f97316] to-red-500 bg-clip-text pb-[0.12em] text-transparent";
@@ -614,23 +605,19 @@ export function ThePaperProblem() {
     setReduce(!!prefersReduced);
   }, [prefersReduced]);
 
-  // Big enough for the pinned experience?
-  const [canPin, setCanPin] = useState(false);
+  // Layout only: desktop = video left / cards right. Pinning is on everywhere.
+  const [desktop, setDesktop] = useState(false);
   useLayoutEffect(() => {
-    const mq = window.matchMedia(PIN_QUERY);
-    const set = () => setCanPin(mq.matches);
+    const mq = window.matchMedia(DESKTOP_QUERY);
+    const set = () => setDesktop(mq.matches);
     set();
     mq.addEventListener("change", set);
     return () => mq.removeEventListener("change", set);
   }, []);
 
-  // pinned = desktop pinned horizontal scroll. Otherwise: native flow + swipe.
-  const pinned = canPin && !reduce;
-
   const sectionRef = useRef<HTMLElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const rightPanelRef = useRef<HTMLDivElement>(null);
-  const scrollerRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const counterRef = useRef<HTMLSpanElement>(null);
   const chapterRef = useRef<HTMLParagraphElement>(null);
@@ -651,9 +638,8 @@ export function ThePaperProblem() {
 
   useEffect(() => () => cancelAnimationFrame(raf.current), []);
 
-  // ---------- DESKTOP: pinned horizontal scroll (GSAP) ----------
+  // ---------- Pinned horizontal scroll (GSAP), desktop AND mobile ----------
   useLayoutEffect(() => {
-    if (!pinned) return;
     const section = sectionRef.current;
     const track = trackRef.current;
     const rightPanel = rightPanelRef.current;
@@ -696,6 +682,7 @@ export function ThePaperProblem() {
             best = i;
           }
         });
+        if (d > 0 && p >= 0.985) best = panels.length - 1;
         if (best !== lastIdx) {
           lastIdx = best;
           if (counterRef.current)
@@ -718,6 +705,9 @@ export function ThePaperProblem() {
         }
       };
 
+      // Scroll length: a little longer on phones so swipes feel controlled.
+      const lengthFactor = desktop ? 1.2 : 1.35;
+
       const scrollTween = gsap.to(track, {
         x: () => -distance(),
         ease: "none",
@@ -725,10 +715,10 @@ export function ThePaperProblem() {
         scrollTrigger: {
           trigger: section,
           start: "top top",
-          end: () => `+=${distance() * 1.2}`,
+          end: () => `+=${distance() * lengthFactor}`,
           pin: true,
           pinSpacing: true,
-          scrub: 0.6,
+          scrub: reduce ? true : 0.6,
           invalidateOnRefresh: true,
           // no anticipatePin: it is a known cause of the "jump up then down"
         },
@@ -756,7 +746,7 @@ export function ThePaperProblem() {
           );
         }
         const parallax = panel.querySelector<HTMLElement>(".h-parallax");
-        if (parallax) {
+        if (parallax && !reduce) {
           gsap.fromTo(
             parallax,
             { xPercent: -8 },
@@ -784,59 +774,16 @@ export function ThePaperProblem() {
       ctx.revert();
       gsap.set(track, { clearProps: "transform" });
     };
-  }, [pinned]);
+  }, [desktop, reduce]);
 
-  // ---------- MOBILE / TABLET / SHORT SCREENS: native swipe carousel ----------
-  useEffect(() => {
-    if (pinned) return;
-    const sc = scrollerRef.current;
-    const track = trackRef.current;
-    if (!sc || !track) return;
-    const panels = Array.from(track.querySelectorAll<HTMLElement>(".h-panel"));
-    let last = -1;
-    const update = () => {
-      const max = sc.scrollWidth - sc.clientWidth;
-      const p = max > 0 ? Math.min(1, Math.max(0, sc.scrollLeft / max)) : 0;
-      if (barRef.current) barRef.current.style.transform = `scaleX(${p})`;
-      const mid = sc.scrollLeft + sc.clientWidth / 2;
-      let best = 0;
-      let bd = Infinity;
-      panels.forEach((el, i) => {
-        const d = Math.abs(el.offsetLeft + el.offsetWidth / 2 - mid);
-        if (d < bd) {
-          bd = d;
-          best = i;
-        }
-      });
-      if (max > 0 && sc.scrollLeft >= max - 4) best = panels.length - 1;
-      if (best !== last) {
-        last = best;
-        if (counterRef.current) counterRef.current.textContent = pad(best + 1);
-        if (chapterRef.current)
-          chapterRef.current.textContent =
-            CHAPTERS[best + 1] ?? CHAPTERS[CHAPTERS.length - 1];
-      }
-    };
-    update();
-    sc.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("resize", update);
-    return () => {
-      sc.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
-    };
-  }, [pinned]);
-
-  const tilt = pinned;
+  const tilt = desktop && !reduce;
 
   return (
     <section
       ref={sectionRef}
       onPointerMove={onMove}
       aria-labelledby="paper-problem-heading"
-      className={cn(
-        "relative isolate z-20 flex w-full flex-col overflow-hidden bg-[#fdeadb]",
-        pinned ? "h-[100svh]" : "min-h-[100svh] pb-[4.5rem] sm:pb-20",
-      )}
+      className="relative isolate z-20 flex h-[100svh] max-h-[100svh] w-full flex-col overflow-hidden bg-[#fdeadb]"
     >
       <Backdrop spotlight />
       <DustField paused={reduce} />
@@ -859,34 +806,33 @@ export function ThePaperProblem() {
       <div
         className={cn(
           "relative z-20",
-          pinned
+          desktop
             ? "contents"
-            : "flex shrink-0 items-center justify-between gap-3 px-4 pb-3 pt-[4.75rem] sm:gap-6 sm:px-8 sm:pt-24",
+            : "flex shrink-0 items-center justify-between gap-3 px-4 pb-2 pt-[4.5rem] sm:gap-6 sm:px-8 sm:pt-24",
         )}
       >
         <div
           className={cn(
             "h-intro",
-            pinned
-              ? "pointer-events-none absolute inset-x-0 top-16 z-20"
+            desktop
+              ? "pointer-events-none absolute inset-x-0 top-14 z-20"
               : "min-w-0 flex-1",
           )}
         >
-          <HeaderBlock className={pinned ? "text-center" : "text-left"} />
+          <HeaderBlock className={desktop ? "text-center" : "text-left"} />
         </div>
 
+        {/* Video: on the left on desktop, small beside the title on mobile */}
         <div
           className={cn(
-            pinned
-              ? "absolute bottom-0 left-0 top-24 z-20 flex w-[45%] items-center justify-center px-12"
-              : "relative aspect-[4/5] w-[28%] max-w-[140px] shrink-0 sm:w-[30%] sm:max-w-[220px]",
+            desktop
+              ? "absolute bottom-14 left-0 top-[7.5rem] z-20 flex w-[40%] items-center justify-center px-10"
+              : "relative aspect-[4/5] w-[24%] max-w-[96px] shrink-0 sm:w-[26%] sm:max-w-[150px]",
           )}
         >
           <div
             className={cn(
-              pinned
-                ? "relative h-full w-full max-w-lg"
-                : "absolute inset-0",
+              desktop ? "relative h-full w-full max-w-md" : "absolute inset-0",
             )}
           >
             <VisualPair reduce={reduce} />
@@ -897,59 +843,51 @@ export function ThePaperProblem() {
       {/* Cards */}
       <div
         className={cn(
-          "relative z-10 flex w-full flex-col",
-          pinned ? "min-h-0 flex-1 pt-24" : "",
+          "relative z-10 flex w-full min-h-0 flex-1 flex-col",
+          desktop ? "pb-14 pt-[7.5rem]" : "pb-14 pt-1",
         )}
       >
         <div
           ref={rightPanelRef}
           className={cn(
-            "relative w-full overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_3%,black_96%,transparent)]",
-            pinned
-              ? "ml-[45%] min-h-0 w-[55%] flex-1"
-              : "h-[500px] sm:h-[540px]",
+            "relative min-h-0 flex-1 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_3%,black_96%,transparent)]",
+            desktop ? "ml-[40%] w-[60%]" : "w-full",
           )}
         >
-          <div
-            ref={scrollerRef}
-            className={cn(
-              "absolute inset-0",
-              !pinned &&
-                "snap-x snap-mandatory overflow-x-auto overflow-y-hidden scroll-px-4 overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-            )}
-          >
+          <div className="absolute inset-0">
             <div
               ref={trackRef}
               className={cn(
                 "relative flex h-full w-max will-change-transform",
-                pinned
-                  ? "items-center gap-8 pl-0 pr-12"
-                  : "items-stretch gap-4 pl-4 pr-8 sm:pl-8",
+                desktop
+                  ? "items-center gap-6 pl-0 pr-10"
+                  : "items-stretch gap-3 py-1 pl-4 pr-6 sm:gap-4 sm:pl-8",
               )}
             >
               {FLAWS.map((f, i) => (
                 <div
                   key={f.title}
                   className={cn(
-                    "h-panel flex shrink-0 items-center",
-                    pinned
-                      ? i % 2 === 0
-                        ? "translate-y-6"
-                        : "-translate-y-6"
-                      : "snap-start py-2",
+                    "h-panel flex shrink-0",
+                    desktop
+                      ? cn(
+                          "items-center",
+                          i % 2 === 0 ? "translate-y-3" : "-translate-y-3",
+                        )
+                      : "h-full",
                   )}
                 >
-                  <div className={cn("h-reveal", !pinned && "h-full")}>
+                  <div className={cn("h-reveal", !desktop && "h-full")}>
                     <TiltCard
                       tone={f.tone}
                       tilt={tilt}
                       className={
-                        pinned
-                          ? "h-[clamp(440px,60vh,540px)] w-[440px]"
-                          : "h-full w-[84vw] max-w-[340px] sm:w-[380px] sm:max-w-none"
+                        desktop
+                          ? "h-[clamp(370px,58vh,500px)] w-[400px]"
+                          : "h-full w-[80vw] max-w-[340px] sm:w-[400px] sm:max-w-none"
                       }
                     >
-                      <FlawBody flaw={f} pinned={pinned} />
+                      <FlawBody flaw={f} />
                     </TiltCard>
                   </div>
                 </div>
@@ -957,18 +895,18 @@ export function ThePaperProblem() {
 
               <div
                 className={cn(
-                  "h-panel flex shrink-0 items-center",
-                  !pinned && "snap-start py-2",
+                  "h-panel flex shrink-0",
+                  desktop ? "items-center" : "h-full",
                 )}
               >
-                <div className={cn("h-reveal", !pinned && "h-full")}>
+                <div className={cn("h-reveal", !desktop && "h-full")}>
                   <TiltCard
                     tone="sun"
                     tilt={tilt}
                     className={
-                      pinned
-                        ? "h-[clamp(460px,64vh,580px)] w-[600px]"
-                        : "h-full w-[84vw] max-w-[360px] sm:w-[480px] sm:max-w-none"
+                      desktop
+                        ? "h-[clamp(390px,60vh,520px)] w-[520px]"
+                        : "h-full w-[80vw] max-w-[340px] sm:w-[480px] sm:max-w-none"
                     }
                   >
                     <CtaBody />
@@ -985,7 +923,7 @@ export function ThePaperProblem() {
         aria-hidden
         className={cn(
           "pointer-events-none absolute inset-x-0 z-20",
-          pinned ? "bottom-6 px-12 pl-[50%]" : "bottom-3 px-6 sm:bottom-5",
+          desktop ? "bottom-4 px-10 pl-[44%]" : "bottom-3 px-6 sm:bottom-4",
         )}
       >
         <div className="mx-auto flex w-full max-w-lg items-center gap-4">
@@ -1009,8 +947,8 @@ export function ThePaperProblem() {
         <p
           ref={chapterRef}
           className={cn(
-            "mt-2 text-xs font-semibold tracking-wide text-orange-900/60",
-            pinned ? "pl-[2.5rem] text-left" : "text-center",
+            "mt-1.5 text-xs font-semibold tracking-wide text-orange-900/60",
+            desktop ? "pl-[2.5rem] text-left" : "text-center",
           )}
         >
           {CHAPTERS[1]}
