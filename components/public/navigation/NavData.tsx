@@ -22,6 +22,7 @@ export interface PrivacyLink {
 
 export const NAV_LINKS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/plans", label: "Plans", icon: CreditCard },
+  { href: "/craft", label: "Craft", icon: CreditCard },
   { href: "/ethos", label: "Our Ethos", icon: Heart },
 ];
 

@@ -9,6 +9,7 @@ import { PricingPreview } from "@/components/public/sections/home/PricingPreview
 import { FAQ } from "@/components/public/sections/home/FAQ";
 import { CinematicShowcase } from "@/components/public/sections/home/CinematicShowcase";
 import settings from "@/config/settings_config";
+import { CraftTeaser } from "@/components/public/sections/home/CraftTeaser";
 
 const config = settings();
 
@@ -93,6 +94,9 @@ export default function HomePage() {
       <HomeHero />
       <WhyRiwainvite />
       <TemplatesMarquee />
+
+      <CraftTeaser />
+
       <CinematicShowcase />
 
       <HowItWorks />
