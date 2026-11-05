@@ -48,6 +48,29 @@ const panelClass =
 const triggerReset =
   "relative z-10 rounded-full bg-transparent px-4 text-sm font-semibold text-stone-700 hover:bg-transparent hover:text-orange-600 focus:bg-transparent focus:text-orange-600 data-[state=open]:bg-transparent data-[state=open]:text-orange-600 data-[state=open]:hover:bg-transparent data-[active=true]:bg-transparent";
 
+/* Any modal, lightbox, video player or dialog marks itself with one of these */
+const OVERLAY_SELECTOR = '[aria-modal="true"], [data-scroll-lock], dialog[open]';
+
+/* True while any overlay is open anywhere on the page */
+function useOverlayOpen() {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const check = () => setOpen(!!document.querySelector(OVERLAY_SELECTOR));
+    check();
+    const mo = new MutationObserver(check);
+    mo.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["aria-modal", "data-scroll-lock", "open"],
+    });
+    return () => mo.disconnect();
+  }, []);
+
+  return open;
+}
+
 function HoverPill({ show }: { show: boolean }) {
   if (!show) return null;
   return (
@@ -100,6 +123,7 @@ export function Navbar() {
   const [user, setUser] = useState<NavUser | null>(null);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const overlayOpen = useOverlayOpen();
 
   const { scrollY, scrollYProgress } = useScroll();
   const progress = useSpring(scrollYProgress, {
@@ -194,7 +218,7 @@ export function Navbar() {
     <>
       <motion.header
         variants={{ visible: { y: 0 }, hidden: { y: "-100%" } }}
-        animate={isHidden && !isMobileOpen ? "hidden" : "visible"}
+        animate={(isHidden || overlayOpen) && !isMobileOpen ? "hidden" : "visible"}
         transition={{ duration: 0.35, ease: "easeInOut" }}
         className={cn(
           "fixed inset-x-0 top-0 z-50 border-b backdrop-blur-xl transition-[background-color,box-shadow,border-color] duration-300",
@@ -203,7 +227,7 @@ export function Navbar() {
             : "border-transparent bg-[#fffafb]/60",
         )}
       >
-        <NavbarScene paused={isMobileOpen} />
+        <NavbarScene paused={isMobileOpen || overlayOpen} />
 
         <div
           className={cn(
