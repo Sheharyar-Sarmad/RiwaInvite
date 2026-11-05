@@ -9,6 +9,7 @@ import {
   AnimatePresence,
   motion,
   useAnimationControls,
+  useMotionValue,
   useReducedMotion,
   type Variants,
 } from "framer-motion";
@@ -32,6 +33,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { apiClient } from "@/lib/api/api_base";
+import { CardBackdrop } from "@/components/public/sections/auth/CardBackdrop";
 
 /* ------------------------------------------------------------------ */
 /* styles + motion presets                                             */
@@ -41,11 +43,10 @@ const focusRing =
 const primaryBtn =
   "bg-gradient-to-b from-[#fb8a3c] to-[#f97316] shadow-[0_10px_30px_-10px_rgba(249,115,22,0.8),inset_0_1px_0_rgba(255,255,255,0.3)]";
 const inputBase =
-  "w-full rounded-xl border border-orange-200/60 bg-white/80 py-2.5 pl-11 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition-colors hover:border-orange-300 focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-500/20";
+  "w-full rounded-xl border border-orange-200/70 bg-white/60 py-2.5 pl-11 text-sm text-gray-900 placeholder:text-gray-400 outline-none backdrop-blur-sm transition-all hover:border-orange-300 hover:bg-white/80 focus:border-orange-400 focus:bg-white focus:shadow-[0_0_0_4px_rgba(249,115,22,0.15)]";
 
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
-// card: 3D flip-up, then children cascade
 const cardV: Variants = {
   hidden: { opacity: 0, y: 80, rotateX: 16, scale: 0.94 },
   show: {
@@ -53,24 +54,24 @@ const cardV: Variants = {
     y: 0,
     rotateX: 0,
     scale: 1,
-    transition: { duration: 1.2, ease: EASE_OUT, staggerChildren: 0.09, delayChildren: 0.3 },
+    transition: { duration: 1.4, ease: EASE_OUT, staggerChildren: 0.12, delayChildren: 0.3 },
   },
 };
 const itemV: Variants = {
   hidden: { opacity: 0, y: 22 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.75, ease: EASE_OUT } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.9, ease: EASE_OUT } },
 };
 const staggerV: Variants = {
   hidden: {},
-  show: { transition: { staggerChildren: 0.07 } },
+  show: { transition: { staggerChildren: 0.08 } },
 };
 const titleV: Variants = {
   hidden: {},
-  show: { transition: { staggerChildren: 0.1 } },
+  show: { transition: { staggerChildren: 0.12 } },
 };
 const wordV: Variants = {
   hidden: { y: "115%" },
-  show: { y: "0%", transition: { duration: 0.95, ease: EASE_OUT } },
+  show: { y: "0%", transition: { duration: 1.1, ease: EASE_OUT } },
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -130,7 +131,6 @@ function extractError(err: unknown): string {
   const data = (err as { response?: { data?: any } })?.response?.data;
   if (!data) return "Network error. Please check your connection and try again.";
 
-  // Zod: error = { field: ["msg", ...] }
   if (data.error && typeof data.error === "object" && !Array.isArray(data.error)) {
     const parts = Object.entries(data.error as Record<string, string[]>)
       .filter(([, v]) => Array.isArray(v) && v.length)
@@ -167,16 +167,15 @@ function Field({
   const id = useId();
   return (
     <div>
-      {/* fixed-height label row: nothing below it ever moves */}
       <div className="mb-1.5 flex h-5 items-center justify-between">
         <label htmlFor={id} className="text-sm font-bold text-gray-700">
           {label}
-          {optional && <span className="ml-1 font-medium text-gray-400">(Optional)</span>}
+          {optional && <span className="ml-1 font-medium text-gray-500">(Optional)</span>}
         </label>
         {labelAction}
       </div>
       <div className="relative">
-        <Icon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-orange-400" />
+        <Icon className="pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-orange-500" />
         <input id={id} {...props} className={`${inputBase} ${trailing ? "pr-12" : "pr-10"} ${className}`} />
         {trailing ?? (
           <Check
@@ -196,7 +195,7 @@ function Rule({ ok, children }: { ok: boolean; children: ReactNode }) {
   return (
     <div
       className={`flex items-center gap-1.5 transition-colors duration-300 ${
-        ok ? "text-emerald-600" : "text-gray-400"
+        ok ? "text-emerald-600" : "text-gray-500"
       }`}
     >
       <Icon className="h-3.5 w-3.5" /> {children}
@@ -204,12 +203,11 @@ function Rule({ ok, children }: { ok: boolean; children: ReactNode }) {
   );
 }
 
-/** Orbiting light along the card border. Masked to a 1.5px ring; transform-only animation. */
 function GlowRing({ reduce }: { reduce: boolean }) {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-[2rem] bg-white/60 p-[1.5px]"
+      className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-[2rem] bg-white/10 p-[1.5px]"
       style={{
         WebkitMask: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
         WebkitMaskComposite: "xor",
@@ -224,7 +222,7 @@ function GlowRing({ reduce }: { reduce: boolean }) {
               "conic-gradient(from 0deg, transparent 0deg, transparent 220deg, rgba(251,146,60,0.0) 230deg, #fb923c 290deg, #fde68a 330deg, transparent 360deg)",
           }}
           animate={reduce ? undefined : { rotate: 360 }}
-          transition={{ duration: 7, repeat: Infinity, ease: "linear" }}
+          transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
         />
       </div>
     </div>
@@ -266,6 +264,16 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
   const reduce = useReducedMotion() ?? false;
   const shake = useAnimationControls();
 
+  // pointer position (-0.5..0.5) for the card spotlight
+  const mx = useMotionValue(0);
+  const my = useMotionValue(0);
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (reduce) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    mx.set((e.clientX - r.left) / r.width - 0.5);
+    my.set((e.clientY - r.top) / r.height - 0.5);
+  };
+
   const [formData, setFormData] = useState<RegisterData>({
     first_name: "",
     last_name: "",
@@ -281,11 +289,9 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
   const [generated, setGenerated] = useState(false);
   const [copiedCreds, setCopiedCreds] = useState(false);
 
-  // portal target is only available after mount (SSR-safe)
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  // start the entrance after the page curtains have opened
   const [go, setGo] = useState(reduce);
   useEffect(() => {
     if (reduce) {
@@ -299,7 +305,6 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
   const set = (key: keyof RegisterData) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setFormData((p) => ({ ...p, [key]: e.target.value }));
 
-  // live password validation
   const pw = formData.password;
   const hasLength = pw.length >= 8;
   const hasUpper = /[A-Z]/.test(pw);
@@ -315,7 +320,6 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
   const done = [firstOk, lastOk, emailOk, isStrong].filter(Boolean).length;
   const canSubmit = !isLoading && isUnderstood && isStrong;
 
-  // errors show in a floating toast (no layout impact) and auto-dismiss
   useEffect(() => {
     if (!error) return;
     shake.start({ x: [0, -10, 10, -7, 7, -3, 0], transition: { duration: 0.5 } });
@@ -385,12 +389,14 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
             variants={cardV}
             initial={reduce ? false : "hidden"}
             animate={go ? "show" : "hidden"}
+            onMouseMove={handleMouseMove}
             style={{ transformOrigin: "50% 100%" }}
-            className="relative w-full rounded-[2rem] bg-white/70 p-6 shadow-[0_30px_70px_-30px_rgba(249,115,22,0.55)] backdrop-blur-xl sm:p-8"
+            whileHover={reduce ? undefined : { y: -4, scale: 1.005 }}
+            className="relative isolate w-full rounded-[2rem] border border-orange-200/70 p-6 shadow-[0_30px_80px_-30px_rgba(249,115,22,0.65)] backdrop-blur-xl sm:p-8"
           >
+            <CardBackdrop reduce={reduce} mx={mx} my={my} />
             <GlowRing reduce={reduce} />
 
-            {/* completion bar (transform only) */}
             <div className="absolute inset-x-0 top-0 h-1 overflow-hidden rounded-t-[2rem]">
               <motion.div
                 initial={false}
@@ -400,7 +406,6 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
               />
             </div>
 
-            {/* header: words rise out of a mask */}
             <motion.div variants={titleV} className="mb-6 text-center">
               <h1 className="font-[family-name:var(--font-display)] text-3xl font-extrabold tracking-tight text-gray-900">
                 {["Create", "Account"].map((w) => (
@@ -411,12 +416,12 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                   </span>
                 ))}
               </h1>
-              <motion.p variants={itemV} className="mt-1 text-sm font-medium text-gray-600">
+              <motion.p variants={itemV} className="mt-1 text-sm font-medium text-gray-700">
                 Start designing your unforgettable event.
               </motion.p>
               <motion.p
                 variants={itemV}
-                className="mt-2 text-[11px] font-bold uppercase tabular-nums tracking-widest text-orange-600/80"
+                className="mt-2 text-[11px] font-bold uppercase tabular-nums tracking-widest text-orange-700/80"
               >
                 {done} / 4 required steps
               </motion.p>
@@ -523,11 +528,10 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                   }
                 />
 
-                {/* strength meter: constant height */}
                 <div className="mt-3" aria-live="polite">
                   <div className="flex gap-1.5">
                     {[1, 2, 3, 4].map((i) => (
-                      <div key={i} className="h-1.5 flex-1 overflow-hidden rounded-full bg-orange-100">
+                      <div key={i} className="h-1.5 flex-1 overflow-hidden rounded-full bg-orange-200/60">
                         <motion.div
                           initial={false}
                           animate={{ scaleX: pw && score >= i ? 1 : 0 }}
@@ -537,7 +541,7 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                       </div>
                     ))}
                   </div>
-                  <p className={`mt-1.5 h-4 text-right text-[11px] font-bold ${pw ? meta.text : "text-gray-400"}`}>
+                  <p className={`mt-1.5 h-4 text-right text-[11px] font-bold ${pw ? meta.text : "text-gray-500"}`}>
                     {pw ? meta.label : "Enter a password"}
                   </p>
                 </div>
@@ -550,8 +554,7 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                 </div>
               </motion.div>
 
-              {/* zero recovery warning */}
-              <motion.div variants={itemV} className="rounded-xl border border-red-200 bg-red-50/80 p-3 shadow-sm">
+              <motion.div variants={itemV} className="rounded-xl border border-red-200 bg-red-50/80 p-3 shadow-sm backdrop-blur-sm">
                 <div className="flex items-start gap-3">
                   <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
                   <div>
@@ -570,7 +573,7 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
 
               <motion.label
                 variants={itemV}
-                className="flex cursor-pointer items-start gap-3 rounded-xl border border-orange-200 bg-white/60 p-3 transition-colors hover:bg-white"
+                className="flex cursor-pointer items-start gap-3 rounded-xl border border-orange-200 bg-white/60 p-3 backdrop-blur-sm transition-colors hover:bg-white/90"
               >
                 <input
                   type="checkbox"
@@ -615,7 +618,7 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
               </motion.div>
             </motion.form>
 
-            <motion.p variants={itemV} className="mt-6 text-center text-sm font-medium text-gray-600">
+            <motion.p variants={itemV} className="mt-6 text-center text-sm font-medium text-gray-700">
               Already have an account?{" "}
               <Link href="/login" className="font-bold text-orange-600 hover:underline">
                 Sign in
@@ -625,12 +628,9 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
         </motion.div>
       </div>
 
-      {/* Toast + modal render on document.body so no stacking context
-          (the right pane's `isolate`, the stage's film layers) can overlap them */}
       {mounted &&
         createPortal(
           <>
-            {/* error toast */}
             <div className="pointer-events-none fixed inset-x-4 top-4 z-[10000] flex justify-center">
               <AnimatePresence>
                 {error && (
@@ -660,7 +660,6 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
               </AnimatePresence>
             </div>
 
-            {/* success modal */}
             <AnimatePresence>
               {showSuccessModal && (
                 <motion.div
@@ -679,7 +678,6 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                     transition={{ type: "spring", damping: 22, stiffness: 240 }}
                     className="w-full max-w-md rounded-3xl border border-orange-200 bg-[#fdeadb] p-8 text-center shadow-2xl"
                   >
-                    {/* self-drawing check + particle burst */}
                     <div className="relative mx-auto mb-4 flex h-16 w-16 items-center justify-center">
                       <motion.div
                         initial={{ scale: 0 }}
