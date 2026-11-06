@@ -9,6 +9,7 @@ DO $$ BEGIN
     CREATE TYPE invitation_status AS ENUM ('draft', 'published', 'expired', 'archived');
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
+-- Kept original order_status exactly as is
 DO $$ BEGIN
     CREATE TYPE order_status AS ENUM ('pending', 'completed', 'failed');
 EXCEPTION WHEN duplicate_object THEN null; END $$;
@@ -181,9 +182,13 @@ CREATE TABLE IF NOT EXISTS orders (
     amount DECIMAL(10,2) NOT NULL,
     order_type VARCHAR(20) NOT NULL,
     reference_id UUID NOT NULL,
-    status order_status DEFAULT 'pending', -- Changed to use ENUM
+    status order_status DEFAULT 'pending',
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 1. Add nullable columns (Frontend ignores them, Backend won't crash)
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
 
 CREATE TABLE IF NOT EXISTS order_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -203,7 +208,6 @@ CREATE TABLE IF NOT EXISTS template_purchases (
     UNIQUE(user_id, template_id) 
 );
 
--- Note: Kept your original `subscriptions` table, but `user_subscriptions` is the one used for the Paywall logic.
 CREATE TABLE IF NOT EXISTS subscriptions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -273,6 +277,35 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 2. Create the isolated Payment Logs table (The Webhook safety net)
+CREATE TABLE IF NOT EXISTS payment_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    provider VARCHAR(20) NOT NULL,
+    event_id VARCHAR(255) UNIQUE NOT NULL,
+    payload JSONB NOT NULL,
+    status VARCHAR(20) DEFAULT 'received',
+    error_message TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Admin Notifications
+DO $$ 
+BEGIN 
+    CREATE TYPE admin_notification_type AS ENUM ('order', 'user', 'system', 'alert'); 
+EXCEPTION 
+    WHEN duplicate_object THEN null; 
+END $$;
+
+CREATE TABLE IF NOT EXISTS admin_notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    admin_id UUID REFERENCES admins(id) ON DELETE CASCADE,
+    type admin_notification_type NOT NULL,
+    title VARCHAR(100) NOT NULL,
+    message TEXT NOT NULL,
+    read_at TIMESTAMPTZ DEFAULT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ==========================================
 -- 4. INDEXES
 -- ==========================================
@@ -305,14 +338,38 @@ CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_user_subscriptions_active ON user_subscriptions (user_id, expires_at) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user_id ON user_subscriptions (user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_prevent_double_pending ON orders (user_id, reference_id) WHERE status = 'pending';
 
 -- Invitations & Guests
 CREATE INDEX IF NOT EXISTS idx_invitations_user ON invitations(user_id);
 CREATE INDEX IF NOT EXISTS idx_invitations_status ON invitations(status);
 CREATE INDEX IF NOT EXISTS idx_invitations_expires_at ON invitations(expires_at);
 CREATE INDEX IF NOT EXISTS idx_guests_invitation ON guests(invitation_id);
-CREATE INDEX IF NOT EXISTS idx_guests_attendance ON guests(invitation_id, attendance_status); -- Fixed column name
+CREATE INDEX IF NOT EXISTS idx_guests_attendance ON guests(invitation_id, attendance_status);
 CREATE INDEX IF NOT EXISTS idx_guests_created_at ON guests(invitation_id, created_at DESC);
+
+-- Admin Notifications Indexes
+CREATE INDEX IF NOT EXISTS idx_admin_notifications_admin ON admin_notifications(admin_id);
+CREATE INDEX IF NOT EXISTS idx_admin_notifications_unread ON admin_notifications(admin_id) WHERE read_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_admin_notifications_created ON admin_notifications(created_at DESC);
+
+-- Additional Performance Indexes
+CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_invitations_user_status ON invitations (user_id, status, expires_at);
+CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user_expires ON user_subscriptions (user_id, expires_at DESC);
+CREATE INDEX IF NOT EXISTS idx_template_purchases_user ON template_purchases (user_id);
+CREATE INDEX IF NOT EXISTS idx_users_search_trgm ON users USING GIN (first_name gin_trgm_ops, last_name gin_trgm_ops, email gin_trgm_ops, phone_number gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_users_deleted_marker ON users (id) WHERE email LIKE '%@deleted.riwainvite.local';
+CREATE INDEX IF NOT EXISTS idx_user_subscriptions_plan_id ON user_subscriptions (plan_id);
+CREATE INDEX IF NOT EXISTS idx_plans_created_at ON plans (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_plans_name_trgm ON plans USING GIN (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_plans_is_active ON plans (is_active) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_user_subs_created_at ON user_subscriptions (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_subs_status_created ON user_subscriptions (status, created_at DESC);
+
+-- 3. Add indexes for the webhook and cron job performance
+CREATE INDEX IF NOT EXISTS idx_orders_pending_cron ON orders (status, created_at) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_payment_logs_event ON payment_logs(event_id);
 
 -- ==========================================
 -- 5. TRIGGERS
@@ -326,9 +383,9 @@ DROP TRIGGER IF EXISTS trg_validate_invitation_date ON invitations;
 CREATE TRIGGER trg_validate_invitation_date BEFORE INSERT OR UPDATE ON invitations FOR EACH ROW EXECUTE FUNCTION validate_invitation_date();
 
 DROP TRIGGER IF EXISTS trg_set_invitation_expiry ON invitations;
-CREATE TRIGGER trg_set_invitation_expiry BEFORE INSERT OR UPDATE OF event_date ON invitations FOR EACH ROW EXECUTE FUNCTION set_invitation_expiry(); -- Fixed column name
+CREATE TRIGGER trg_set_invitation_expiry BEFORE INSERT OR UPDATE OF event_date ON invitations FOR EACH ROW EXECUTE FUNCTION set_invitation_expiry();
 
--- Updated At Triggers (Applied to all tables with `updated_at`)
+-- Updated At Triggers
 DROP TRIGGER IF EXISTS trg_update_template_categories_updated_at ON template_categories;
 CREATE TRIGGER trg_update_template_categories_updated_at BEFORE UPDATE ON template_categories FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -347,96 +404,14 @@ CREATE TRIGGER trg_update_subscriptions_updated_at BEFORE UPDATE ON subscription
 DROP TRIGGER IF EXISTS trg_update_user_subscriptions_updated_at ON user_subscriptions;
 CREATE TRIGGER trg_update_user_subscriptions_updated_at BEFORE UPDATE ON user_subscriptions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- 1. Create the ENUM type
-DO $$ 
-BEGIN 
-    CREATE TYPE admin_notification_type AS ENUM ('order', 'user', 'system', 'alert'); 
-EXCEPTION 
-    WHEN duplicate_object THEN null; 
-END $$;
-
--- 2. Create the table
-CREATE TABLE IF NOT EXISTS admin_notifications (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    admin_id UUID REFERENCES admins(id) ON DELETE CASCADE, -- NULL means broadcast to all admins
-    type admin_notification_type NOT NULL,
-    title VARCHAR(100) NOT NULL,
-    message TEXT NOT NULL,
-    read_at TIMESTAMPTZ DEFAULT NULL,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-
--- 3. Create the indexes for performance
-CREATE INDEX IF NOT EXISTS idx_admin_notifications_admin 
-    ON admin_notifications(admin_id);
-
-CREATE INDEX IF NOT EXISTS idx_admin_notifications_unread 
-    ON admin_notifications(admin_id) WHERE read_at IS NULL;
-
-CREATE INDEX IF NOT EXISTS idx_admin_notifications_created 
-    ON admin_notifications(created_at DESC);
-
--- 1. ORDERS: Speeds up COUNT(*) and MAX(created_at)
-CREATE INDEX IF NOT EXISTS idx_orders_user_created 
-  ON orders (user_id, created_at DESC);
-
--- 2. INVITATIONS: Speeds up the COUNT(*) FILTER (WHERE status = 'published')
-CREATE INDEX IF NOT EXISTS idx_invitations_user_status 
-  ON invitations (user_id, status, expires_at);
-
--- 3. USER_SUBSCRIPTIONS: Speeds up fetching the latest active plan
-CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user_expires 
-  ON user_subscriptions (user_id, expires_at DESC);
-
--- 4. TEMPLATE_PURCHASES: Speeds up the purchase count
--- (Your schema has UNIQUE(user_id, template_id), which covers this, 
--- but adding an explicit index guarantees the planner uses it for counts)
-CREATE INDEX IF NOT EXISTS idx_template_purchases_user 
-  ON template_purchases (user_id);
-
--- 5. USERS: Speeds up the search (ILIKE) and Deleted filter
-CREATE EXTENSION IF NOT EXISTS pg_trgm; -- Ensure this is enabled
-CREATE INDEX IF NOT EXISTS idx_users_search_trgm 
-  ON users USING GIN (
-    first_name gin_trgm_ops, 
-    last_name gin_trgm_ops, 
-    email gin_trgm_ops, 
-    phone_number gin_trgm_ops
-  );
-CREATE INDEX IF NOT EXISTS idx_users_deleted_marker 
-  ON users (id) WHERE email LIKE '%@deleted.riwainvite.local';
-
--- 1. Index for the subquery count (CRITICAL)
--- This makes counting active subscribers instant.
-CREATE INDEX IF NOT EXISTS idx_user_subscriptions_plan_id 
-  ON user_subscriptions (plan_id);
-
--- 2. Index for sorting plans by date
-CREATE INDEX IF NOT EXISTS idx_plans_created_at 
-  ON plans (created_at DESC);
-
--- 3. Trigram index for fast plan searching (ILIKE)
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE INDEX IF NOT EXISTS idx_plans_name_trgm 
-  ON plans USING GIN (name gin_trgm_ops);
-
--- 4. Partial index for active plans
-CREATE INDEX IF NOT EXISTS idx_plans_is_active 
-  ON plans (is_active) WHERE is_active = TRUE;
+-- 4. Trigger to automatically update the 'updated_at' column (Safe, transparent)
+DROP TRIGGER IF EXISTS trg_update_orders_updated_at ON orders;
+CREATE TRIGGER trg_update_orders_updated_at BEFORE UPDATE ON orders FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ==========================================
--- 6. SUBSCRIPTIONS TABLE OPTIMIZATION
+-- 6. MATERIALIZED VIEWS
 -- ==========================================
-
--- 1. Speeds up pagination sorting (ORDER BY created_at DESC)
-CREATE INDEX IF NOT EXISTS idx_user_subs_created_at 
-  ON user_subscriptions (created_at DESC);
-
--- 2. Superpower Index: Speeds up filtering by status AND sorting by date in one step
-CREATE INDEX IF NOT EXISTS idx_user_subs_status_created 
-  ON user_subscriptions (status, created_at DESC);
-
--- 1. Create the Materialized View
+-- 1. Create the Materialized View for Templates
 CREATE MATERIALIZED VIEW IF NOT EXISTS public_marquee_templates_view AS
 SELECT
   t.id,
@@ -462,21 +437,16 @@ LEFT JOIN LATERAL (
 ) tb ON true
 WHERE t.status = 'published';
 
--- 2. Create a UNIQUE index (Required for CONCURRENTLY refreshing)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_public_marquee_view_id 
-ON public_marquee_templates_view (id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_public_marquee_view_id ON public_marquee_templates_view (id);
 
--- 3. Create the Trigger Function to refresh the view
 CREATE OR REPLACE FUNCTION refresh_public_marquee_templates()
 RETURNS TRIGGER AS $$
 BEGIN
-  -- CONCURRENTLY prevents the table from locking while it refreshes
   REFRESH MATERIALIZED VIEW CONCURRENTLY public_marquee_templates_view;
   RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
--- 4. Attach the Trigger to the tables
 DROP TRIGGER IF EXISTS trg_refresh_marquee_templates ON templates;
 CREATE TRIGGER trg_refresh_marquee_templates
 AFTER INSERT OR UPDATE OR DELETE ON templates
@@ -492,7 +462,7 @@ CREATE TRIGGER trg_refresh_marquee_categories
 AFTER UPDATE ON template_categories
 FOR EACH STATEMENT EXECUTE FUNCTION refresh_public_marquee_templates();
 
--- 1. Create the Materialized View for Active Plans
+-- 2. Create the Materialized View for Active Plans
 CREATE MATERIALIZED VIEW IF NOT EXISTS public_active_plans_view AS
 SELECT 
   id, 
@@ -502,16 +472,13 @@ SELECT
   duration_days, 
   max_simple_templates, 
   max_premium_templates, 
-  allows_custom_slug
+  allows_custom_slug, -- FIXED: Added missing comma here
   created_at 
 FROM plans
 WHERE is_active = true;
 
--- 2. Unique index for CONCURRENTLY refreshing
-CREATE UNIQUE INDEX IF NOT EXISTS idx_public_plans_view_id 
-ON public_active_plans_view (id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_public_plans_view_id ON public_active_plans_view (id);
 
--- 3. Trigger Function to refresh
 CREATE OR REPLACE FUNCTION refresh_public_plans()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -520,7 +487,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 4. Attach the Trigger to the plans table
 DROP TRIGGER IF EXISTS trg_refresh_public_plans ON plans;
 CREATE TRIGGER trg_refresh_public_plans
 AFTER INSERT OR UPDATE OR DELETE ON plans

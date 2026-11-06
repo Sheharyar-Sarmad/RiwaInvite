@@ -34,6 +34,19 @@ class Settings {
   readonly aiDailyLimit: number;
   readonly aiMaxTokens: number;
 
+  // PAYMENTS CONFIGURATION
+  
+  // Mock System (Set to true to test payments without real gateway)
+  readonly mockPaymentEnabled: boolean;
+
+  // JazzCash Credentials (Handles Wallet, Cards, Bank Accounts, Raast/QR)
+  readonly jazzcashEnv: "sandbox" | "live";
+  readonly jazzcashMerchantId: string;
+  readonly jazzcashPassword: string;
+  readonly jazzcashIntegritySalt: string;
+  readonly jazzcashReturnUrl: string;
+  readonly jazzcashWebhookSecret: string;
+
   constructor() {
     // App
     this.appName = this.getRequired("APP_NAME");
@@ -81,8 +94,21 @@ class Settings {
     this.rateLimitWindowMs = this.getNumber("RATE_LIMIT_WINDOW_MS", 900000);
     this.rateLimitMaxRequests = this.getNumber("RATE_LIMIT_MAX_REQUESTS", 100);
     
-    this.aiDailyLimit = this.getNumber("AI_DAILY_LIMIT", 50); // 50 requests/day for free tier
+    this.aiDailyLimit = this.getNumber("AI_DAILY_LIMIT", 50);
     this.aiMaxTokens = this.getNumber("AI_MAX_TOKENS", 2048);
+
+    // PAYMENTS (JazzCash Only)
+    
+    // Mock System
+    this.mockPaymentEnabled = this.getBoolean("MOCK_PAYMENT_ENABLED", true);
+
+    // JazzCash
+    this.jazzcashEnv = this.getEnum("JAZZCASH_ENV", ["sandbox", "live"], "sandbox");
+    this.jazzcashMerchantId = this.getString("JAZZCASH_MERCHANT_ID", "MC_DUMMY_12345");
+    this.jazzcashPassword = this.getString("JAZZCASH_PASSWORD", "dummy_password");
+    this.jazzcashIntegritySalt = this.getString("JAZZCASH_INTEGRITY_SALT", "dummy_salt_32_characters_long_1234");
+    this.jazzcashReturnUrl = this.getString("JAZZCASH_RETURN_URL", `${this.appUrl}/api/v1/webhooks/jazzcash`);
+    this.jazzcashWebhookSecret = this.getString("JAZZCASH_WEBHOOK_SECRET", "dummy_webhook_secret");
   }
 
   // Convenience Helpers
@@ -121,6 +147,12 @@ class Settings {
     return parsed;
   }
 
+  private getBoolean(key: string, fallback: boolean): boolean {
+    const value = process.env[key];
+    if (!value) return fallback;
+    return value.toLowerCase() === "true";
+  }
+
   private getEnum<T extends string>(
     key: string,
     allowed: readonly T[],
@@ -141,10 +173,6 @@ class Settings {
 // Singleton Cache
 let cachedSettings: Settings | null = null;
 
-/**
- * Returns a singleton instance of the Settings class.
- * The env vars are read and validated only on the first call.
- */
 export function settings(): Settings {
   if (!cachedSettings) {
     cachedSettings = new Settings();

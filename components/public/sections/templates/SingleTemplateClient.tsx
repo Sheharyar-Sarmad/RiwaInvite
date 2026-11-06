@@ -32,6 +32,7 @@ import {
   Smartphone,
   Sparkles,
   Zap,
+  MonitorPlay,
 } from "lucide-react";
 import { apiClient } from "@/lib/api/api_base";
 import {
@@ -57,7 +58,6 @@ const glassCard =
 const FALLBACK_DESC =
   "A beautiful, fully customizable digital invitation template designed to leave a lasting impression on your guests.";
 
-/** Orchestrates the whole page: children inherit this stagger. */
 const pageVariants: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.09, delayChildren: 0.05 } },
@@ -111,11 +111,6 @@ const thumbChild: Variants = {
   },
 };
 
-/* -------------------------------------------------------------------------- */
-/*  Small hooks & components                                                  */
-/* -------------------------------------------------------------------------- */
-
-/** Pointer-driven 3D tilt with a cursor-following orange glow. */
 function useTilt(max: number, reduce: boolean) {
   const px = useMotionValue(0);
   const py = useMotionValue(0);
@@ -223,7 +218,6 @@ function CountUp({
   );
 }
 
-/** Floating glass chip that springs in around the hero image. */
 function FloatChip({
   children,
   className,
@@ -274,7 +268,6 @@ export function SingleTemplateClient({ id }: { id: string }) {
 
   const reduce = useReducedMotion() ?? false;
 
-  // Cursor-reveal dotted background (identical to the templates page)
   const sectionRef = useRef<HTMLDivElement>(null);
   const raf = useRef(0);
   const onMove = useCallback((e: React.PointerEvent) => {
@@ -317,7 +310,6 @@ export function SingleTemplateClient({ id }: { id: string }) {
   const tilt = useTilt(6, reduce);
 
   const gallery = template?.galleryUrls ?? [];
-  // Hero shows the thumbnail first, then the gallery
   const images = template
     ? Array.from(
         new Set([template.thumbnailUrl, ...gallery].filter(Boolean)),
@@ -334,7 +326,6 @@ export function SingleTemplateClient({ id }: { id: string }) {
     [images.length, activeIdx],
   );
 
-  // Arrow keys switch images
   useEffect(() => {
     if (isPreviewOpen || images.length < 2) return;
     const onKey = (e: KeyboardEvent) => {
@@ -350,12 +341,9 @@ export function SingleTemplateClient({ id }: { id: string }) {
       await navigator.clipboard.writeText(window.location.href);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
-    } catch {
-      /* clipboard unavailable */
-    }
+    } catch { }
   };
 
-  /* ------------------------------ Loading ------------------------------- */
   if (loading) {
     return (
       <div className="relative isolate min-h-screen w-full overflow-hidden bg-[#fdeadb] py-16 sm:py-24">
@@ -390,7 +378,6 @@ export function SingleTemplateClient({ id }: { id: string }) {
     );
   }
 
-  /* ------------------------------- Error -------------------------------- */
   if (error || !template) {
     return (
       <div className="relative isolate flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#fdeadb] px-4 text-center">
@@ -452,7 +439,6 @@ export function SingleTemplateClient({ id }: { id: string }) {
       onPointerMove={onMove}
       className="relative isolate min-h-screen w-full overflow-hidden bg-[#fdeadb] py-16 pb-32 sm:py-24 lg:pb-24"
     >
-      {/* Background: peach gradient, drifting glows, dots that light up under the cursor */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-gradient-to-b from-[#fff4ea] to-[#fbdcc0]" />
         <motion.div
@@ -491,7 +477,6 @@ export function SingleTemplateClient({ id }: { id: string }) {
         animate="show"
         className="relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8"
       >
-        {/* Breadcrumb / back */}
         <motion.div
           variants={riseVariants}
           className="mb-8 flex flex-wrap items-center justify-between gap-3"
@@ -552,7 +537,6 @@ export function SingleTemplateClient({ id }: { id: string }) {
               style={{ transformPerspective: 1400 }}
               className="relative"
             >
-              {/* Floating chips */}
               <FloatChip
                 className="-left-3 top-10 sm:-left-6"
                 delay={1.1}
@@ -577,13 +561,11 @@ export function SingleTemplateClient({ id }: { id: string }) {
                 style={tilt.style}
                 className="group relative aspect-[4/5] w-full rounded-3xl"
               >
-                {/* Depth shadow */}
                 <div
                   aria-hidden
                   className="absolute inset-0 rounded-3xl shadow-[0_30px_70px_-30px_rgba(249,115,22,0.65)]"
                 />
 
-                {/* Shining border + clipped surface */}
                 <motion.div
                   initial={
                     reduce
@@ -637,21 +619,18 @@ export function SingleTemplateClient({ id }: { id: string }) {
                       className="pointer-events-none absolute inset-0 opacity-0 mix-blend-soft-light transition-opacity duration-300 group-hover:opacity-100"
                     />
 
-                    {/* Premium tag on image */}
                     {template.isPremium && (
                       <span className="absolute left-4 top-4 z-10 flex items-center gap-1.5 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 px-3 py-1 text-[11px] font-bold text-white shadow-lg">
                         <Crown className="h-3 w-3" /> Premium
                       </span>
                     )}
 
-                    {/* Counter */}
                     {images.length > 1 && (
                       <span className="absolute right-4 top-4 z-10 rounded-full bg-black/40 px-3 py-1 text-[11px] font-bold tabular-nums text-white backdrop-blur-md">
                         {activeIdx + 1} / {images.length}
                       </span>
                     )}
 
-                    {/* Whole-image preview target */}
                     <button
                       type="button"
                       onClick={() => setIsPreviewOpen(true)}
@@ -659,7 +638,6 @@ export function SingleTemplateClient({ id }: { id: string }) {
                       className={`absolute inset-0 z-[5] cursor-pointer ${focusRing}`}
                     />
 
-                    {/* Center preview hint */}
                     <div className="pointer-events-none absolute inset-0 z-[6] flex items-center justify-center">
                       <motion.span
                         initial={reduce ? false : { scale: 0, opacity: 0 }}
@@ -688,7 +666,6 @@ export function SingleTemplateClient({ id }: { id: string }) {
                       </motion.span>
                     </div>
 
-                    {/* Prev / Next */}
                     {images.length > 1 && (
                       <>
                         <button
@@ -710,7 +687,6 @@ export function SingleTemplateClient({ id }: { id: string }) {
                       </>
                     )}
 
-                    {/* Bottom caption */}
                     <div className="pointer-events-none absolute bottom-0 left-0 z-10 w-full p-5">
                       <p className="text-xs font-semibold text-orange-300">
                         {template.categoryName}
@@ -724,7 +700,6 @@ export function SingleTemplateClient({ id }: { id: string }) {
               </motion.div>
             </motion.div>
 
-            {/* Thumbnails */}
             {images.length > 1 && (
               <motion.div
                 variants={thumbParent}
@@ -787,7 +762,6 @@ export function SingleTemplateClient({ id }: { id: string }) {
                 {template.description || FALLBACK_DESC}
               </motion.p>
 
-              {/* Quick facts */}
               <motion.div
                 variants={riseVariants}
                 className="mt-6 flex flex-wrap gap-2"
@@ -808,7 +782,7 @@ export function SingleTemplateClient({ id }: { id: string }) {
               </motion.div>
             </div>
 
-            {/* Price box */}
+            {/* Price box with THREE BUTTONS */}
             <motion.div
               variants={{
                 hidden: { opacity: 0, y: 40, rotateX: -12, scale: 0.96 },
@@ -823,7 +797,6 @@ export function SingleTemplateClient({ id }: { id: string }) {
               style={{ transformPerspective: 1200 }}
               className={`relative mb-10 overflow-hidden rounded-3xl p-6 sm:p-8 ${glassCard}`}
             >
-              {/* Top accent line that draws in */}
               <motion.span
                 aria-hidden
                 initial={reduce ? false : { scaleX: 0 }}
@@ -860,16 +833,34 @@ export function SingleTemplateClient({ id }: { id: string }) {
               </div>
 
               <div className="mt-8 flex flex-col gap-3">
-                <motion.button
-                  type="button"
-                  whileHover={reduce ? undefined : { y: -2 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setIsPreviewOpen(true)}
-                  className={`flex w-full items-center justify-center gap-2 rounded-xl bg-white/60 py-4 text-sm font-bold text-gray-900 ring-1 ring-orange-200 transition-colors hover:bg-white hover:ring-orange-300 ${focusRing}`}
-                >
-                  <Eye className="h-5 w-5" /> Live preview
-                </motion.button>
+                {/* TWO SECONDARY BUTTONS (Side by Side) */}
+                <div className="grid grid-cols-2 gap-3">
+                  <motion.button
+                    type="button"
+                    whileHover={reduce ? undefined : { y: -2 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setIsPreviewOpen(true)}
+                    className={`flex w-full items-center justify-center gap-2 rounded-xl bg-white/60 py-4 text-sm font-bold text-gray-900 ring-1 ring-orange-200 transition-colors hover:bg-white hover:ring-orange-300 ${focusRing}`}
+                  >
+                    <Eye className="h-5 w-5" /> Quick Look
+                  </motion.button>
 
+                  <motion.div
+                    whileHover={reduce ? undefined : { y: -2 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <Link
+                      href={`/preview/${template.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`flex w-full items-center justify-center gap-2 rounded-xl bg-white/60 py-4 text-sm font-bold text-gray-900 ring-1 ring-orange-200 transition-colors hover:bg-white hover:ring-orange-300 ${focusRing}`}
+                    >
+                      <MonitorPlay className="h-5 w-5" /> Full Page
+                    </Link>
+                  </motion.div>
+                </div>
+
+                {/* THE MAIN BUY BUTTON */}
                 <motion.div
                   whileHover={reduce ? undefined : { y: -2, scale: 1.015 }}
                   whileTap={{ scale: 0.98 }}
@@ -878,7 +869,6 @@ export function SingleTemplateClient({ id }: { id: string }) {
                     href={`/checkout/template/${template.id}`}
                     className={`group/buy relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl py-4 text-base font-bold text-white ${primaryBtn} ${focusRing}`}
                   >
-                    {/* Looping shimmer */}
                     {!reduce && (
                       <motion.span
                         aria-hidden
@@ -909,7 +899,6 @@ export function SingleTemplateClient({ id }: { id: string }) {
               </p>
             </motion.div>
 
-            {/* Features */}
             <div>
               <motion.h3
                 variants={riseVariants}
@@ -947,7 +936,6 @@ export function SingleTemplateClient({ id }: { id: string }) {
         </div>
       </motion.div>
 
-      {/* Mobile sticky buy bar */}
       <motion.div
         initial={reduce ? false : { y: 120, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -963,6 +951,12 @@ export function SingleTemplateClient({ id }: { id: string }) {
               {isPaid ? `Rs ${template.price.toLocaleString()}` : "Free"}
             </p>
           </div>
+          <Link
+            href={`/preview/${template.id}`}
+            className={`inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-bold text-white`}
+          >
+            <MonitorPlay className="h-4 w-4" />
+          </Link>
           <Link
             href={`/checkout/template/${template.id}`}
             className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-bold text-white ${primaryBtn} ${focusRing}`}

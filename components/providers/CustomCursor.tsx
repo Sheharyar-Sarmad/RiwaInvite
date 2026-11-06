@@ -17,7 +17,7 @@ import {
 /* -------------------------------------------------------------------------- */
 
 // Routes where the native cursor should stay
-const HIDDEN_ROUTES = ["/admin", "/dashboard", "/login", "/register"];
+const HIDDEN_ROUTES = ["/admin", "/dashboard", "/login", "/register", "/preview"];
 
 const CLICKABLE =
   "a, button, [role='button'], [role='tab'], input, select, textarea, label, summary, [data-cursor='pointer']";
