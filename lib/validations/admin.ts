@@ -82,12 +82,11 @@ export const CreateTemplateSchema = z
     is_premium: z.boolean().default(false),
     price: priceSchema,
     custom_slug_price: priceSchema,
+    allows_custom_slug: z.boolean().default(true),
     status: z.enum(["draft", "published"]).default("draft"),
     design_schema: designSchemaSchema,
   })
   .strict();
-
-// lib/validations/admin.ts
 
 export const CreateCategorySchema = z
   .object({
@@ -141,6 +140,7 @@ export const UpdateTemplateSchema = z
     video_urls: z.array(z.string().url()).max(20).optional(),
     music_urls: z.array(z.string().url()).max(20).optional(),
     core_names_config: z.record(z.string(), z.any()).optional(),
+    allows_custom_slug: z.boolean().optional(),
     is_premium: z.boolean().optional(),
     price: z.number().min(0).optional(),
     custom_slug_price: z.number().min(0).optional(),

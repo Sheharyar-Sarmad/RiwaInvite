@@ -1010,6 +1010,8 @@ export function ElementorBuilder({
   const [thumbnailUrl, setThumbnailUrl] = React.useState("");
   const [isPremium, setIsPremium] = React.useState(false);
   const [price, setPrice] = React.useState("0");
+  const [customSlugPrice, setCustomSlugPrice] = React.useState("1000");
+  const [allowsCustomSlug, setAllowsCustomSlug] = React.useState(true);
   const [status, setStatus] = React.useState<"draft" | "published">("draft");
   const [coreNames, setCoreNames] = React.useState({ bride: "", groom: "" });
   const [galleryUrls, setGalleryUrls] = React.useState<string[]>([]);
@@ -1074,6 +1076,8 @@ export function ElementorBuilder({
         setStatus(data.status === "published" ? "published" : "draft");
         setIsPremium(Boolean(data.is_premium));
         setPrice(String(data.price || 0));
+        setCustomSlugPrice(String(data.custom_slug_price ?? 1000));
+        setAllowsCustomSlug(data.allows_custom_slug !== false);
         setGalleryUrls(data.gallery_urls || []);
         setVideoUrls(data.video_urls || []);
         setMusicUrls(data.music_urls || []);
@@ -1417,7 +1421,8 @@ export function ElementorBuilder({
       thumbnail_url: thumbnailUrl || PLACEHOLDER_IMG,
       is_premium: isPremium,
       price: parseFloat(price) || 0,
-      custom_slug_price: 1000.0,
+      custom_slug_price: parseFloat(customSlugPrice) || 0,
+      allows_custom_slug: allowsCustomSlug,
       gallery_urls: galleryUrls,
       video_urls: videoUrls,
       music_urls: musicUrls,
@@ -2908,6 +2913,45 @@ export function ElementorBuilder({
                           {isPremium ? "Yes" : "No"}
                         </span>
                       </Field>
+                    </div>
+
+                    {/* Custom Slug Add-on */}
+                    <div className="space-y-3 rounded-xl border border-orange-100 bg-orange-50/40 p-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700">
+                          Custom slug add-on
+                        </span>
+                        <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-600">
+                          Enable
+                          <input
+                            type="checkbox"
+                            checked={allowsCustomSlug}
+                            onChange={(e) => setAllowsCustomSlug(e.target.checked)}
+                            className="size-4 accent-orange-500"
+                          />
+                        </label>
+                      </div>
+                      {allowsCustomSlug && (
+                        <Field label="Add-on Price (PKR)">
+                          <div className="relative">
+                            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                              Rs
+                            </span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="100"
+                              value={customSlugPrice}
+                              onChange={(e) => setCustomSlugPrice(e.target.value)}
+                              className={`${inputCls} pl-8`}
+                              placeholder="1000"
+                            />
+                          </div>
+                        </Field>
+                      )}
+                      {!allowsCustomSlug && (
+                        <p className="text-[11px] text-slate-500">Custom slug is disabled for this template.</p>
+                      )}
                     </div>
 
                     <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">

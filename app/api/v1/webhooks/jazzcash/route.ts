@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // IDEMPOTENCY: Save to payment_logs first
+    // 1. IDEMPOTENCY: Save to payment_logs first to prevent double-processing
     const [log] = await sql`
       INSERT INTO payment_logs (provider, event_id, payload, status)
       VALUES ('jazzcash', ${txnRefNo}, ${JSON.stringify(payload)}::jsonb, 'received')
@@ -54,14 +54,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "success", message: "Already processed" }, { status: STATUS_CODE.OK });
     }
 
-    // CHECK PAYMENT STATUS
+    // 2. CHECK PAYMENT STATUS
     if (responseCode !== "000") {
       await sql`UPDATE orders SET status = 'failed' WHERE provider_order_id = ${txnRefNo}`;
       await sql`UPDATE payment_logs SET status = 'failed', error_message = ${payload.pp_ResponseMessage || 'Unknown Error'} WHERE id = ${log.id}`;
       return NextResponse.json({ status: "success", message: "Payment marked as failed" }, { status: STATUS_CODE.OK });
     }
 
-    // ACID TRANSACTION: Unlock the item
+    // 3. ACID TRANSACTION: Unlock the item
     await sql.begin(async (tx) => {
       const [order] = await tx`SELECT * FROM orders WHERE provider_order_id = ${txnRefNo} FOR UPDATE`;
 
@@ -80,16 +80,22 @@ export async function POST(req: NextRequest) {
           VALUES (${order.user_id}, ${order.reference_id}, NOW(), ${expiresAt}, 'active')
         `;
       } else if (order.order_type === "template") {
+        // 4. UNLOCK TEMPLATE + CUSTOM SLUG ENTITLEMENT
+        // We cast to boolean just to be absolutely certain Postgres handles it natively
+        const hasCustomSlug = Boolean(order.has_custom_slug);
+
         await tx`
-          INSERT INTO template_purchases (user_id, template_id, price_paid)
-          VALUES (${order.user_id}, ${order.reference_id}, ${order.amount})
-          ON CONFLICT (user_id, template_id) DO NOTHING
+          INSERT INTO template_purchases (user_id, template_id, price_paid, has_custom_slug)
+          VALUES (${order.user_id}, ${order.reference_id}, ${order.amount}, ${hasCustomSlug})
+          ON CONFLICT (user_id, template_id) DO UPDATE
+          SET has_custom_slug = template_purchases.has_custom_slug OR EXCLUDED.has_custom_slug,
+              price_paid = template_purchases.price_paid + EXCLUDED.price_paid
         `;
       }
 
       await tx`
         INSERT INTO notifications (user_id, title, message)
-        VALUES (${order.user_id}, 'Payment Successful 🎉', 'Your payment was verified and your access is ready.')
+        VALUES (${order.user_id}, 'Payment Successful', 'Your payment was verified and your access is ready.')
       `;
       await tx`
         INSERT INTO admin_notifications (type, title, message)
@@ -97,6 +103,7 @@ export async function POST(req: NextRequest) {
       `;
     });
 
+    // 5. Mark log as processed
     await sql`UPDATE payment_logs SET status = 'processed' WHERE id = ${log.id}`;
 
     return NextResponse.json({ status: "success" }, { status: STATUS_CODE.OK });

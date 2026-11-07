@@ -131,6 +131,9 @@ export async function PATCH(
           custom_slug_price = CASE WHEN ${has("custom_slug_price")}::boolean
                                 THEN ${body.custom_slug_price ?? null}::numeric
                                 ELSE custom_slug_price END,
+          allows_custom_slug = CASE WHEN ${has("allows_custom_slug")}::boolean
+                                THEN ${body.allows_custom_slug ?? null}::boolean
+                                ELSE allows_custom_slug END,
           status            = CASE WHEN ${has("status")}::boolean
                                 THEN ${body.status ?? null}::template_status
                                 ELSE status END,

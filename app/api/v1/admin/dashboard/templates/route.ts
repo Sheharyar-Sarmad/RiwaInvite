@@ -133,28 +133,42 @@ export async function POST(req: NextRequest) {
         await tx`SELECT id FROM template_categories WHERE id = ${body.category_id}`;
       if (!category) throw new Error("CATEGORY_NOT_FOUND");
 
+      // 1. Insert Template (Added allows_custom_slug)
       const [template] = await tx`
         INSERT INTO templates (
           category_id, name, description, thumbnail_url,
           gallery_urls, video_urls, music_urls,
-          core_names_config, is_premium, price, custom_slug_price, status
+          core_names_config, is_premium, price, custom_slug_price, allows_custom_slug, status
         ) VALUES (
           ${body.category_id}, ${body.name}, ${body.description ?? null}, ${body.thumbnail_url},
           ${JSON.stringify(body.gallery_urls)}::jsonb, ${JSON.stringify(body.video_urls)}::jsonb, ${JSON.stringify(body.music_urls)}::jsonb,
           ${JSON.stringify(body.core_names_config)}::jsonb, 
-          ${body.is_premium}, ${body.price}, ${body.custom_slug_price}, ${body.status}
+          ${body.is_premium}, ${body.price}, ${body.custom_slug_price}, ${body.allows_custom_slug ?? true}, ${body.status}
         ) RETURNING *
       `;
 
+      // 2. Insert Template Body
       const [templateBody] = await tx`
         INSERT INTO template_bodies (template_id, version, design_schema)
         VALUES (${template.id}, 1, ${JSON.stringify(body.design_schema)}::jsonb)
         RETURNING id, version
       `;
 
+      // 3. Create Admin Notification
+      await tx`
+        INSERT INTO admin_notifications (admin_id, type, title, message)
+        VALUES (
+          ${adminId}, 
+          'system', 
+          'New Template Created', 
+          ${`Template "${body.name}" was successfully created.`}
+        )
+      `;
+
       return { template, body: templateBody };
     });
 
+    // Clear Cache
     const redis = await getRedisClient();
     const keys = await redis.keys("admin:templates:*");
     if (keys.length > 0) await redis.del(keys);

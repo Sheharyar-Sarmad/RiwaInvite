@@ -4,12 +4,10 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
--- Safe creation of ENUMs (prevents errors if script is run twice)
 DO $$ BEGIN
     CREATE TYPE invitation_status AS ENUM ('draft', 'published', 'expired', 'archived');
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
--- Kept original order_status exactly as is
 DO $$ BEGIN
     CREATE TYPE order_status AS ENUM ('pending', 'completed', 'failed');
 EXCEPTION WHEN duplicate_object THEN null; END $$;
@@ -64,10 +62,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ==========================================
--- 3. TABLES (Ordered by dependencies)
+-- 3. TABLES
 -- ==========================================
-
--- INDEPENDENT TABLES
 CREATE TABLE IF NOT EXISTS admins (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_name VARCHAR(30) NOT NULL UNIQUE,
@@ -103,7 +99,7 @@ CREATE TABLE IF NOT EXISTS template_categories (
     name VARCHAR(50) NOT NULL UNIQUE,
     slug VARCHAR(50) NOT NULL UNIQUE,
     description TEXT,
-    thumbnail_url TEXT, 
+    thumbnail_url TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -122,7 +118,6 @@ CREATE TABLE IF NOT EXISTS plans (
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
--- SESSIONS
 CREATE TABLE IF NOT EXISTS admin_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     admin_id UUID NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
@@ -145,7 +140,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     CONSTRAINT check_user_session_expiry CHECK (expires_at > created_at)
 );
 
--- TEMPLATES
+-- TEMPLATES (fixed: no duplicate columns)
 CREATE TABLE IF NOT EXISTS templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     category_id UUID NOT NULL REFERENCES template_categories(id) ON DELETE RESTRICT,
@@ -158,11 +153,16 @@ CREATE TABLE IF NOT EXISTS templates (
     core_names_config JSONB NOT NULL,
     is_premium BOOLEAN DEFAULT FALSE,
     price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    custom_slug_price DECIMAL(10,2) NOT NULL DEFAULT 1000.00, 
+    custom_slug_price DECIMAL(10,2) NOT NULL DEFAULT 1000.00,
+    allows_custom_slug BOOLEAN NOT NULL DEFAULT TRUE,
     status template_status NOT NULL DEFAULT 'draft',
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Safe-alter for existing installs
+ALTER TABLE templates ADD COLUMN IF NOT EXISTS custom_slug_price DECIMAL(10,2) NOT NULL DEFAULT 1000.00;
+ALTER TABLE templates ADD COLUMN IF NOT EXISTS allows_custom_slug BOOLEAN NOT NULL DEFAULT TRUE;
 
 CREATE TABLE IF NOT EXISTS template_bodies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -173,7 +173,6 @@ CREATE TABLE IF NOT EXISTS template_bodies (
     UNIQUE(template_id, version)
 );
 
--- ORDERS & SUBSCRIPTIONS
 CREATE TABLE IF NOT EXISTS orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id),
@@ -182,13 +181,15 @@ CREATE TABLE IF NOT EXISTS orders (
     amount DECIMAL(10,2) NOT NULL,
     order_type VARCHAR(20) NOT NULL,
     reference_id UUID NOT NULL,
+    preferred_slug VARCHAR(100),
+    has_custom_slug BOOLEAN NOT NULL DEFAULT FALSE,
     status order_status DEFAULT 'pending',
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
--- 1. Add nullable columns (Frontend ignores them, Backend won't crash)
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS has_custom_slug BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS order_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -204,9 +205,12 @@ CREATE TABLE IF NOT EXISTS template_purchases (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
     price_paid DECIMAL(10,2) NOT NULL,
+    has_custom_slug BOOLEAN NOT NULL DEFAULT FALSE,
     purchased_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, template_id) 
+    UNIQUE(user_id, template_id)
 );
+
+ALTER TABLE template_purchases ADD COLUMN IF NOT EXISTS has_custom_slug BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS subscriptions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -216,8 +220,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     current_period_start TIMESTAMPTZ NOT NULL,
     current_period_end TIMESTAMPTZ NOT NULL,
     provider VARCHAR(20) NOT NULL,
-    provider_sub_id VARCHAR(255) UNIQUE, 
-    idempotency_key VARCHAR(255) UNIQUE, 
+    provider_sub_id VARCHAR(255) UNIQUE,
+    idempotency_key VARCHAR(255) UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -237,7 +241,6 @@ CREATE TABLE IF NOT EXISTS user_subscriptions (
     CONSTRAINT user_subscriptions_period_check CHECK (expires_at > starts_at)
 );
 
--- INVITATIONS & GUESTS
 CREATE TABLE IF NOT EXISTS invitations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -246,14 +249,14 @@ CREATE TABLE IF NOT EXISTS invitations (
     title VARCHAR(100) NOT NULL,
     event_date DATE NOT NULL,
     event_time TIME,
-    venue_details JSONB DEFAULT '{}'::jsonb, 
+    venue_details JSONB DEFAULT '{}'::jsonb,
     slug VARCHAR(100) NOT NULL UNIQUE DEFAULT (gen_random_uuid()::text),
-    is_custom_slug BOOLEAN NOT NULL DEFAULT FALSE, 
+    is_custom_slug BOOLEAN NOT NULL DEFAULT FALSE,
     design_schema JSONB NOT NULL,
-    selected_music_url TEXT, 
+    selected_music_url TEXT,
     status invitation_status NOT NULL DEFAULT 'draft',
     published_at TIMESTAMPTZ,
-    expires_at TIMESTAMPTZ, 
+    expires_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -277,7 +280,6 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. Create the isolated Payment Logs table (The Webhook safety net)
 CREATE TABLE IF NOT EXISTS payment_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     provider VARCHAR(20) NOT NULL,
@@ -288,12 +290,11 @@ CREATE TABLE IF NOT EXISTS payment_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Admin Notifications
-DO $$ 
-BEGIN 
-    CREATE TYPE admin_notification_type AS ENUM ('order', 'user', 'system', 'alert'); 
-EXCEPTION 
-    WHEN duplicate_object THEN null; 
+DO $$
+BEGIN
+    CREATE TYPE admin_notification_type AS ENUM ('order', 'user', 'system', 'alert');
+EXCEPTION
+    WHEN duplicate_object THEN null;
 END $$;
 
 CREATE TABLE IF NOT EXISTS admin_notifications (
@@ -309,20 +310,17 @@ CREATE TABLE IF NOT EXISTS admin_notifications (
 -- ==========================================
 -- 4. INDEXES
 -- ==========================================
--- Admin & Auth
 CREATE UNIQUE INDEX IF NOT EXISTS idx_admins_email_lower ON admins (LOWER(email));
 CREATE UNIQUE INDEX IF NOT EXISTS idx_admins_account_name_lower ON admins (LOWER(account_name));
 CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_sessions_token_hash ON admin_sessions (token_hash);
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_admin_id ON admin_sessions (admin_id);
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires_at ON admin_sessions (expires_at) WHERE revoked_at IS NULL;
 
--- Users
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users (LOWER(email));
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_sessions_token_hash ON user_sessions (token_hash);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions (user_id);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions (expires_at);
 
--- Templates
 CREATE UNIQUE INDEX IF NOT EXISTS idx_template_categories_slug ON template_categories(slug);
 CREATE INDEX IF NOT EXISTS idx_template_categories_name ON template_categories(name);
 CREATE INDEX IF NOT EXISTS idx_template_categories_name_trgm ON template_categories USING GIN (name gin_trgm_ops);
@@ -330,9 +328,9 @@ CREATE INDEX IF NOT EXISTS idx_template_categories_slug_trgm ON template_categor
 CREATE INDEX IF NOT EXISTS idx_templates_category ON templates(category_id);
 CREATE INDEX IF NOT EXISTS idx_templates_status ON templates(status);
 CREATE INDEX IF NOT EXISTS idx_templates_is_premium ON templates(is_premium) WHERE is_premium = TRUE;
+CREATE INDEX IF NOT EXISTS idx_templates_allows_custom_slug ON templates(allows_custom_slug) WHERE allows_custom_slug = TRUE;
 CREATE INDEX IF NOT EXISTS idx_template_bodies_template ON template_bodies(template_id);
 
--- Orders & Subscriptions
 CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
@@ -340,7 +338,6 @@ CREATE INDEX IF NOT EXISTS idx_user_subscriptions_active ON user_subscriptions (
 CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user_id ON user_subscriptions (user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_prevent_double_pending ON orders (user_id, reference_id) WHERE status = 'pending';
 
--- Invitations & Guests
 CREATE INDEX IF NOT EXISTS idx_invitations_user ON invitations(user_id);
 CREATE INDEX IF NOT EXISTS idx_invitations_status ON invitations(status);
 CREATE INDEX IF NOT EXISTS idx_invitations_expires_at ON invitations(expires_at);
@@ -348,12 +345,10 @@ CREATE INDEX IF NOT EXISTS idx_guests_invitation ON guests(invitation_id);
 CREATE INDEX IF NOT EXISTS idx_guests_attendance ON guests(invitation_id, attendance_status);
 CREATE INDEX IF NOT EXISTS idx_guests_created_at ON guests(invitation_id, created_at DESC);
 
--- Admin Notifications Indexes
 CREATE INDEX IF NOT EXISTS idx_admin_notifications_admin ON admin_notifications(admin_id);
 CREATE INDEX IF NOT EXISTS idx_admin_notifications_unread ON admin_notifications(admin_id) WHERE read_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_admin_notifications_created ON admin_notifications(created_at DESC);
 
--- Additional Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_invitations_user_status ON invitations (user_id, status, expires_at);
 CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user_expires ON user_subscriptions (user_id, expires_at DESC);
@@ -367,25 +362,26 @@ CREATE INDEX IF NOT EXISTS idx_plans_is_active ON plans (is_active) WHERE is_act
 CREATE INDEX IF NOT EXISTS idx_user_subs_created_at ON user_subscriptions (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_subs_status_created ON user_subscriptions (status, created_at DESC);
 
--- 3. Add indexes for the webhook and cron job performance
+-- Custom-slug partial indexes
+CREATE INDEX IF NOT EXISTS idx_template_purchases_custom_slug ON template_purchases (user_id, template_id) WHERE has_custom_slug = TRUE;
+CREATE INDEX IF NOT EXISTS idx_orders_custom_slug_paid ON orders (user_id, created_at DESC) WHERE has_custom_slug = TRUE AND status = 'completed';
+CREATE INDEX IF NOT EXISTS idx_orders_preferred_slug ON orders (LOWER(preferred_slug)) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS idx_orders_pending_cron ON orders (status, created_at) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS idx_payment_logs_event ON payment_logs(event_id);
 
 -- ==========================================
 -- 5. TRIGGERS
 -- ==========================================
--- Max 2 Admins
 DROP TRIGGER IF EXISTS trigger_max_two_admins ON admins;
 CREATE TRIGGER trigger_max_two_admins BEFORE INSERT ON admins FOR EACH ROW EXECUTE FUNCTION enforce_max_two_admins();
 
--- Invitations Logic
 DROP TRIGGER IF EXISTS trg_validate_invitation_date ON invitations;
 CREATE TRIGGER trg_validate_invitation_date BEFORE INSERT OR UPDATE ON invitations FOR EACH ROW EXECUTE FUNCTION validate_invitation_date();
 
+-- Fires on event_date OR status change (draft -> published without touching date still sets expiry)
 DROP TRIGGER IF EXISTS trg_set_invitation_expiry ON invitations;
-CREATE TRIGGER trg_set_invitation_expiry BEFORE INSERT OR UPDATE OF event_date ON invitations FOR EACH ROW EXECUTE FUNCTION set_invitation_expiry();
+CREATE TRIGGER trg_set_invitation_expiry BEFORE INSERT OR UPDATE OF event_date, status ON invitations FOR EACH ROW EXECUTE FUNCTION set_invitation_expiry();
 
--- Updated At Triggers
 DROP TRIGGER IF EXISTS trg_update_template_categories_updated_at ON template_categories;
 CREATE TRIGGER trg_update_template_categories_updated_at BEFORE UPDATE ON template_categories FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -404,14 +400,12 @@ CREATE TRIGGER trg_update_subscriptions_updated_at BEFORE UPDATE ON subscription
 DROP TRIGGER IF EXISTS trg_update_user_subscriptions_updated_at ON user_subscriptions;
 CREATE TRIGGER trg_update_user_subscriptions_updated_at BEFORE UPDATE ON user_subscriptions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- 4. Trigger to automatically update the 'updated_at' column (Safe, transparent)
 DROP TRIGGER IF EXISTS trg_update_orders_updated_at ON orders;
 CREATE TRIGGER trg_update_orders_updated_at BEFORE UPDATE ON orders FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ==========================================
 -- 6. MATERIALIZED VIEWS
 -- ==========================================
--- 1. Create the Materialized View for Templates
 CREATE MATERIALIZED VIEW IF NOT EXISTS public_marquee_templates_view AS
 SELECT
   t.id,
@@ -423,16 +417,18 @@ SELECT
   t.music_urls AS "musicUrls",
   t.is_premium AS "isPremium",
   (t.price)::float AS "price",
+  (t.custom_slug_price)::float AS "customSlugPrice",
+  t.allows_custom_slug AS "allowsCustomSlug",
   c.name AS "categoryName",
   tb.design_schema AS "design_schema",
   t.created_at
 FROM templates t
 JOIN template_categories c ON t.category_id = c.id
 LEFT JOIN LATERAL (
-  SELECT design_schema 
-  FROM template_bodies 
-  WHERE template_id = t.id 
-  ORDER BY version DESC 
+  SELECT design_schema
+  FROM template_bodies
+  WHERE template_id = t.id
+  ORDER BY version DESC
   LIMIT 1
 ) tb ON true
 WHERE t.status = 'published';
@@ -462,18 +458,17 @@ CREATE TRIGGER trg_refresh_marquee_categories
 AFTER UPDATE ON template_categories
 FOR EACH STATEMENT EXECUTE FUNCTION refresh_public_marquee_templates();
 
--- 2. Create the Materialized View for Active Plans
 CREATE MATERIALIZED VIEW IF NOT EXISTS public_active_plans_view AS
-SELECT 
-  id, 
-  name, 
-  description, 
-  price, 
-  duration_days, 
-  max_simple_templates, 
-  max_premium_templates, 
-  allows_custom_slug, -- FIXED: Added missing comma here
-  created_at 
+SELECT
+  id,
+  name,
+  description,
+  price,
+  duration_days,
+  max_simple_templates,
+  max_premium_templates,
+  allows_custom_slug,
+  created_at
 FROM plans
 WHERE is_active = true;
 
