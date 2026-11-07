@@ -26,6 +26,7 @@ import {
   RefreshCcw,
   CalendarCheck,
   ShoppingCart,
+  FileText, // 👈 Added this icon
   type LucideIcon,
 } from "lucide-react";
 import Image from "next/image";
@@ -39,6 +40,7 @@ export type AdminSession = {
 };
 
 type NavItem = { label: string; href: string; icon: LucideIcon };
+
 type NavGroup = { label: string; items: NavItem[] };
 
 export const NAV: NavGroup[] = [
@@ -88,7 +90,12 @@ export const NAV: NavGroup[] = [
         href: "/admin/dashboard/purchases",
         icon: ShoppingCart,
       }, 
-
+      // 👇 Added Payment Logs here
+      {
+        label: "Payment Logs",
+        href: "/admin/dashboard/payment-logs",
+        icon: FileText,
+      },
       { label: "Users", href: "/admin/dashboard/users", icon: Users },
     ],
   },

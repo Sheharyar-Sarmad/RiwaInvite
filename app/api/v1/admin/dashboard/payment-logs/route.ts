@@ -5,10 +5,6 @@ import { errorResponse, pgErrorToResponse } from "@/lib/api/errors";
 import { STATUS_CODE } from "@/lib/status_codes";
 import { z } from "zod";
 
-// CRITICAL: Keeps the route as an SSR (Server-Side Rendered) API. 
-// It prevents Next.js from statically caching the response.
-export const dynamic = "force-dynamic";
-
 const ListPaymentLogsQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
   limit: z.coerce.number().min(1).max(100).default(20),

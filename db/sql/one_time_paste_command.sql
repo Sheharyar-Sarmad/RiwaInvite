@@ -361,6 +361,9 @@ CREATE INDEX IF NOT EXISTS idx_plans_name_trgm ON plans USING GIN (name gin_trgm
 CREATE INDEX IF NOT EXISTS idx_plans_is_active ON plans (is_active) WHERE is_active = TRUE;
 CREATE INDEX IF NOT EXISTS idx_user_subs_created_at ON user_subscriptions (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_subs_status_created ON user_subscriptions (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_logs_created_at ON payment_logs (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_logs_status ON payment_logs (status);
+CREATE INDEX IF NOT EXISTS idx_payment_logs_provider ON payment_logs (provider);
 
 -- Custom-slug partial indexes
 CREATE INDEX IF NOT EXISTS idx_template_purchases_custom_slug ON template_purchases (user_id, template_id) WHERE has_custom_slug = TRUE;
