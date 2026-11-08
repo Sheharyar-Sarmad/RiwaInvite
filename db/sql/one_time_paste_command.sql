@@ -364,6 +364,9 @@ CREATE INDEX IF NOT EXISTS idx_user_subs_status_created ON user_subscriptions (s
 CREATE INDEX IF NOT EXISTS idx_payment_logs_created_at ON payment_logs (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_payment_logs_status ON payment_logs (status);
 CREATE INDEX IF NOT EXISTS idx_payment_logs_provider ON payment_logs (provider);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications (user_id) WHERE is_read = FALSE;
+CREATE INDEX IF NOT EXISTS idx_invitations_user_recent ON invitations (user_id, created_at DESC);
 
 -- Custom-slug partial indexes
 CREATE INDEX IF NOT EXISTS idx_template_purchases_custom_slug ON template_purchases (user_id, template_id) WHERE has_custom_slug = TRUE;

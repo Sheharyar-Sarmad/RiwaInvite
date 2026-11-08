@@ -17,6 +17,7 @@ import {
 } from "../navigation/UserSidebar";
 import { useUserNotifications } from "@/hooks/useUserNotifications";
 import { toast } from "@/components/ui/toast";
+import { UserFooter } from "../navigation/UserFooter"; 
 
 export function UserShell({
   user,
@@ -200,21 +201,26 @@ export function UserShell({
           </div>
         </header>
 
-        {/* ATTACH THE REFS HERE */}
+        {/* ATTACH THE REFS HERE & ADD FOOTER */}
         <main
           ref={mainRef}
           className="relative flex-1 overflow-y-auto px-2.5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-6 lg:px-8"
         >
-          <div ref={contentRef}>
+          <div ref={contentRef} className="flex min-h-full flex-col">
+            {/* flex-1 pushes the footer to the bottom if content is short */}
             <motion.div
               key="content"
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25, ease: "easeOut" }}
-              className="mx-auto max-w-7xl"
+              className="mx-auto w-full max-w-7xl flex-1"
             >
               {children}
             </motion.div>
+            
+            <div className="mx-auto w-full max-w-7xl">
+              <UserFooter />
+            </div>
           </div>
         </main>
       </div>
@@ -231,7 +237,6 @@ function Crumbs() {
   const pathname = usePathname() ?? "/dashboard";
   const segments = pathname.split("/").filter(Boolean);
 
-  // "/dashboard" → Overview; "/dashboard/library" → Library (drop the root "dashboard")
   const parts =
     segments[0] === "dashboard" && segments.length > 1
       ? segments.slice(1)

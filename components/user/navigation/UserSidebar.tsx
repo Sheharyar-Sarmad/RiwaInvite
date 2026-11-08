@@ -309,6 +309,7 @@ function SidebarBody({
               alt="Riwainvite"
               width={28}
               height={28}
+              loading="eager"
               className="object-contain"
             />
           </div>
