@@ -14,10 +14,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Code2,
-  ShieldAlert
+  ChevronDown 
 } from "lucide-react";
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
 import { apiClient } from "@/lib/api/api_base";
 import { toast } from "@/components/ui/toast";
+import { AceternitySelect } from "@/components/ui/aceternity-select";
 
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
@@ -32,7 +36,6 @@ const isLast24Hours = (dateString: string) => {
   return now - date <= 24 * 60 * 60 * 1000;
 };
 
-// Maps ugly JazzCash keys to human-readable labels
 const PAYLOAD_LABELS: Record<string, string> = {
   pp_TxnRefNo: "Transaction Reference",
   pp_ResponseCode: "Response Code",
@@ -48,6 +51,13 @@ const PAYLOAD_LABELS: Record<string, string> = {
   pp_MerchantID: "Merchant ID",
 };
 
+const STATUS_OPTIONS = [
+  { label: "All Status", value: "all" },
+  { label: "Received", value: "received" },
+  { label: "Processed", value: "processed" },
+  { label: "Failed", value: "failed" },
+];
+
 export function PaymentLogsClient() {
   const [logs, setLogs] = React.useState<any[]>([]);
   const [meta, setMeta] = React.useState({ page: 1, limit: 20, total: 0, total_pages: 1 });
@@ -58,6 +68,7 @@ export function PaymentLogsClient() {
   const [provider, setProvider] = React.useState("all");
   
   const [selectedPayload, setSelectedPayload] = React.useState<any | null>(null);
+  const [isJsonOpen, setIsJsonOpen] = React.useState(false); 
 
   const fetchLogs = React.useCallback(async (page = 1) => {
     setIsLoading(true);
@@ -89,19 +100,16 @@ export function PaymentLogsClient() {
   const success24h = recent24h.filter(log => log.status === "processed").length;
   const failed24h = recent24h.filter(log => log.status === "failed").length;
 
-  // Formats payload for admins (e.g., converts 700000 -> Rs 7,000)
   const getFormattedPayload = (payload: any) => {
     if (!payload) return [];
     const result = [];
     
     for (const [key, value] of Object.entries(payload)) {
-      // Skip technical hashes, passwords, and empty values
       if (key === "pp_SecureHash" || key === "pp_Password" || value === "") continue;
       
       let displayValue = String(value);
       let label = PAYLOAD_LABELS[key] || key.replace("pp_", "").replace(/([A-Z])/g, " $1").trim();
 
-      // Format currency properly
       if (key === "pp_Amount") {
         displayValue = `Rs ${(Number(value) / 100).toLocaleString()}`;
       }
@@ -152,19 +160,19 @@ export function PaymentLogsClient() {
             />
           </div>
           
-          <div className="flex gap-2 w-full sm:w-auto">
-            <select 
-              value={status} 
-              onChange={(e) => setStatus(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white outline-none focus:border-orange-500 w-full sm:w-auto"
-            >
-              <option value="all">All Status</option>
-              <option value="received">Received</option>
-              <option value="processed">Processed</option>
-              <option value="failed">Failed</option>
-            </select>
+          <div className="flex gap-2 w-full sm:w-auto items-center">
+            <div className="w-full sm:w-[180px]">
+              <AceternitySelect
+                value={status}
+                onChange={(val) => setStatus(val)}
+                options={STATUS_OPTIONS}
+              />
+            </div>
             
-            <button onClick={() => fetchLogs(meta.page)} className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition">
+            <button 
+              onClick={() => fetchLogs(meta.page)} 
+              className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition cursor-pointer"
+            >
               <RefreshCcw className={`size-5 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
           </div>
@@ -214,8 +222,11 @@ export function PaymentLogsClient() {
                     <td className="px-6 py-4 text-slate-600">{formatDate(log.created_at)}</td>
                     <td className="px-6 py-4 text-right">
                       <button
-                        onClick={() => setSelectedPayload(log.payload)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                        onClick={() => {
+                          setSelectedPayload(log.payload);
+                          setIsJsonOpen(false); 
+                        }}
+                        className="inline-flex cursor-pointer items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
                       >
                         <Eye className="size-3.5" /> Receipt
                       </button>
@@ -230,9 +241,9 @@ export function PaymentLogsClient() {
         <div className="p-4 border-t border-slate-200 flex items-center justify-between bg-white">
           <span className="text-sm text-slate-500">Showing <b>{logs.length}</b> of <b>{meta.total}</b> logs</span>
           <div className="flex items-center gap-2">
-            <button disabled={meta.page === 1 || isLoading} onClick={() => fetchLogs(meta.page - 1)} className="p-2 rounded-lg border border-slate-200 disabled:opacity-50 hover:bg-slate-50"><ChevronLeft className="size-4" /></button>
+            <button disabled={meta.page === 1 || isLoading} onClick={() => fetchLogs(meta.page - 1)} className="cursor-pointer p-2 rounded-lg border border-slate-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition"><ChevronLeft className="size-4" /></button>
             <span className="text-sm font-medium text-slate-700">Page {meta.page} of {meta.total_pages}</span>
-            <button disabled={meta.page === meta.total_pages || isLoading} onClick={() => fetchLogs(meta.page + 1)} className="p-2 rounded-lg border border-slate-200 disabled:opacity-50 hover:bg-slate-50"><ChevronRight className="size-4" /></button>
+            <button disabled={meta.page === meta.total_pages || isLoading} onClick={() => fetchLogs(meta.page + 1)} className="cursor-pointer p-2 rounded-lg border border-slate-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition"><ChevronRight className="size-4" /></button>
           </div>
         </div>
       </div>
@@ -240,18 +251,18 @@ export function PaymentLogsClient() {
       {/* HUMAN-READABLE RECEIPT MODAL */}
       <AnimatePresence>
         {selectedPayload && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-10 sm:pt-20 overflow-y-auto">
             <motion.div 
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setSelectedPayload(null)}
-              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
             >
               {/* Header */}
-              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
                     <CheckCircle2 className="size-5" />
@@ -261,13 +272,13 @@ export function PaymentLogsClient() {
                     <p className="text-xs text-slate-500">Detailed payment gateway response</p>
                   </div>
                 </div>
-                <button onClick={() => setSelectedPayload(null)} className="text-slate-400 hover:text-slate-700 p-1">
+                <button onClick={() => setSelectedPayload(null)} className="cursor-pointer text-slate-400 hover:text-slate-700 p-1 transition-colors">
                   <X className="size-5" />
                 </button>
               </div>
 
-              {/* Human-Readable Data */}
-              <div className="p-6 overflow-y-auto">
+              {/* Human-Readable Data (Scrollable Area) */}
+              <div className="p-6 overflow-y-auto flex-1">
                 <div className="space-y-0">
                   {getFormattedPayload(selectedPayload).map((item, i) => (
                     <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-4 border-b border-slate-100 py-3 last:border-0">
@@ -279,17 +290,55 @@ export function PaymentLogsClient() {
                   ))}
                 </div>
 
-                {/* Developer Raw JSON Accordion */}
+                {/* Developer Raw JSON Accordion (Animated) */}
                 <div className="mt-8 border-t border-slate-200 pt-4">
-                  <details className="group">
-                    <summary className="text-xs font-semibold text-slate-400 cursor-pointer hover:text-slate-700 flex items-center gap-2 select-none">
+                  <button
+                    onClick={() => setIsJsonOpen(!isJsonOpen)}
+                    className="flex w-full items-center justify-between text-xs font-semibold text-slate-400 hover:text-slate-700 cursor-pointer select-none transition-colors outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded"
+                  >
+                    <span className="flex items-center gap-2">
                       <Code2 className="size-4" /> 
-                      <span>View Raw JSON Payload (Developer)</span>
-                    </summary>
-                    <pre className="mt-3 text-[11px] text-emerald-400 font-mono whitespace-pre-wrap bg-[#0f172a] p-4 rounded-xl border border-slate-800 overflow-x-auto">
-                      {JSON.stringify(selectedPayload, null, 2)}
-                    </pre>
-                  </details>
+                      View Raw JSON Payload (Developer)
+                    </span>
+                    <motion.div
+                      animate={{ rotate: isJsonOpen ? 180 : 0 }}
+                      transition={{ duration: 0.3, ease: "easeInOut" }}
+                    >
+                      <ChevronDown className="size-4" />
+                    </motion.div>
+                  </button>
+
+                  <AnimatePresence initial={false}>
+                    {isJsonOpen && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ 
+                          duration: 0.4, 
+                          ease: [0.04, 0.62, 0.23, 0.98] // Silky smooth easing
+                        }}
+                        className="overflow-hidden"
+                      >
+                        <div className="mt-3 rounded-xl overflow-hidden border border-slate-800">
+                          <SyntaxHighlighter
+                            language="json"
+                            style={vscDarkPlus}
+                            customStyle={{
+                              margin: 0,
+                              padding: "1rem",
+                              fontSize: "12px",
+                              background: "#0f172a",
+                              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                            }}
+                            wrapLongLines={true}
+                          >
+                            {JSON.stringify(selectedPayload, null, 2)}
+                          </SyntaxHighlighter>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
             </motion.div>
