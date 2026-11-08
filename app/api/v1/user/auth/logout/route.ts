@@ -17,6 +17,8 @@ export async function POST(request: Request) {
     const cookieStore = await cookies();
     const rawToken = cookieStore.get(config.sessionCookieName)?.value;
 
+    let userId: string | null = null;
+
     if (rawToken) {
       const hashedToken = hashSessionToken(rawToken);
       
@@ -26,19 +28,35 @@ export async function POST(request: Request) {
 
       if (logoutAll) {
         // HARD DELETE: Find the user_id and destroy ALL their sessions
-        await sql`
+        const deleted = await sql`
           DELETE FROM user_sessions 
           WHERE user_id = (
             SELECT user_id FROM user_sessions WHERE token_hash = ${hashedToken}
           )
+          RETURNING user_id
         `;
+        userId = deleted[0]?.user_id;
       } else {
         // HARD DELETE: Destroy only the CURRENT device's session
-        await sql`
+        const deleted = await sql`
           DELETE FROM user_sessions 
           WHERE token_hash = ${hashedToken}
+          RETURNING user_id
         `;
+        userId = deleted[0]?.user_id;
       }
+    }
+
+    // ADDED: Create logout notification
+    if (userId) {
+      await sql`
+        INSERT INTO notifications (user_id, title, message)
+        VALUES (
+          ${userId}, 
+          ${logoutAll ? 'Security Alert' : 'Logged Out'}, 
+          ${logoutAll ? 'Your account has been logged out from all devices.' : 'You have successfully logged out.'}
+        )
+      `;
     }
 
     // Clear the cookie

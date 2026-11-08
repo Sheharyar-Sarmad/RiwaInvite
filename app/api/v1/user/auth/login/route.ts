@@ -79,6 +79,16 @@ export async function POST(request: Request) {
       VALUES (${user.id}, ${hashedToken}, ${expiresAtIso})
     `;
 
+    // ADDED: Create login notification
+    await sql`
+      INSERT INTO notifications (user_id, title, message)
+      VALUES (
+        ${user.id}, 
+        'New Login', 
+        'You have successfully logged in to your account. If this was not you, please secure your account immediately.'
+      )
+    `;
+
     // Set Shared Cookie
     (await cookies()).set(config.sessionCookieName, rawToken, {
       httpOnly: true,

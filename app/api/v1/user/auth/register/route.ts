@@ -16,7 +16,6 @@ const registerSchema = z.object({
     .regex(/[A-Z]/, "Must contain an uppercase letter")
     .regex(/[a-z]/, "Must contain a lowercase letter")
     .regex(/[0-9]/, "Must contain a number"),
-  // User phone number is optional. Handles undefined or empty strings.
   phone_number: z
     .string()
     .regex(/^\+?[1-9]\d{1,14}$/, "Invalid phone format (e.g., +923001234567)")
@@ -26,7 +25,6 @@ const registerSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    // Safely parse JSON
     const body = await request.json().catch(() => null);
     
     if (!body) {
@@ -62,7 +60,6 @@ export async function POST(request: Request) {
     const passwordHash = await hashPassword(data.password);
 
     // 4. Insert into DB
-    // Note: We pass NULL to the DB if phone_number is empty or undefined
     const result = await sql`
       INSERT INTO users (first_name, last_name, email, password, phone_number)
       VALUES (
@@ -75,19 +72,29 @@ export async function POST(request: Request) {
       RETURNING id, first_name, last_name, email, phone_number, created_at
     `;
 
+    const newUser = result[0];
+
+    // 5. Create Welcome Notification
+    await sql`
+      INSERT INTO notifications (user_id, title, message)
+      VALUES (
+        ${newUser.id}, 
+        'Welcome to Riwainvite!', 
+        'Your account has been successfully created. We are thrilled to help you design your dream invitations!'
+      )
+    `;
+
     return NextResponse.json(
       {
         status: "success",
         message: "User registered successfully",
-        data: result[0],
+        data: newUser,
         error: null,
       },
       { status: STATUS_CODE.CREATED } // 201
     );
 
   } catch (error: any) {
-    // Handle Unique Constraint Violation (Duplicate Email or Phone)
-    // Postgres Error Code 23505 = unique_violation
     if (error.code === "23505") {
       return NextResponse.json(
         {

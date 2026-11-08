@@ -4,7 +4,7 @@ import "./globals.css";
 import settings from "@/config/settings_config";
 import { Toaster } from "@/components/ui/toast";
 import { SmoothScroll } from "@/components/providers/SmoothScroll";
-import { PublicShell } from "@/components/user/sections/PublicShell";
+import { PublicShell } from "@/components/public/sections/PublicShell";
 import { CustomCursor } from "@/components/providers/CustomCursor";
 
 const display = Bricolage_Grotesque({
