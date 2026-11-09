@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   motion,
   useMotionValue,
+  useMotionTemplate,
   useReducedMotion,
   useSpring,
   useTransform,
@@ -16,24 +17,22 @@ import {
 /*  Config                                                                    */
 /* -------------------------------------------------------------------------- */
 
-// Hide the cursor on the preview route (and any sub-routes like /preview/123)
 const HIDDEN_ROUTES: string[] = ["/preview"];
 
 const CLICKABLE =
   "a, button, [role='button'], [role='tab'], input, select, textarea, label, summary, [data-cursor='pointer']";
 
-/** Put data-cursor-label="Preview" on any element to show a label next to the cursor. */
 const LABELLED = "[data-cursor-label]";
 
-// Tweaked physics for a smoother, more premium feel
-const DOT_SPRING = { damping: 28, stiffness: 700, mass: 0.3 }; // Snappy, locked to mouse
-const RING_SPRING = { damping: 22, stiffness: 180, mass: 0.8 }; // Fluid, luxurious drag
+const DOT_SPRING = { damping: 28, stiffness: 700, mass: 0.3 };
+const RING_SPRING = { damping: 22, stiffness: 180, mass: 0.8 };
+// 🪄 Torch spring: Slower and heavier so the light feels like it's illuminating the room
+const TORCH_SPRING = { damping: 30, stiffness: 60, mass: 1.2 }; 
 
 const RING_SIZE = 36;
 const DOT_SIZE = 8;
 const MAX_PARTICLES = 80;
 
-// Theme: warm orange only. Particles stay in the orange -> amber range.
 const ORANGE = "249,115,22";
 
 type Ripple = { id: number; x: number; y: number };
@@ -88,12 +87,22 @@ export function CustomCursor() {
   const ringX = useSpring(ringTX, RING_SPRING);
   const ringY = useSpring(ringTY, RING_SPRING);
 
-  // Squash & stretch: the ring gently elongates along its direction of travel.
+  // 🪄 Torch Position (lags slightly behind the mouse for a "heavy" light feel)
+  const torchX = useSpring(mouseX, TORCH_SPRING);
+  const torchY = useSpring(mouseY, TORCH_SPRING);
+
+  // 🪄 Torch Gradients
+  // The outer glow is huge (600px) and very faint
+  const outerTorch = useMotionTemplate`radial-gradient(600px circle at ${torchX}px ${torchY}px, rgba(${ORANGE},0.08), transparent 60%)`;
+  // The inner core is smaller (200px) and brighter
+  const innerTorch = useMotionTemplate`radial-gradient(200px circle at ${torchX}px ${torchY}px, rgba(255,255,255,0.08), transparent 70%)`;
+
+  // Squash & stretch
   const rvx = useVelocity(ringX);
   const rvy = useVelocity(ringY);
   const lastAngle = useRef(0);
   const stretch = useTransform([rvx, rvy], (v: number[]) =>
-    1 + Math.min(Math.hypot(v[0], v[1]) / 5200, 0.35), // Slightly more stretch
+    1 + Math.min(Math.hypot(v[0], v[1]) / 5200, 0.35),
   );
   const squash = useTransform(stretch, (s) => 1 - (s - 1) * 0.55);
   const angle = useTransform([rvx, rvy], (v: number[]) => {
@@ -154,15 +163,14 @@ export function CustomCursor() {
       const a = Math.random() * Math.PI * 2;
       const s = Math.random() * 0.5;
       particles.push({
-        x,
-        y,
+        x, y,
         vx: Math.cos(a) * s,
         vy: Math.sin(a) * s - 0.1,
         life: 0,
         max: 32 + Math.random() * 28,
         size: 1.2 + Math.random() * 1.8,
-        hue: 18 + Math.random() * 26, // orange -> amber
-        star: Math.random() < 0.6, // Slightly more stars than circles
+        hue: 18 + Math.random() * 26,
+        star: Math.random() < 0.6,
         rot: Math.random() * Math.PI,
         vr: (Math.random() - 0.5) * 0.1,
         tw: Math.random() * 6,
@@ -172,7 +180,7 @@ export function CustomCursor() {
     };
 
     const burst = (x: number, y: number) => {
-      const n = 16; // Slightly bigger burst
+      const n = 16;
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2 + Math.random() * 0.3;
         const s = 1.5 + Math.random() * 3.5;
@@ -225,7 +233,7 @@ export function CustomCursor() {
         ctx.globalAlpha = Math.min(1, k * 1.5) * twinkle;
         ctx.fillStyle = `hsl(${p.hue} 95% 60%)`;
         ctx.shadowColor = `hsl(${p.hue} 95% 60% / 0.8)`;
-        ctx.shadowBlur = 8; // Brighter glow
+        ctx.shadowBlur = 8;
         if (p.star) {
           ctx.rotate(p.rot);
           drawStar(p.size * (1 + k) * 1.8);
@@ -246,7 +254,7 @@ export function CustomCursor() {
     const aimRing = (x: number, y: number) => {
       if (magnet && magnet.isConnected) {
         const r = magnet.getBoundingClientRect();
-        ringTX.set(x + (r.left + r.width / 2 - x) * 0.35); // Tighter magnet pull
+        ringTX.set(x + (r.left + r.width / 2 - x) * 0.35);
         ringTY.set(y + (r.top + r.height / 2 - y) * 0.35);
       } else {
         ringTX.set(x);
@@ -274,11 +282,13 @@ export function CustomCursor() {
         dotY.jump(y);
         ringX.jump(ringTX.get());
         ringY.jump(ringTY.get());
+        // 🪄 Jump the torch to the mouse so it doesn't fly across the screen on first load
+        torchX.jump(x);
+        torchY.jump(y);
         setVisible(true);
         return;
       }
 
-      // 🪄 Denser trail: sparkles every 14px instead of 26px
       const dx = x - last.x;
       const dy = y - last.y;
       const dist = Math.hypot(dx, dy);
@@ -347,7 +357,7 @@ export function CustomCursor() {
       document.removeEventListener("mouseover", onOver, capture);
       document.documentElement.removeEventListener("mouseleave", onLeaveWindow);
     };
-  }, [enabled, reduce, mouseX, mouseY, ringTX, ringTY, dotX, dotY, ringX, ringY]);
+  }, [enabled, reduce, mouseX, mouseY, ringTX, ringTY, dotX, dotY, ringX, ringY, torchX, torchY]);
 
   if (!enabled) return null;
 
@@ -369,14 +379,26 @@ export function CustomCursor() {
 
   return createPortal(
     <div aria-hidden className="pointer-events-none fixed inset-0 z-[2147483647]">
+      
+      {/* 🪄 TORCH / SPOTLIGHT EFFECT */}
+      {/* We use mix-blend-soft-light so it feels like actual light hitting the page, not just a colored circle */}
+      <motion.div
+        className="absolute inset-0 z-0 mix-blend-soft-light"
+        style={{ background: outerTorch }}
+      />
+      <motion.div
+        className="absolute inset-0 z-0 mix-blend-overlay"
+        style={{ background: innerTorch }}
+      />
+
       {/* Sparkle trail */}
-      {!reduce && <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />}
+      {!reduce && <canvas ref={canvasRef} className="absolute inset-0 z-10 h-full w-full" />}
 
       {/* Click ripples: one soft orange ring */}
       {ripples.map((r) => (
         <motion.span
           key={r.id}
-          className="absolute left-0 top-0 rounded-full border-2 border-orange-500/70"
+          className="absolute left-0 top-0 z-20 rounded-full border-2 border-orange-500/70"
           style={{ x: r.x, y: r.y, width: 40, height: 40, marginLeft: -20, marginTop: -20 }}
           initial={{ scale: 0.3, opacity: 0.8 }}
           animate={{ scale: 2.8, opacity: 0 }}
@@ -387,7 +409,7 @@ export function CustomCursor() {
 
       {/* Ring (and label) */}
       <motion.div
-        className="absolute left-0 top-0"
+        className="absolute left-0 top-0 z-20"
         style={{ x: rx, y: ry, width: RING_SIZE, height: RING_SIZE, marginLeft: -RING_SIZE / 2, marginTop: -RING_SIZE / 2 }}
       >
         <motion.div
@@ -414,7 +436,7 @@ export function CustomCursor() {
 
       {/* Dot: sits on the pointer */}
       <motion.div
-        className="absolute left-0 top-0"
+        className="absolute left-0 top-0 z-20"
         style={{ x: dx, y: dy, width: DOT_SIZE, height: DOT_SIZE, marginLeft: -DOT_SIZE / 2, marginTop: -DOT_SIZE / 2 }}
       >
         <motion.div

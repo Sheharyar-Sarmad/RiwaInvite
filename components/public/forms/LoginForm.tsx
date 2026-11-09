@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense, useRef } from "react"; 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import {
   motion,
@@ -14,8 +14,20 @@ import {
   useReducedMotion,
   type Variants,
 } from "framer-motion";
-import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, AlertTriangle, MessageCircle, X } from "lucide-react";
+import { 
+  Mail, 
+  Lock, 
+  Eye, 
+  EyeOff, 
+  ArrowRight, 
+  Loader2, 
+  AlertTriangle, 
+  MessageCircle, 
+  X, 
+  ClipboardPaste 
+} from "lucide-react";
 import { apiClient } from "@/lib/api/api_base";
+import { toast } from "@/components/ui/toast"; 
 import { CardBackdrop } from "@/components/public/sections/auth/CardBackdrop";
 
 const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fdeadb]";
@@ -78,8 +90,9 @@ function GlowRing({ reduce }: { reduce: boolean }) {
   );
 }
 
-export function LoginForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
+function LoginFormContent({ enterDelay = 0.9 }: { enterDelay?: number }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const reduce = useReducedMotion() ?? false;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -89,6 +102,9 @@ export function LoginForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
   const [showLostPass, setShowLostPass] = useState(false);
   const [mounted, setMounted] = useState(false);
   const shake = useAnimationControls();
+
+  // 👈 Ref to ensure the toast only fires once
+  const hasShownToast = useRef(false);
 
   // 3D Tilt Logic
   const x = useMotionValue(0);
@@ -112,6 +128,28 @@ export function LoginForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
 
   useEffect(() => setMounted(true), []);
 
+  // 👈 Autofill from URL params on mount (Fixed for React Strict Mode)
+  useEffect(() => {
+    const emailParam = searchParams.get("email");
+    const passwordParam = searchParams.get("password");
+    
+    if (emailParam && passwordParam && !hasShownToast.current) {
+      hasShownToast.current = true; // Prevent double-firing in dev
+      
+      setEmail(emailParam);
+      setPassword(passwordParam);
+      
+      toast.add({ 
+        title: "Credentials loaded", 
+        description: "Email and password prefilled from registration.", 
+        type: "success" 
+      });
+
+      // Clean the URL so refreshing doesn't trigger it again
+      window.history.replaceState({}, '', '/login');
+    }
+  }, [searchParams]);
+
   const [go, setGo] = useState(false);
   useEffect(() => {
     const id = setTimeout(() => setGo(true), enterDelay * 1000);
@@ -125,6 +163,25 @@ export function LoginForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
     return () => clearTimeout(id);
   }, [error, shake]);
 
+  // 👈 Paste from clipboard handler
+  const handlePasteCredentials = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const emailMatch = text.match(/Email:\s*([^\n]+)/);
+      const passMatch = text.match(/Password:\s*([^\n]+)/);
+      
+      if (emailMatch && passMatch) {
+        setEmail(emailMatch[1].trim());
+        setPassword(passMatch[1].trim());
+        toast.add({ title: "Pasted!", description: "Credentials pasted from clipboard.", type: "success" });
+      } else {
+        toast.add({ title: "Format not recognized", description: "Please copy the credentials using the button on the register page.", type: "error" });
+      }
+    } catch (err) {
+      toast.add({ title: "Paste failed", description: "Could not read clipboard. Please allow clipboard permissions.", type: "error" });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
@@ -135,11 +192,14 @@ export function LoginForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
     try {
       const res = await apiClient.post("/user/auth/login", { email, password });
       if (res.data.status === "success") {
+        toast.add({ title: "Welcome back!", description: "Redirecting to your dashboard...", type: "success" });
         router.push("/dashboard");
         router.refresh();
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || "Invalid email or password.");
+      const msg = err.response?.data?.message || "Invalid email or password.";
+      setError(msg);
+      toast.add({ title: "Login Failed", description: msg, type: "error" });
     } finally {
       setIsLoading(false);
     }
@@ -180,6 +240,19 @@ export function LoginForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
             </motion.div>
 
             <motion.form variants={staggerV} onSubmit={handleSubmit} className="space-y-4">
+              
+              {/* Paste Button Row */}
+              <motion.div variants={itemV} className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handlePasteCredentials}
+                  className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50/50 px-2.5 py-1 text-[11px] font-bold text-orange-700 transition-colors hover:bg-orange-100 hover:text-orange-800"
+                >
+                  <ClipboardPaste className="h-3.5 w-3.5" />
+                  Paste Credentials
+                </button>
+              </motion.div>
+
               <motion.div variants={itemV}>
                 <label className="mb-1.5 block text-sm font-bold text-gray-700">Email Address</label>
                 <div className="relative">
@@ -309,5 +382,14 @@ export function LoginForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
           document.body
         )}
     </>
+  );
+}
+
+// Wrap with Suspense for useSearchParams
+export function LoginForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
+  return (
+    <Suspense fallback={<div className="h-96 w-full animate-pulse rounded-3xl bg-orange-100/50" />}>
+      <LoginFormContent enterDelay={enterDelay} />
+    </Suspense>
   );
 }

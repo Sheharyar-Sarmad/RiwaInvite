@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { useReducedMotion } from "framer-motion";
 import { ReactLenis, useLenis } from "lenis/react";
@@ -9,17 +9,20 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
-  // Prevents ScrollTrigger from refreshing on mobile URL bar resize
+  // Prevents GSAP from recalculating on mobile URL bar resize (fixes iOS jump)
   ScrollTrigger.config({ ignoreMobileResize: true }); 
 }
 
-const LOCK_SELECTOR = '[aria-modal="true"], [data-scroll-lock]';
-
-function LenisGuard() {
+/**
+ * Custom Event: 'lenis:lock' to stop scrolling, 'lenis:unlock' to resume.
+ * This is much safer than relying on body { overflow: hidden }
+ */
+function LenisManager() {
   const lenis = useLenis();
   const pathname = usePathname();
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
-  // Sync Lenis with GSAP ScrollTrigger
+  // 1. Sync Lenis with GSAP ScrollTrigger
   useEffect(() => {
     if (!lenis) return;
 
@@ -37,48 +40,71 @@ function LenisGuard() {
     };
   }, [lenis]);
 
-  // Re-measure on route change
+  // 2. Handle Route Changes & Dynamic Content Resizing
   useEffect(() => {
     if (!lenis) return;
 
-    let frame = 0;
-    const resize = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
+    let rafId = 0;
+    const refresh = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
         lenis.resize();
         ScrollTrigger.refresh();
       });
     };
 
-    window.addEventListener("resize", resize);
-    resize();
+    // Refresh on route change
+    refresh();
+
+    // Refresh on window resize
+    window.addEventListener("resize", refresh);
+
+    // Refresh when the body height changes (e.g., data loaded, accordion opened)
+    resizeObserverRef.current = new ResizeObserver(() => refresh());
+    resizeObserverRef.current.observe(document.body);
 
     return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("resize", resize);
+      cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", refresh);
+      resizeObserverRef.current?.disconnect();
     };
   }, [lenis, pathname]);
 
-  // Self-heal (Fixes Brave Shields occasionally blocking the scroll)
+  // 3. The Bulletproof Self-Healing Scroll Lock
   useEffect(() => {
     if (!lenis) return;
 
-    const heal = () => {
-      // If a modal is open, don't interfere
-      if (document.querySelector(LOCK_SELECTOR)) return;
-      
-      // Force Lenis to restart if it got stuck
+    const handleLock = () => {
+      if (!lenis.isStopped) lenis.stop();
+    };
+    const handleUnlock = () => {
       if (lenis.isStopped) lenis.start();
-      
-      // Ensure body overflow is clean
-      if (document.body.style.overflow === "hidden") {
+    };
+
+    // Listen for custom events (dispatch these when modals open/close)
+    window.addEventListener("lenis:lock", handleLock);
+    window.addEventListener("lenis:unlock", handleUnlock);
+
+    // Failsafe: If React leaves body overflow hidden, but no modal exists, clean it up
+    const cleanupOverflow = () => {
+      if (
+        document.body.style.overflow === "hidden" &&
+        !document.querySelector('[role="dialog"], [aria-modal="true"], [data-scroll-lock]')
+      ) {
         document.body.style.overflow = "";
+        handleUnlock();
       }
     };
 
-    // Capture wheel events to self-heal as soon as the user tries to scroll
-    window.addEventListener("wheel", heal, { passive: true, capture: true });
-    return () => window.removeEventListener("wheel", heal, { capture: true });
+    // Observe DOM changes to auto-clean orphaned locks
+    const observer = new MutationObserver(cleanupOverflow);
+    observer.observe(document.body, { attributes: true, attributeFilter: ["style"] });
+
+    return () => {
+      window.removeEventListener("lenis:lock", handleLock);
+      window.removeEventListener("lenis:unlock", handleUnlock);
+      observer.disconnect();
+    };
   }, [lenis]);
 
   return null;
@@ -88,23 +114,24 @@ export function SmoothScroll({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const reduce = !!useReducedMotion();
 
+  // 50M SaaS Config: Slow, buttery lerp + optimized touch handling
   const options = useMemo(
     () => ({
-      lerp: 0.1, 
-      wheelMultiplier: 1, 
-      touchMultiplier: 1.5, 
-      smoothWheel: !reduce,
-      // Add this to handle Brave's aggressive event handling
-      syncTouch: true, 
+      lerp: 0.08, // Buttery smooth (lower = smoother, 0.08 is perfect for SaaS)
+      wheelMultiplier: 0.9, // Slightly dampened mouse wheel for control
+      touchMultiplier: 1.5, // Native feel on mobile
+      smoothWheel: !reduce, // Respect OS accessibility
+      syncTouch: true, // CRITICAL: Stops iOS Safari momentum from fighting Lenis
     }),
     [reduce],
   );
 
+  // Optional: Skip smooth scroll in the Admin Panel (where scrolling fast matters more)
   if (pathname?.startsWith("/admin")) return <>{children}</>;
 
   return (
     <ReactLenis root options={options}>
-      <LenisGuard />
+      <LenisManager />
       {children}
     </ReactLenis>
   );

@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { UserDashboardClient } from "@/components/user/sections/dashboard/UserDashboardClient";
 import settings from "@/config/settings_config";
+import { getUserServerSide } from "@/lib/server/getUser";
 
 /*  Exceptional SEO & Social Metadata */
 export const metadata: Metadata = {
@@ -56,46 +57,30 @@ export const metadata: Metadata = {
   },
 };
 
-/*  Page Component                                                            */
 export default async function DashboardPage() {
   const h = await headers();
 
+  // 1. Extract headers injected by your proxy.ts middleware
   const id = h.get("x-user-id");
   const email = h.get("x-user-email");
   const first_name = h.get("x-user-first-name") || h.get("x-user-name") || "User";
 
+  // 2. Protect the route
   if (!id || !email) redirect("/login");
 
-  let userRecord: any = null;
+  // 3. Fetch the full user record via the Axios-based server helper
+  const dbUser = await getUserServerSide(id);
 
-  try {
-    const host = h.get("host");
-    const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-    const res = await fetch(
-      `${protocol}://${host}/api/v1/user/dashboard/account_settings`,
-      {
-        headers: {
-          "x-user-id": id,
-          "x-user-email": email,
-          "x-user-name": first_name,
-        },
-        cache: "no-store",
-      },
-    );
-    if (res.ok) userRecord = (await res.json()).user;
-  } catch (error) {
-    console.error("Failed to fetch user settings via API:", error);
-  }
-
+  // 4. Build the final user object (fallback to headers if the API fails)
   const user = {
     id,
-    email: userRecord?.email || email,
-    first_name: userRecord?.first_name || first_name,
-    last_name: userRecord?.last_name || "",
-    phone_number: userRecord?.phone_number || "",
-    created_at: userRecord?.created_at || undefined, // powers "Member Since"
+    email: dbUser?.email || email,
+    first_name: dbUser?.first_name || first_name,
+    last_name: dbUser?.last_name || "",
+    phone_number: dbUser?.phone_number || "",
+    created_at: dbUser?.created_at || undefined,
   };
 
-  // NO <UserShell> here, the layout already provides it.
+  // 5. Render the Client Component with the data
   return <UserDashboardClient user={user} />;
 }

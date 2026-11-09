@@ -22,25 +22,6 @@ const body = Geist({
 
 const config = settings();
 
-export const metadata: Metadata = {
-  metadataBase: new URL(config.appUrl),
-  title: {
-    default: "Riwainvite",
-    template: "%s · Riwainvite",
-  },
-  description: "Create, send, and track beautiful event invitations.",
-  icons: {
-    icon: [{ url: "/logo.png", type: "image/png" }],
-    shortcut: "/logo.png",
-    apple: "/logo.png",
-  },
-  openGraph: {
-    title: "Riwainvite",
-    description: "Create, send, and track beautiful event invitations.",
-    images: [{ url: "/logo.png" }],
-  },
-};
-
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,

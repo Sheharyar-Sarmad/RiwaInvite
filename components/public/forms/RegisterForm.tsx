@@ -33,6 +33,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { apiClient } from "@/lib/api/api_base";
+import { toast } from "@/components/ui/toast"; // 👈 Imported Toast
 import { CardBackdrop } from "@/components/public/sections/auth/CardBackdrop";
 
 /* ------------------------------------------------------------------ */
@@ -54,7 +55,12 @@ const cardV: Variants = {
     y: 0,
     rotateX: 0,
     scale: 1,
-    transition: { duration: 1.4, ease: EASE_OUT, staggerChildren: 0.12, delayChildren: 0.3 },
+    transition: {
+      duration: 1.4,
+      ease: EASE_OUT,
+      staggerChildren: 0.12,
+      delayChildren: 0.3,
+    },
   },
 };
 const itemV: Variants = {
@@ -108,13 +114,12 @@ async function copyText(text: string) {
   }
 }
 
-/** "0300 1234567" -> "+923001234567", "+92 300 1234567" -> "+923001234567" */
 function normalizePhone(raw: string): string {
   const c = raw.replace(/[\s\-().]/g, "");
   if (!c) return "";
   if (c.startsWith("+")) return c;
   if (c.startsWith("00")) return `+${c.slice(2)}`;
-  if (c.startsWith("0")) return `+92${c.slice(1)}`; // Pakistan local format
+  if (c.startsWith("0")) return `+92${c.slice(1)}`;
   if (c.startsWith("92")) return `+${c}`;
   return `+${c}`;
 }
@@ -129,9 +134,14 @@ const FIELD_LABELS: Record<string, string> = {
 
 function extractError(err: unknown): string {
   const data = (err as { response?: { data?: any } })?.response?.data;
-  if (!data) return "Network error. Please check your connection and try again.";
+  if (!data)
+    return "Network error. Please check your connection and try again.";
 
-  if (data.error && typeof data.error === "object" && !Array.isArray(data.error)) {
+  if (
+    data.error &&
+    typeof data.error === "object" &&
+    !Array.isArray(data.error)
+  ) {
     const parts = Object.entries(data.error as Record<string, string[]>)
       .filter(([, v]) => Array.isArray(v) && v.length)
       .map(([k, v]) => `${FIELD_LABELS[k] ?? k}: ${v[0]}`);
@@ -170,13 +180,19 @@ function Field({
       <div className="mb-1.5 flex h-5 items-center justify-between">
         <label htmlFor={id} className="text-sm font-bold text-gray-700">
           {label}
-          {optional && <span className="ml-1 font-medium text-gray-500">(Optional)</span>}
+          {optional && (
+            <span className="ml-1 font-medium text-gray-500">(Optional)</span>
+          )}
         </label>
         {labelAction}
       </div>
       <div className="relative">
         <Icon className="pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-orange-500" />
-        <input id={id} {...props} className={`${inputBase} ${trailing ? "pr-12" : "pr-10"} ${className}`} />
+        <input
+          id={id}
+          {...props}
+          className={`${inputBase} ${trailing ? "pr-12" : "pr-10"} ${className}`}
+        />
         {trailing ?? (
           <Check
             aria-hidden
@@ -194,9 +210,7 @@ function Rule({ ok, children }: { ok: boolean; children: ReactNode }) {
   const Icon = ok ? CheckCircle2 : Circle;
   return (
     <div
-      className={`flex items-center gap-1.5 transition-colors duration-300 ${
-        ok ? "text-emerald-600" : "text-gray-500"
-      }`}
+      className={`flex items-center gap-1.5 transition-colors duration-300 ${ok ? "text-emerald-600" : "text-gray-500"}`}
     >
       <Icon className="h-3.5 w-3.5" /> {children}
     </div>
@@ -209,7 +223,8 @@ function GlowRing({ reduce }: { reduce: boolean }) {
       aria-hidden
       className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-[2rem] bg-white/10 p-[1.5px]"
       style={{
-        WebkitMask: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
+        WebkitMask:
+          "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
         WebkitMaskComposite: "xor",
         mask: "linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0)",
       }}
@@ -264,7 +279,6 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
   const reduce = useReducedMotion() ?? false;
   const shake = useAnimationControls();
 
-  // pointer position (-0.5..0.5) for the card spotlight
   const mx = useMotionValue(0);
   const my = useMotionValue(0);
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -302,15 +316,18 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
     return () => clearTimeout(id);
   }, [enterDelay, reduce]);
 
-  const set = (key: keyof RegisterData) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setFormData((p) => ({ ...p, [key]: e.target.value }));
+  const set =
+    (key: keyof RegisterData) => (e: React.ChangeEvent<HTMLInputElement>) =>
+      setFormData((p) => ({ ...p, [key]: e.target.value }));
 
   const pw = formData.password;
   const hasLength = pw.length >= 8;
   const hasUpper = /[A-Z]/.test(pw);
   const hasLower = /[a-z]/.test(pw);
   const hasNumber = /[0-9]/.test(pw);
-  const score = [hasLength, hasUpper, hasLower, hasNumber].filter(Boolean).length;
+  const score = [hasLength, hasUpper, hasLower, hasNumber].filter(
+    Boolean,
+  ).length;
   const isStrong = score === 4;
   const meta = strengthMeta[pw ? score : 0];
 
@@ -322,7 +339,10 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
 
   useEffect(() => {
     if (!error) return;
-    shake.start({ x: [0, -10, 10, -7, 7, -3, 0], transition: { duration: 0.5 } });
+    shake.start({
+      x: [0, -10, 10, -7, 7, -3, 0],
+      transition: { duration: 0.5 },
+    });
     const id = setTimeout(() => setError(""), 7000);
     return () => clearTimeout(id);
   }, [error, shake]);
@@ -333,6 +353,11 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
     setShowPassword(true);
     await copyText(next);
     setGenerated(true);
+    toast.add({
+      title: "Password generated",
+      description: "Copied to clipboard.",
+      type: "success",
+    });
     setTimeout(() => setGenerated(false), 2200);
   };
 
@@ -347,7 +372,9 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
 
     const phone = normalizePhone(formData.phone_number);
     if (phone && !/^\+[1-9]\d{1,14}$/.test(phone)) {
-      setError("Phone: enter a valid number, e.g. +923001234567 or 0300 1234567");
+      setError(
+        "Phone: enter a valid number, e.g. +923001234567 or 0300 1234567",
+      );
       return;
     }
 
@@ -374,11 +401,25 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
   };
 
   const handleCopyCreds = async () => {
-    const ok = await copyText(`Email: ${formData.email.trim()}\nPassword: ${formData.password}`);
+    const ok = await copyText(
+      `Email: ${formData.email.trim()}\nPassword: ${formData.password}`,
+    );
     if (ok) {
       setCopiedCreds(true);
+      toast.add({
+        title: "Copied!",
+        description: "Credentials copied to clipboard.",
+        type: "success",
+      });
       setTimeout(() => setCopiedCreds(false), 2200);
     }
+  };
+
+  const handleCopyAndLogin = async () => {
+    await handleCopyCreds();
+    router.push(
+      `/login?email=${encodeURIComponent(formData.email.trim())}&password=${encodeURIComponent(formData.password)}`,
+    );
   };
 
   return (
@@ -392,7 +433,7 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
             onMouseMove={handleMouseMove}
             style={{ transformOrigin: "50% 100%" }}
             whileHover={reduce ? undefined : { y: -4, scale: 1.005 }}
-            className="relative isolate w-full rounded-[2rem] border border-orange-200/70 p-6 shadow-[0_30px_80px_-30px_rgba(249,115,22,0.65)] backdrop-blur-xl sm:p-8"
+            className="relative isolate w-full overflow-hidden rounded-[2rem] border border-white/10 bg-[#0a0a0a]/60 p-6 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.8)] backdrop-blur-2xl sm:p-8"
           >
             <CardBackdrop reduce={reduce} mx={mx} my={my} />
             <GlowRing reduce={reduce} />
@@ -409,14 +450,20 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
             <motion.div variants={titleV} className="mb-6 text-center">
               <h1 className="font-[family-name:var(--font-display)] text-3xl font-extrabold tracking-tight text-gray-900">
                 {["Create", "Account"].map((w) => (
-                  <span key={w} className="mr-[0.25em] inline-block overflow-hidden pb-[0.12em] align-bottom last:mr-0">
+                  <span
+                    key={w}
+                    className="mr-[0.25em] inline-block overflow-hidden pb-[0.12em] align-bottom last:mr-0"
+                  >
                     <motion.span variants={wordV} className="inline-block">
                       {w}
                     </motion.span>
                   </span>
                 ))}
               </h1>
-              <motion.p variants={itemV} className="mt-1 text-sm font-medium text-gray-700">
+              <motion.p
+                variants={itemV}
+                className="mt-1 text-sm font-medium text-gray-700"
+              >
                 Start designing your unforgettable event.
               </motion.p>
               <motion.p
@@ -427,8 +474,15 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
               </motion.p>
             </motion.div>
 
-            <motion.form variants={staggerV} onSubmit={handleSubmit} className="space-y-4">
-              <motion.div variants={itemV} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <motion.form
+              variants={staggerV}
+              onSubmit={handleSubmit}
+              className="space-y-4"
+            >
+              <motion.div
+                variants={itemV}
+                className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+              >
                 <Field
                   label="First Name"
                   icon={User}
@@ -520,10 +574,16 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                     <button
                       type="button"
                       onClick={() => setShowPassword((s) => !s)}
-                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
                       className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 transition-colors hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
                     >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
                     </button>
                   }
                 />
@@ -531,7 +591,10 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                 <div className="mt-3" aria-live="polite">
                   <div className="flex gap-1.5">
                     {[1, 2, 3, 4].map((i) => (
-                      <div key={i} className="h-1.5 flex-1 overflow-hidden rounded-full bg-orange-200/60">
+                      <div
+                        key={i}
+                        className="h-1.5 flex-1 overflow-hidden rounded-full bg-orange-200/60"
+                      >
                         <motion.div
                           initial={false}
                           animate={{ scaleX: pw && score >= i ? 1 : 0 }}
@@ -541,7 +604,9 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                       </div>
                     ))}
                   </div>
-                  <p className={`mt-1.5 h-4 text-right text-[11px] font-bold ${pw ? meta.text : "text-gray-500"}`}>
+                  <p
+                    className={`mt-1.5 h-4 text-right text-[11px] font-bold ${pw ? meta.text : "text-gray-500"}`}
+                  >
                     {pw ? meta.label : "Enter a password"}
                   </p>
                 </div>
@@ -554,7 +619,10 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                 </div>
               </motion.div>
 
-              <motion.div variants={itemV} className="rounded-xl border border-red-200 bg-red-50/80 p-3 shadow-sm backdrop-blur-sm">
+              <motion.div
+                variants={itemV}
+                className="rounded-xl border border-red-200 bg-red-50/80 p-3 shadow-sm backdrop-blur-sm"
+              >
                 <div className="flex items-start gap-3">
                   <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
                   <div>
@@ -564,7 +632,8 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                     <p className="mt-1 text-[12px] font-medium leading-relaxed text-red-700">
                       We do not store plain-text passwords.{" "}
                       <strong>
-                        If you lose this password, your templates, invitations, and RSVPs are permanently lost.
+                        If you lose this password, your templates, invitations,
+                        and RSVPs are permanently lost.
                       </strong>
                     </p>
                   </div>
@@ -583,8 +652,8 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                   className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-orange-600"
                 />
                 <span className="text-[12px] font-semibold leading-snug text-gray-700">
-                  I understand that I must save this password safely, and RiwaInvite cannot recover my account
-                  data if I forget it.
+                  I understand that I must save this password safely, and
+                  RiwaInvite cannot recover my account data if I forget it.
                 </span>
               </motion.label>
 
@@ -600,13 +669,19 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                       className="pointer-events-none absolute inset-y-0 left-0 w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-white/50 to-transparent"
                       initial={{ x: "-150%" }}
                       animate={{ x: "450%" }}
-                      transition={{ duration: 1.4, repeat: Infinity, repeatDelay: 2.2, ease: "easeInOut" }}
+                      transition={{
+                        duration: 1.4,
+                        repeat: Infinity,
+                        repeatDelay: 2.2,
+                        ease: "easeInOut",
+                      }}
                     />
                   )}
                   <span className="relative flex items-center gap-2">
                     {isLoading ? (
                       <>
-                        <Loader2 className="h-4 w-4 animate-spin" /> Creating Account...
+                        <Loader2 className="h-4 w-4 animate-spin" /> Creating
+                        Account...
                       </>
                     ) : (
                       <>
@@ -618,9 +693,15 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
               </motion.div>
             </motion.form>
 
-            <motion.p variants={itemV} className="mt-6 text-center text-sm font-medium text-gray-700">
+            <motion.p
+              variants={itemV}
+              className="mt-6 text-center text-sm font-medium text-gray-700"
+            >
               Already have an account?{" "}
-              <Link href="/login" className="font-bold text-orange-600 hover:underline">
+              <Link
+                href="/login"
+                className="font-bold text-orange-600 hover:underline"
+              >
                 Sign in
               </Link>
             </motion.p>
@@ -646,7 +727,9 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                     <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600">
                       <AlertTriangle className="h-3.5 w-3.5" />
                     </span>
-                    <p className="text-sm font-bold leading-snug text-red-700">{error}</p>
+                    <p className="text-sm font-bold leading-snug text-red-700">
+                      {error}
+                    </p>
                     <button
                       type="button"
                       onClick={() => setError("")}
@@ -682,10 +765,21 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                       <motion.div
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
-                        transition={{ type: "spring", stiffness: 260, damping: 16, delay: 0.1 }}
+                        transition={{
+                          type: "spring",
+                          stiffness: 260,
+                          damping: 16,
+                          delay: 0.1,
+                        }}
                         className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-inner"
                       >
-                        <svg viewBox="0 0 52 52" className="h-9 w-9" fill="none" stroke="currentColor" strokeWidth={3.5}>
+                        <svg
+                          viewBox="0 0 52 52"
+                          className="h-9 w-9"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={3.5}
+                        >
                           <motion.circle
                             cx="26"
                             cy="26"
@@ -693,7 +787,11 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                             strokeLinecap="round"
                             initial={{ pathLength: 0 }}
                             animate={{ pathLength: 1 }}
-                            transition={{ duration: 0.7, delay: 0.25, ease: "easeOut" }}
+                            transition={{
+                              duration: 0.7,
+                              delay: 0.25,
+                              ease: "easeOut",
+                            }}
                           />
                           <motion.path
                             d="M15 27l8 8 14-16"
@@ -701,7 +799,11 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                             strokeLinejoin="round"
                             initial={{ pathLength: 0 }}
                             animate={{ pathLength: 1 }}
-                            transition={{ duration: 0.45, delay: 0.75, ease: "easeOut" }}
+                            transition={{
+                              duration: 0.45,
+                              delay: 0.75,
+                              ease: "easeOut",
+                            }}
                           />
                         </svg>
                       </motion.div>
@@ -712,10 +814,24 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                             key={i}
                             aria-hidden
                             className={`absolute left-1/2 top-1/2 rounded-full ${p.c}`}
-                            style={{ width: p.s, height: p.s, marginLeft: -p.s / 2, marginTop: -p.s / 2 }}
+                            style={{
+                              width: p.s,
+                              height: p.s,
+                              marginLeft: -p.s / 2,
+                              marginTop: -p.s / 2,
+                            }}
                             initial={{ x: 0, y: 0, scale: 0, opacity: 1 }}
-                            animate={{ x: p.x, y: p.y, scale: [0, 1.2, 0.5], opacity: [1, 1, 0] }}
-                            transition={{ duration: 1.1, delay: 0.7, ease: "easeOut" }}
+                            animate={{
+                              x: p.x,
+                              y: p.y,
+                              scale: [0, 1.2, 0.5],
+                              opacity: [1, 1, 0],
+                            }}
+                            transition={{
+                              duration: 1.1,
+                              delay: 0.7,
+                              ease: "easeOut",
+                            }}
                           />
                         ))}
                     </div>
@@ -732,40 +848,53 @@ export function RegisterForm({ enterDelay = 0.9 }: { enterDelay?: number }) {
                     <motion.p
                       initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.62, duration: 0.6, ease: EASE_OUT }}
+                      transition={{
+                        delay: 0.62,
+                        duration: 0.6,
+                        ease: EASE_OUT,
+                      }}
                       className="mb-5 text-sm font-medium leading-relaxed text-gray-700"
                     >
                       Before you enter your dashboard,{" "}
-                      <strong>save your email and password somewhere safe.</strong> We cannot retrieve them for you.
+                      <strong>
+                        save your email and password somewhere safe.
+                      </strong>{" "}
+                      We cannot retrieve them for you.
                     </motion.p>
 
                     <motion.div
                       initial={{ opacity: 0, y: 14 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.78, duration: 0.6, ease: EASE_OUT }}
+                      transition={{
+                        delay: 0.78,
+                        duration: 0.6,
+                        ease: EASE_OUT,
+                      }}
+                      className="space-y-3"
                     >
                       <button
                         type="button"
-                        onClick={handleCopyCreds}
-                        className={`mb-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-orange-300 bg-white/70 py-2.5 text-sm font-bold text-orange-700 transition-colors hover:bg-white ${focusRing}`}
+                        onClick={handleCopyAndLogin}
+                        className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gray-900 py-3 font-bold text-white transition-transform hover:scale-[1.02] ${focusRing}`}
                       >
-                        {copiedCreds ? (
-                          <>
-                            <Check className="h-4 w-4" /> Copied to clipboard
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="h-4 w-4" /> Copy email &amp; password
-                          </>
-                        )}
+                        <Copy className="h-4 w-4" /> Copy Credentials & Go to
+                        Login
                       </button>
 
                       <button
-                        autoFocus
-                        onClick={() => router.push("/dashboard")}
-                        className={`w-full cursor-pointer rounded-xl bg-gray-900 py-3 font-bold text-white transition-transform hover:scale-[1.02] ${focusRing}`}
+                        type="button"
+                        onClick={handleCopyCreds}
+                        className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-orange-300 bg-white/70 py-2.5 text-sm font-bold text-orange-700 transition-colors hover:bg-white ${focusRing}`}
                       >
-                        I Have Saved It. Enter Dashboard
+                        {copiedCreds ? (
+                          <>
+                            <Check className="h-4 w-4" /> Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-4 w-4" /> Just Copy Credentials
+                          </>
+                        )}
                       </button>
                     </motion.div>
                   </motion.div>
