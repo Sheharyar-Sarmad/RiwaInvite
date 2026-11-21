@@ -1,75 +1,83 @@
 "use client";
 
 import * as React from "react";
-import { motion, useMotionValue, useSpring, useTransform, useMotionTemplate, useReducedMotion } from "framer-motion";
-import { cn, MAX_TILT, EASE, VIEW, TONE_TEXT, TONE, Tone } from "../constants";
-
-function useFinePointer() {
-  const [fine, setFine] = React.useState(false);
-  React.useEffect(() => {
-    const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
-    const sync = () => setFine(mq.matches);
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, []);
-  return fine;
-}
+import { motion, useReducedMotion } from "framer-motion";
+import { cn, EASE, VIEW, TONE_TEXT, TONE, Tone } from "../constants";
 
 export function TiltCard({
-  tone, className, pad = "p-4 sm:p-5 lg:p-6", delay = 0, children,
+  tone,
+  className,
+  pad = "p-5",
+  delay = 0,
+  children,
 }: {
-  tone: Tone; className?: string; pad?: string; delay?: number; children: React.ReactNode;
+  tone: Tone;
+  className?: string;
+  pad?: string;
+  delay?: number;
+  children: React.ReactNode;
 }) {
   const reduce = useReducedMotion() ?? false;
-  const fine = useFinePointer();
-  const tilt = fine && !reduce;
   const t = TONE[tone];
-
-  const px = useMotionValue(0);
-  const py = useMotionValue(0);
-  const sx = useSpring(px, { stiffness: 150, damping: 20 });
-  const sy = useSpring(py, { stiffness: 150, damping: 20 });
-  const rotateY = useTransform(sx, [-0.5, 0.5], [-MAX_TILT, MAX_TILT]);
-  const rotateX = useTransform(sy, [-0.5, 0.5], [MAX_TILT, -MAX_TILT]);
-
-  const gx = useMotionValue(-400);
-  const gy = useMotionValue(-400);
-  const light = useMotionTemplate`radial-gradient(420px circle at ${gx}px ${gy}px, ${t.light}, transparent 65%)`;
-  const edge = useMotionTemplate`radial-gradient(240px circle at ${gx}px ${gy}px, rgba(251,146,60,0.95), transparent 70%)`;
-
-  const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType !== "mouse") return;
-    const r = e.currentTarget.getBoundingClientRect();
-    const nx = (e.clientX - r.left) / r.width;
-    const ny = (e.clientY - r.top) / r.height;
-    px.set(nx - 0.5); py.set(ny - 0.5); gx.set(nx * r.width); gy.set(ny * r.height);
-  };
-  const onLeave = () => { px.set(0); py.set(0); gx.set(-400); gy.set(-400); };
 
   return (
     <motion.div
-      initial={reduce ? false : { opacity: 0, y: 28, scale: 0.97 }}
+      initial={reduce ? false : { opacity: 0, y: 15, scale: 0.98 }}
       whileInView={{ opacity: 1, y: 0, scale: 1 }}
       viewport={VIEW}
-      whileHover={tilt ? { y: -4, transition: { duration: 0.35, ease: EASE } } : undefined}
-      transition={{ duration: 0.7, delay, ease: EASE }}
-      onPointerMove={tilt ? onMove : undefined}
-      onPointerLeave={tilt ? onLeave : undefined}
-      style={tilt ? { rotateX, rotateY, transformPerspective: 1200, transformStyle: "preserve-3d" } : undefined}
-      className={cn("group relative min-w-0", className)}
+      transition={{ duration: 0.5, delay, ease: EASE }}
+      className={cn(
+        "group relative overflow-hidden rounded-2xl p-[1.5px] transition-shadow duration-300 hover:shadow-xl", 
+        className
+      )}
     >
-      <div
+      {/* 
+        1. The Animated Infinite Border.
+        It spins forever. Uses only warm colors.
+      */}
+      <motion.div
         aria-hidden
-        className={cn("pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit] border transition-shadow duration-500", t.shell)}
-        style={{ backgroundImage: t.bg }}
+        className="absolute inset-[-100%] z-0 opacity-50 transition-opacity duration-500 group-hover:opacity-100"
+        style={{ background: t.borderGradient }}
+        animate={reduce ? undefined : { rotate: 360 }}
+        transition={{ duration: 5, repeat: Infinity, ease: "linear" }}
+      />
+
+      {/* 2. The Inner Card */}
+      <div
+        className={cn(
+          "relative z-10 flex h-full min-w-0 flex-col overflow-hidden rounded-[14px]",
+          pad,
+          t.bg,
+          TONE_TEXT[tone]
+        )}
       >
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-        {tilt && <motion.div style={{ background: light }} className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />}
-        {tilt && <motion.div aria-hidden style={{ background: edge, padding: 1.5, WebkitMask: "linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0)", mask: "linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0)", maskComposite: "exclude" }} className="absolute inset-0 rounded-[inherit] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />}
-      </div>
-      <div className={cn("relative flex h-full min-w-0 flex-col", pad, TONE_TEXT[tone])} style={tilt ? { transformStyle: "preserve-3d" } : undefined}>
-        {children}
+        {/* 
+          3. The Multi-Color Background Mesh.
+          Adds subtle orange, amber, and red glowing orbs inside the card.
+        */}
+        {tone === "paper" && (
+          <div aria-hidden className="absolute inset-0 pointer-events-none opacity-40 mix-blend-multiply">
+            <div className="absolute -top-10 -left-10 w-32 h-32 bg-orange-400 rounded-full blur-3xl" />
+            <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-amber-400 rounded-full blur-3xl" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-red-400 rounded-full blur-3xl opacity-50" />
+          </div>
+        )}
+
+        {tone === "ember" && (
+          <div aria-hidden className="absolute inset-0 pointer-events-none opacity-20">
+            <div className="absolute -top-10 -left-10 w-32 h-32 bg-orange-500 rounded-full blur-3xl" />
+            <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-red-500 rounded-full blur-3xl" />
+          </div>
+        )}
+
+        {/* Inner highlight ring */}
+        <div aria-hidden className="absolute inset-0 rounded-[14px] ring-1 ring-inset ring-white/40 pointer-events-none" />
+        
+        {/* Content */}
+        <div className="relative z-10 h-full flex flex-col">
+          {children}
+        </div>
       </div>
     </motion.div>
   );

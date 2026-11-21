@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/db/connections/postgres_connection";
+import { getRedisClient } from "@/db/connections/redis_connection";
 import { STATUS_CODE } from "@/lib/status_codes";
 
 export async function GET(req: NextRequest) {
@@ -7,48 +8,50 @@ export async function GET(req: NextRequest) {
     const userId = req.headers.get("x-user-id");
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: STATUS_CODE.UNAUTHORIZED });
 
-    // A unified feed combining Notifications, RSVPs, and Orders
-    const activities = await sql`
-      SELECT * FROM (
+    const redis = await getRedisClient();
+    const cacheKey = `user_dashboard_activity:${userId}`;
+
+    const cached = await redis.get(cacheKey);
+    if (cached) return NextResponse.json({ data: JSON.parse(cached) }, { status: STATUS_CODE.OK });
+
+    // Union of Notifications, RSVPs, and Orders to create a unified timeline
+    const activity = await sql`
+      SELECT id, title, message, type, created_at FROM (
         -- Notifications
-        SELECT id, title, message, 'notification' as type, created_at
+        SELECT id::text, title, message, 'notification' as type, created_at 
         FROM notifications WHERE user_id = ${userId}
         
         UNION ALL
         
-        -- New RSVPs
-        SELECT g.id, 
-               'New RSVP from ' || g.guest_name as title, 
-               'Status: ' || g.attendance_status || ' (' || g.number_of_guests || ' guests)' as message,
-               'rsvp' as type, 
-               g.created_at
-        FROM guests g JOIN invitations i ON g.invitation_id = i.id 
+        -- RSVPs
+        SELECT 
+          g.id::text, 
+          'New RSVP from ' || g.guest_name as title,
+          g.guest_name || ' replied ' || g.attendance_status || ' for ' || i.title as message,
+          'rsvp' as type, 
+          g.created_at
+        FROM guests g 
+        JOIN invitations i ON g.invitation_id = i.id 
         WHERE i.user_id = ${userId} AND g.attendance_status != 'pending'
         
         UNION ALL
         
-        -- Completed Orders
-        SELECT o.id, 
-               'Payment Successful' as title, 
-               'Amount: Rs ' || o.amount || ' via ' || o.provider as message,
-               'order' as type, 
-               o.created_at
+        -- Orders
+        SELECT 
+          o.id::text, 
+          'Payment ' || o.status as title,
+          'Order of Rs ' || o.amount || ' for ' || o.order_type as message,
+          'order' as type, 
+          o.created_at
         FROM orders o 
-        WHERE o.user_id = ${userId} AND o.status = 'completed'
+        WHERE o.user_id = ${userId}
       ) AS combined_activity
-      ORDER BY created_at DESC
-      LIMIT 15
+      ORDER BY created_at DESC 
+      LIMIT 20
     `;
 
-    return NextResponse.json(
-      { data: activities }, 
-      { 
-        status: STATUS_CODE.OK,
-        headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-        }
-      }
-    );
+    await redis.setEx(cacheKey, 60, JSON.stringify(activity)); // 1 min cache
+    return NextResponse.json({ data: activity }, { status: STATUS_CODE.OK });
   } catch (error: any) {
     console.error("[USER_ACTIVITY_API]", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: STATUS_CODE.INTERNAL_SERVER_ERROR });
