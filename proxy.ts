@@ -27,6 +27,7 @@ export async function proxy(request: NextRequest) {
   requestHeaders.delete("x-user-id");
   requestHeaders.delete("x-user-email");
   requestHeaders.delete("x-user-name");  
+  requestHeaders.delete("x-user-first-name");
 
   // 2. ROUTE CLASSIFICATION
   const isAdminApi = pathname.startsWith("/api/v1/admin") && !pathname.includes("/auth");
@@ -34,7 +35,9 @@ export async function proxy(request: NextRequest) {
   
   const isUserApi = pathname.startsWith("/api/v1/user") && !pathname.includes("/auth");
   const isUserDashboardPage = pathname.startsWith("/user/dashboard");
-  const isRootDashboardPage = pathname === "/dashboard";
+  // Covers /dashboard and every nested route (e.g. /dashboard/library)
+  const isRootDashboardPage =
+    pathname === "/dashboard" || pathname.startsWith("/dashboard/");
 
   // ADMIN LOGIC
   if (isAdminApi || isAdminPage) {
@@ -106,6 +109,7 @@ export const config = {
     "/admin/dashboard/:path*",
     "/api/v1/admin/:path*",
     "/dashboard",
+    "/dashboard/:path*",
     "/user/dashboard/:path*",
     "/api/v1/user/:path*",
   ],

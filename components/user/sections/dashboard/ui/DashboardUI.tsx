@@ -13,7 +13,6 @@ import {
   useInView,
   useMotionValue,
   useReducedMotion,
-  useSpring,
   useTransform,
 } from "framer-motion";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
@@ -29,7 +28,6 @@ import {
   Receipt,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
   TrendingUp,
   UserCheck,
   X,
@@ -119,6 +117,12 @@ export type Billing = {
 
 /* ========================================================================== */
 /*  Constants & helpers                                                       */
+/*                                                                            */
+/*  Design rules for this file:                                               */
+/*   - Orange is for brand actions only.                                      */
+/*   - Ink (near-black) is for selection and primary text.                    */
+/*   - Colour appears only where it carries meaning (status, charts).         */
+/*   - Surfaces are solid, with a hairline ring and a soft neutral shadow.    */
 /* ========================================================================== */
 
 export const fetcher = (url: string) =>
@@ -137,11 +141,11 @@ export const TOKENS = {
   emerald: "#10b981",
   rose: "#e11d48",
   sand: "#fed7aa",
-  text: "#2a1002",
+  text: "#1c1410",
   axis: "#78716c",
-  grid: "#fed7aa",
+  grid: "#e8e1d8",
   stone: "#a8a29e",
-  ink: "#2a1002",
+  ink: "#1c1410",
 } as const;
 
 export const cn = (...c: (string | false | null | undefined)[]) =>
@@ -171,13 +175,20 @@ export function timeAgo(d: string) {
 }
 
 export const HEADING =
-  "font-[family-name:var(--font-display)] font-extrabold tracking-tight";
+  "font-[family-name:var(--font-display)] font-extrabold tracking-[-0.02em]";
 export const ORB =
   "flex shrink-0 select-none items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-orange-600 text-white shadow-sm";
 export const BTN =
-  "bg-gradient-to-b from-orange-500 to-orange-600 text-white transition hover:brightness-105 active:scale-[0.98] shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_4px_12px_rgba(234,88,12,0.3)] inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold";
+  "bg-gradient-to-b from-orange-500 to-orange-600 text-white transition hover:brightness-105 active:scale-[0.98] shadow-[0_1px_2px_rgba(154,52,18,0.35),inset_0_1px_0_rgba(255,255,255,0.18)] inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold";
 export const BTN_DARK =
-  "bg-[#2a1002] text-white transition hover:bg-[#431407] active:scale-[0.98] shadow-sm inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold";
+  "bg-neutral-900 text-white ring-1 ring-black/10 transition hover:bg-neutral-800 active:scale-[0.98] shadow-sm inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold";
+
+/** Solid white surface: hairline ring + layered neutral shadow. */
+export const SURFACE_LIGHT =
+  "bg-white text-[#1c1410] ring-1 ring-black/[0.06] shadow-[0_1px_2px_rgba(28,20,16,0.04),0_12px_28px_-18px_rgba(28,20,16,0.22)]";
+/** Ink surface for the one or two "feature" panels per page. */
+export const SURFACE_DARK =
+  "bg-[#1c1410] text-orange-50 ring-1 ring-white/10 shadow-[0_1px_2px_rgba(0,0,0,0.2),0_16px_32px_-18px_rgba(28,20,16,0.6)]";
 
 /* ========================================================================== */
 /*  Tip: hover / focus label for any button or link                           */
@@ -279,11 +290,11 @@ export function Tip({
                   animate={{ opacity: 1, x: 0, y: 0 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.12, ease: "easeOut" }}
-                  className="flex items-center gap-2 whitespace-nowrap rounded-md bg-[#2a1002] px-2.5 py-1.5 text-xs font-medium text-orange-50 shadow-[0_4px_14px_rgba(42,16,2,0.25)] ring-1 ring-white/10"
+                  className="flex items-center gap-2 whitespace-nowrap rounded-md bg-[#1c1410] px-2.5 py-1.5 text-xs font-medium text-orange-50 shadow-[0_4px_14px_rgba(28,20,16,0.25)] ring-1 ring-white/10"
                 >
                   {label}
                   {hint && (
-                    <kbd className="rounded border border-white/20 px-1 font-mono text-[10px] text-orange-200/70">
+                    <kbd className="rounded border border-white/20 px-1 font-mono text-[10px] text-stone-300">
                       {hint}
                     </kbd>
                   )}
@@ -303,7 +314,9 @@ export function Tip({
 
 export function StatGrid({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">{children}</div>
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+      {children}
+    </div>
   );
 }
 
@@ -326,47 +339,38 @@ export function Surface({
   const isDark = variant === "dark";
   return (
     <motion.div
-      initial={reduce ? false : { opacity: 0, y: 14 }}
+      initial={reduce ? false : { opacity: 0, y: 10 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={VIEW}
-      transition={{ duration: 0.5, delay, ease: EASE }}
+      transition={{ duration: 0.45, delay, ease: EASE }}
       className={cn(
-        "relative min-w-0 overflow-hidden rounded-2xl p-[1.5px]",
-        isDark
-          ? "bg-gradient-to-br from-orange-600/50 via-orange-900/40 to-orange-600/50"
-          : "bg-gradient-to-br from-orange-300/60 via-orange-200/40 to-orange-300/60",
+        "relative min-w-0 overflow-hidden rounded-2xl",
+        isDark ? SURFACE_DARK : SURFACE_LIGHT,
+        pad,
         className,
       )}
     >
-      <div
-        className={cn(
-          "relative h-full overflow-hidden rounded-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]",
-          isDark
-            ? "bg-[#431407] text-orange-50"
-            : "bg-[#fffbf7] text-[#2a1002]",
-          pad,
-        )}
-      >
-        {image && (
-          <>
-            <Image
-              src={image}
-              alt=""
-              fill
-              className="object-cover opacity-20 mix-blend-overlay pointer-events-none"
-            />
-            <div
-              className={cn(
-                "absolute inset-0 pointer-events-none",
-                isDark
-                  ? "bg-gradient-to-r from-[#431407] via-[#431407]/90 to-transparent"
-                  : "bg-gradient-to-r from-[#fffbf7] via-[#fffbf7]/90 to-transparent",
-              )}
-            />
-          </>
-        )}
-        <div className="relative z-10 h-full flex flex-col">{children}</div>
-      </div>
+      {image && (
+        <>
+          <Image
+            src={image}
+            alt=""
+            fill
+            sizes="(min-width: 1280px) 480px, 100vw"
+            className="pointer-events-none object-cover opacity-20 mix-blend-overlay"
+          />
+          <div
+            aria-hidden
+            className={cn(
+              "pointer-events-none absolute inset-0",
+              isDark
+                ? "bg-gradient-to-r from-[#1c1410] via-[#1c1410]/90 to-transparent"
+                : "bg-gradient-to-r from-white via-white/90 to-transparent",
+            )}
+          />
+        </>
+      )}
+      <div className="relative z-10 flex h-full flex-col">{children}</div>
     </motion.div>
   );
 }
@@ -391,7 +395,7 @@ export function Sparkline({
         >
           <defs>
             <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity={0.4} />
+              <stop offset="0%" stopColor={color} stopOpacity={0.28} />
               <stop offset="100%" stopColor={color} stopOpacity={0} />
             </linearGradient>
           </defs>
@@ -399,7 +403,7 @@ export function Sparkline({
             type="monotone"
             dataKey="v"
             stroke={color}
-            strokeWidth={2}
+            strokeWidth={1.75}
             fill={`url(#${id})`}
             isAnimationActive={false}
           />
@@ -422,12 +426,13 @@ export function CountUp({
   const rounded = useTransform(mv, (v) => Math.round(v).toLocaleString());
   React.useEffect(() => {
     if (!inView) return;
-    const c = animate(mv, value, { duration: 1.4, delay, ease: EASE });
+    const c = animate(mv, value, { duration: 1.1, delay, ease: EASE });
     return () => c.stop();
   }, [value, mv, inView, delay]);
   return <motion.span ref={ref}>{rounded}</motion.span>;
 }
 
+/** Kept for compatibility. Now just a calm hover lift (no 3D tilt, no shine sweep). */
 export function TiltCard({
   children,
   className,
@@ -436,41 +441,13 @@ export function TiltCard({
   className?: string;
 }) {
   const reduce = useReducedMotion();
-  const rx = useSpring(0, { stiffness: 220, damping: 22 });
-  const ry = useSpring(0, { stiffness: 220, damping: 22 });
-
-  const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (reduce || e.pointerType !== "mouse") return;
-    const r = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - r.left;
-    const y = e.clientY - r.top;
-    rx.set((0.5 - y / r.height) * 8);
-    ry.set((x / r.width - 0.5) * 10);
-  };
-  const onLeave = () => {
-    rx.set(0);
-    ry.set(0);
-  };
-
   return (
     <motion.div
-      onPointerMove={onMove}
-      onPointerLeave={onLeave}
-      style={{ rotateX: rx, rotateY: ry, transformPerspective: 900 }}
-      whileHover={reduce ? undefined : { y: -4 }}
-      transition={{ type: "spring", stiffness: 300, damping: 24 }}
-      className={cn(
-        "group/tilt relative h-full will-change-transform",
-        className,
-      )}
+      whileHover={reduce ? undefined : { y: -2 }}
+      transition={{ type: "spring", stiffness: 300, damping: 26 }}
+      className={cn("relative h-full", className)}
     >
       {children}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 z-20 overflow-hidden rounded-2xl"
-      >
-        <span className="absolute inset-y-0 -left-1/2 w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-0 transition-all duration-[900ms] ease-out group-hover/tilt:translate-x-[420%] group-hover/tilt:opacity-100" />
-      </div>
     </motion.div>
   );
 }
@@ -500,112 +477,80 @@ export function StatCell({
   const reduce = useReducedMotion();
 
   return (
-    <TiltCard>
-      <Surface variant={variant} className="h-full" pad="p-0" delay={delay}>
-        <div className="relative z-10 flex flex-col p-5 pb-16 sm:pb-[4.5rem]">
-          <div className="flex items-center justify-between">
-            <motion.span
-              animate={reduce ? undefined : { y: [0, -3, 0] }}
-              transition={{
-                duration: 4,
-                repeat: Infinity,
-                ease: "easeInOut",
-                delay,
-              }}
-              className={cn(
-                "flex size-11 items-center justify-center rounded-2xl ring-1 backdrop-blur-sm",
-                isDark
-                  ? "bg-orange-500/20 text-orange-300 ring-orange-400/30"
-                  : "bg-gradient-to-br from-white to-orange-50 text-orange-600 ring-orange-200",
-              )}
-              style={{
-                boxShadow: `0 8px 24px -6px ${accent}80, inset 0 1px 0 rgba(255,255,255,0.5)`,
-              }}
-            >
-              <Icon className="size-5" strokeWidth={2} />
-            </motion.span>
+    <Surface variant={variant} className="h-full" pad="p-0" delay={delay}>
+      <div className="relative flex flex-col p-4 pb-12 sm:p-5 sm:pb-14">
+        <p
+          className={cn(
+            "flex items-center gap-1.5 text-[11px] font-semibold uppercase leading-tight tracking-[0.06em]",
+            isDark ? "text-stone-400" : "text-stone-500",
+          )}
+        >
+          <Icon
+            className="size-4 shrink-0"
+            strokeWidth={1.75}
+            style={{ color: isDark ? TOKENS.amber : accent }}
+          />
+          <span className="truncate">{label}</span>
+        </p>
 
-            {delta && (
-              <span className="relative flex size-2.5">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-60 motion-reduce:animate-none" />
-                <span className="relative inline-flex size-2.5 rounded-full bg-emerald-500" />
+        <p
+          className={cn(
+            HEADING,
+            "mt-2 text-3xl leading-9 tabular-nums sm:text-4xl sm:leading-10",
+            isDark ? "text-orange-50" : "text-[#1c1410]",
+          )}
+        >
+          {typeof value === "number" ? (
+            <CountUp value={value} delay={delay + 0.1} />
+          ) : (
+            value
+          )}
+        </p>
+
+        {(delta || hint) && (
+          <motion.div
+            initial={reduce ? false : { opacity: 0, y: 4 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={VIEW}
+            transition={{ duration: 0.4, delay: delay + 0.3, ease: EASE }}
+            className="mt-2 flex h-5 items-center text-xs font-medium"
+          >
+            {delta ? (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 ring-1 ring-inset",
+                  isDark
+                    ? "bg-emerald-500/15 text-emerald-300 ring-emerald-400/20"
+                    : "bg-emerald-50 text-emerald-700 ring-emerald-200",
+                )}
+              >
+                <TrendingUp className="size-3" /> {delta}
+              </span>
+            ) : (
+              <span className={isDark ? "text-stone-400" : "text-stone-500"}>
+                {hint}
               </span>
             )}
-          </div>
-
-          <p
-            className={cn(
-              "mt-4 text-[10.5px] font-bold uppercase leading-tight tracking-[0.14em]",
-              isDark ? "text-orange-200/70" : "text-stone-500",
-            )}
-          >
-            {label}
-          </p>
-
-          <p
-            className={cn(
-              HEADING,
-              "mt-1.5 text-5xl leading-none tabular-nums sm:text-6xl",
-              "bg-clip-text text-transparent bg-gradient-to-b",
-              isDark
-                ? "from-orange-50 to-amber-200"
-                : "from-[#2a1002] to-[#9a3412]",
-            )}
-          >
-            {typeof value === "number" ? (
-              <CountUp value={value} delay={delay + 0.15} />
-            ) : (
-              value
-            )}
-          </p>
-
-          {(delta || hint) && (
-            <motion.div
-              initial={reduce ? false : { opacity: 0, y: 6 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={VIEW}
-              transition={{ duration: 0.5, delay: delay + 0.45, ease: EASE }}
-              className="mt-4 text-xs font-semibold"
-            >
-              {delta ? (
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ring-1",
-                    isDark
-                      ? "bg-emerald-500/15 text-emerald-300 ring-emerald-400/20"
-                      : "bg-emerald-50 text-emerald-700 ring-emerald-200",
-                  )}
-                >
-                  <TrendingUp className="size-3.5" /> {delta}
-                </span>
-              ) : (
-                <span
-                  className={isDark ? "text-orange-200/60" : "text-stone-500"}
-                >
-                  {hint}
-                </span>
-              )}
-            </motion.div>
-          )}
-        </div>
-
-        {series && (
-          <motion.div
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-14 sm:h-16"
-            initial={reduce ? false : { clipPath: "inset(0 100% 0 0)" }}
-            whileInView={{ clipPath: "inset(0 0% 0 0)" }}
-            viewport={VIEW}
-            transition={{ duration: 1.3, delay: delay + 0.3, ease: EASE }}
-          >
-            <Sparkline
-              data={series}
-              color={isDark ? TOKENS.amber : accent}
-              className="h-full w-full"
-            />
           </motion.div>
         )}
-      </Surface>
-    </TiltCard>
+      </div>
+
+      {series && (
+        <motion.div
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-10 sm:h-12"
+          initial={reduce ? false : { clipPath: "inset(0 100% 0 0)" }}
+          whileInView={{ clipPath: "inset(0 0% 0 0)" }}
+          viewport={VIEW}
+          transition={{ duration: 1, delay: delay + 0.2, ease: EASE }}
+        >
+          <Sparkline
+            data={series}
+            color={isDark ? TOKENS.amber : accent}
+            className="h-full w-full"
+          />
+        </motion.div>
+      )}
+    </Surface>
   );
 }
 
@@ -625,72 +570,61 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "relative flex flex-col items-center justify-center overflow-hidden rounded-2xl px-6 py-12 text-center",
-        dark
-          ? "bg-[#431407]/40"
-          : "bg-gradient-to-br from-[#fff7ed] to-[#ffedd5]",
+        "flex flex-col items-center justify-center px-6 py-10 text-center sm:py-12",
         className,
       )}
     >
       <div
-        aria-hidden
-        className="pointer-events-none absolute left-1/2 top-1/2 size-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-tr from-orange-400/20 via-amber-400/20 to-red-400/20 blur-3xl"
-      />
-      <div className="relative z-10 mb-6">
-        <motion.div
-          animate={{ y: [0, -6, 0] }}
-          transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
-          whileHover={{ scale: 1.05, rotate: -2 }}
-          className={cn(
-            "relative flex items-center justify-center overflow-hidden rounded-xl ring-1",
-            art
-              ? "h-28 w-40 sm:h-32 sm:w-48 bg-white ring-orange-100 shadow-sm"
-              : "size-14 bg-gradient-to-br from-orange-500 to-orange-600 ring-orange-400/50 shadow-md",
-          )}
-        >
-          {art ? (
-            <>
-              <Image
-                src={art}
-                alt=""
-                fill
-                sizes="(max-width: 640px) 160px, 200px"
-                className="object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-orange-900/10 to-transparent pointer-events-none" />
-            </>
-          ) : (
-            <Icon
-              className={cn("size-6 text-white", dark && "text-orange-100")}
-              strokeWidth={2}
-            />
-          )}
-          <Sparkles className="absolute top-2 right-2 size-4 animate-pulse text-amber-400 motion-reduce:animate-none drop-shadow-md z-20" />
-        </motion.div>
-      </div>
-      <div className="relative z-10">
-        <p
-          className={cn(
-            "text-base",
-            HEADING,
-            dark ? "text-orange-50" : "text-[#2a1002]",
-          )}
-        >
-          {title}
-        </p>
-        {hint && (
-          <p
-            className={cn(
-              "mx-auto mt-1.5 max-w-[18rem] text-xs font-medium leading-relaxed",
-              dark ? "text-orange-200/70" : "text-orange-900/70",
-            )}
-          >
-            {hint}
-          </p>
+        className={cn(
+          "relative mb-5 flex items-center justify-center overflow-hidden rounded-xl ring-1",
+          art
+            ? "h-24 w-36 bg-white shadow-[0_10px_24px_-12px_rgba(28,20,16,0.35)] ring-black/[0.06] sm:h-28 sm:w-44"
+            : cn(
+                "size-12",
+                dark
+                  ? "bg-white/10 ring-white/15"
+                  : "bg-stone-100 ring-black/[0.06]",
+              ),
+        )}
+      >
+        {art ? (
+          <Image
+            src={art}
+            alt=""
+            fill
+            sizes="(max-width: 640px) 144px, 176px"
+            className="object-cover"
+          />
+        ) : (
+          <Icon
+            className={cn("size-5", dark ? "text-orange-100" : "text-stone-500")}
+            strokeWidth={1.75}
+          />
         )}
       </div>
+
+      <p
+        className={cn(
+          "text-base",
+          HEADING,
+          dark ? "text-orange-50" : "text-[#1c1410]",
+        )}
+      >
+        {title}
+      </p>
+      {hint && (
+        <p
+          className={cn(
+            "mx-auto mt-1.5 max-w-[18rem] text-xs font-medium leading-relaxed",
+            dark ? "text-stone-400" : "text-stone-500",
+          )}
+        >
+          {hint}
+        </p>
+      )}
+
       {actionLabel && (
-        <div className="relative z-10 mt-6">
+        <div className="mt-5">
           <Tip label={actionLabel} side="bottom">
             {href ? (
               <Link href={href} className={cta}>
@@ -704,28 +638,29 @@ export function EmptyState({
           </Tip>
         </div>
       )}
-      {children && <div className="relative z-10 mt-5">{children}</div>}
+      {children && <div className="mt-5">{children}</div>}
     </div>
   );
 }
 
+/** Loading placeholder. Rounds itself (rounded-2xl) unless the caller passes its own `rounded-*`. */
 export function Shimmer({ className = "" }: { className?: string }) {
+  const ownRadius = /(^|\s)rounded/.test(className);
   return (
     <div
+      aria-hidden
       className={cn(
-        "relative overflow-hidden rounded-2xl bg-orange-50 p-[1.5px]",
+        "relative overflow-hidden bg-stone-200/60",
+        !ownRadius && "rounded-2xl",
         className,
       )}
     >
-      <div className="relative h-full w-full overflow-hidden rounded-[14px] bg-white">
-        <motion.div
-          aria-hidden
-          className="absolute inset-0 z-0 bg-gradient-to-r from-transparent via-orange-100/50 to-transparent"
-          initial={{ x: "-100%" }}
-          animate={{ x: "100%" }}
-          transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-        />
-      </div>
+      <motion.div
+        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/70 to-transparent"
+        initial={{ x: "-100%" }}
+        animate={{ x: "100%" }}
+        transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }}
+      />
     </div>
   );
 }
@@ -735,7 +670,7 @@ export function ErrorCard({ onRetry }: { onRetry: () => void }) {
   return (
     <Surface>
       <div className="flex flex-col items-center gap-3 py-10 text-center">
-        <div className="flex size-11 items-center justify-center rounded-full border border-red-200 bg-red-50 text-red-600">
+        <div className="flex size-11 items-center justify-center rounded-full bg-rose-50 text-rose-600 ring-1 ring-rose-200">
           <RefreshCw className="size-5" />
         </div>
         <div>
@@ -811,7 +746,12 @@ export function ChartCard({
         <div className="min-w-0">
           <h3 className={cn("text-sm", HEADING)}>{title}</h3>
           {description && (
-            <p className="mt-1 text-[11px] font-medium text-stone-500">
+            <p
+              className={cn(
+                "mt-1 text-[11px] font-medium",
+                dark ? "text-stone-400" : "text-stone-500",
+              )}
+            >
               {description}
             </p>
           )}
@@ -838,9 +778,9 @@ export function ChartTooltip({
         : String(label)
       : payload[0].name;
   return (
-    <div className="min-w-[8rem] rounded-xl border border-orange-200 bg-white/95 px-3.5 py-2.5 text-stone-800 shadow-[0_8px_30px_rgb(0,0,0,0.08)] backdrop-blur-md">
+    <div className="min-w-[8rem] rounded-xl bg-white px-3.5 py-2.5 text-stone-800 shadow-[0_10px_30px_-8px_rgba(28,20,16,0.25)] ring-1 ring-black/[0.08]">
       {head && (
-        <p className="mb-1.5 text-[11px] font-bold uppercase tracking-widest text-orange-600">
+        <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-stone-500">
           {head}
         </p>
       )}
@@ -848,18 +788,16 @@ export function ChartTooltip({
         {payload.map((p: any, i: number) => (
           <p
             key={i}
-            className="flex items-center gap-2 text-xs font-semibold tabular-nums"
+            className="flex items-center gap-2 text-xs font-medium tabular-nums"
           >
             <span
               className="size-2 rounded-full"
               style={{ background: p.color ?? (p.payload?.fill as string) }}
             />
             {label !== undefined && p.name ? (
-              <span className="font-medium text-stone-500">
-                {titleCase(String(p.name))}
-              </span>
+              <span className="text-stone-500">{titleCase(String(p.name))}</span>
             ) : null}
-            <span className="ml-auto pl-4 font-mono font-bold text-[#2a1002]">
+            <span className="ml-auto pl-4 font-semibold text-[#1c1410]">
               {Number(p.value).toLocaleString()}
               {valueSuffix}
             </span>
@@ -872,11 +810,11 @@ export function ChartTooltip({
 
 export function StatusChip({ status }: { status: string }) {
   const CHIP_LIGHT: Record<string, string> = {
-    green: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    red: "bg-rose-50 text-rose-700 border-rose-200",
-    amber: "bg-amber-50 text-amber-700 border-amber-200",
-    orange: "bg-orange-50 text-orange-700 border-orange-200",
-    stone: "bg-stone-50 text-stone-600 border-stone-200",
+    green: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    red: "bg-rose-50 text-rose-700 ring-rose-200",
+    amber: "bg-amber-50 text-amber-700 ring-amber-200",
+    orange: "bg-orange-50 text-orange-700 ring-orange-200",
+    stone: "bg-stone-50 text-stone-600 ring-stone-200",
   };
   const CHIP_KIND: Record<string, string> = {
     accepted: "green",
@@ -899,7 +837,7 @@ export function StatusChip({ status }: { status: string }) {
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+        "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ring-inset",
         CHIP_LIGHT[kind],
       )}
     >
@@ -964,6 +902,8 @@ export function useProfile(user: DashboardUser) {
 
 /* ========================================================================== */
 /*  Activity sheet                                                            */
+/*  [drag handle] / [scrolling body] / [pinned action]. Only the handle       */
+/*  starts the swipe-to-close, so the body scrolls natively on touch.         */
 /* ========================================================================== */
 
 export const ACTIVITY_STYLE: Record<
@@ -1039,7 +979,7 @@ export function ActivitySheet({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={onClose}
-            className="absolute inset-0 bg-stone-900/20 backdrop-blur-sm"
+            className="absolute inset-0 bg-stone-950/40 backdrop-blur-sm"
           />
           <motion.div
             key="panel"
@@ -1058,77 +998,89 @@ export function ActivitySheet({
             onDragEnd={(_, info) => {
               if (info.offset.y > 110 || info.velocity.y > 600) onClose();
             }}
-            className="relative max-h-[88dvh] w-full overflow-y-auto overscroll-contain rounded-t-2xl border border-orange-100 bg-white p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] text-[#2a1002] shadow-2xl sm:max-w-md sm:rounded-2xl sm:pb-5"
+            className="relative flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-3xl bg-white text-[#1c1410] shadow-2xl ring-1 ring-black/[0.06] sm:max-w-md sm:rounded-3xl"
           >
             <div
               onPointerDown={(e) => controls.start(e)}
-              className="-mt-2 mb-2 flex h-6 cursor-grab touch-none items-center justify-center sm:hidden"
+              className="flex h-6 shrink-0 cursor-grab touch-none items-center justify-center sm:hidden"
               aria-hidden
             >
-              <span className="h-1.5 w-10 rounded-full bg-orange-200" />
+              <span className="h-1.5 w-10 rounded-full bg-stone-300" />
             </div>
 
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <span
-                  className={cn(
-                    "flex size-10 shrink-0 items-center justify-center rounded-xl ring-1",
-                    s.cls,
-                  )}
-                >
-                  <s.icon className="size-4" strokeWidth={1.75} />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-orange-700">
-                    {m.label}
-                  </p>
-                  <p className="flex items-center gap-1 text-xs text-stone-500">
-                    <Clock className="size-3" /> {timeAgo(item.created_at)}
-                  </p>
+            <div
+              data-lenis-prevent
+              data-lenis-prevent-touch
+              data-lenis-prevent-wheel
+              onWheel={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+              style={{ touchAction: "pan-y", WebkitOverflowScrolling: "touch" }}
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 pt-3 sm:pt-5"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span
+                    className={cn(
+                      "flex size-10 shrink-0 items-center justify-center rounded-xl ring-1",
+                      s.cls,
+                    )}
+                  >
+                    <s.icon className="size-4" strokeWidth={1.75} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-stone-500">
+                      {m.label}
+                    </p>
+                    <p className="flex items-center gap-1 text-xs text-stone-500">
+                      <Clock className="size-3" /> {timeAgo(item.created_at)}
+                    </p>
+                  </div>
                 </div>
+                <Tip label="Close" hint="Esc" side="left">
+                  <button
+                    ref={closeRef}
+                    onClick={onClose}
+                    aria-label="Close"
+                    className={cn(
+                      "flex size-9 shrink-0 items-center justify-center rounded-full bg-stone-100 text-stone-600 transition hover:bg-stone-200 hover:text-[#1c1410] active:scale-95",
+                      FOCUS,
+                    )}
+                  >
+                    <X className="size-4" />
+                  </button>
+                </Tip>
               </div>
-              <Tip label="Close" hint="Esc" side="left">
-                <button
-                  ref={closeRef}
+
+              <h4 id="activity-title" className={cn("mt-4 text-xl", HEADING)}>
+                {item.title}
+              </h4>
+              <p className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-stone-600">
+                {item.message}
+              </p>
+
+              <p className="mt-4 rounded-lg bg-stone-50 px-3 py-2 font-mono text-xs text-stone-600 ring-1 ring-black/[0.05]">
+                {new Date(item.created_at).toLocaleString("en-US", {
+                  dateStyle: "full",
+                  timeStyle: "short",
+                })}
+              </p>
+            </div>
+
+            <div className="shrink-0 border-t border-black/[0.06] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-4">
+              <Tip label={`Go to ${m.label.toLowerCase()}s`} side="top">
+                <Link
+                  href={m.href}
                   onClick={onClose}
-                  aria-label="Close"
                   className={cn(
-                    "flex size-9 shrink-0 items-center justify-center rounded-full bg-stone-50 text-stone-500 transition hover:bg-stone-100 active:scale-95",
+                    "flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold",
+                    BTN,
                     FOCUS,
                   )}
                 >
-                  <X className="size-4" />
-                </button>
+                  {m.cta} <ArrowUpRight className="size-4" />
+                </Link>
               </Tip>
             </div>
-
-            <h4 id="activity-title" className={cn("mt-4 text-xl", HEADING)}>
-              {item.title}
-            </h4>
-            <p className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-stone-600">
-              {item.message}
-            </p>
-
-            <p className="mt-4 rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 font-mono text-xs text-orange-800/80">
-              {new Date(item.created_at).toLocaleString("en-US", {
-                dateStyle: "full",
-                timeStyle: "short",
-              })}
-            </p>
-
-            <Tip label={`Go to ${m.label.toLowerCase()}s`} side="top">
-              <Link
-                href={m.href}
-                onClick={onClose}
-                className={cn(
-                  "mt-4 flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold",
-                  BTN,
-                  FOCUS,
-                )}
-              >
-                {m.cta} <ArrowUpRight className="size-4" />
-              </Link>
-            </Tip>
           </motion.div>
         </div>
       )}
@@ -1139,13 +1091,25 @@ export function ActivitySheet({
 
 /* ========================================================================== */
 /*  Profile sheet (modal)                                                     */
+/*  A membership pass: ink top, paper bottom, torn at a notched dashed line.  */
+/* ========================================================================== */
 
 const PASS_NOTCH = 172; // px from the top of the pass to the tear line
 
 export function ProfileSheet({
-  user, isOpen, onClose, isFree, fullName, rows
+  user,
+  isOpen,
+  onClose,
+  isFree,
+  fullName,
+  rows,
 }: {
-  user: DashboardUser; isOpen: boolean; onClose: () => void; isFree: boolean; fullName: string; rows: ProfileRow[]
+  user: DashboardUser;
+  isOpen: boolean;
+  onClose: () => void;
+  isFree: boolean;
+  fullName: string;
+  rows: ProfileRow[];
 }) {
   const [mounted, setMounted] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
@@ -1194,10 +1158,12 @@ export function ProfileSheet({
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <motion.div
             key="backdrop"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={onClose}
-            className="absolute inset-0 bg-[#2a1002]/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-stone-950/40 backdrop-blur-sm"
           />
 
           {/* outer wrapper carries the shadow, because a mask would clip a box-shadow */}
@@ -1206,17 +1172,24 @@ export function ProfileSheet({
             role="dialog"
             aria-modal="true"
             aria-label="Your profile"
-            initial={{ opacity: 0, y: 30, rotate: -1.5 }}
-            animate={{ opacity: 1, y: 0, rotate: 0 }}
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            transition={{ type: "spring", damping: 26, stiffness: 300 }}
-            className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-[320px] flex-col drop-shadow-[0_20px_32px_rgba(42,16,2,0.35)]"
+            transition={{ type: "spring", damping: 28, stiffness: 320 }}
+            className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-[320px] flex-col drop-shadow-[0_20px_32px_rgba(28,20,16,0.35)]"
           >
-            <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain rounded-3xl">
-              <div style={notchMask} className="bg-[#fffbf7] text-[#2a1002]">
-                {/* ---------- top: dark half ---------- */}
+            <div
+              data-lenis-prevent
+              data-lenis-prevent-touch
+              data-lenis-prevent-wheel
+              onWheel={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+              className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain rounded-3xl"
+            >
+              <div style={notchMask} className="bg-white text-[#1c1410]">
+                {/* ---------- top: ink half ---------- */}
                 <div
-                  className="relative flex flex-col justify-between overflow-hidden bg-[#2a1002] p-5 text-orange-50"
+                  className="relative flex flex-col justify-between overflow-hidden bg-[#1c1410] p-5 text-orange-50"
                   style={{ height: PASS_NOTCH }}
                 >
                   <Image
@@ -1224,17 +1197,13 @@ export function ProfileSheet({
                     alt=""
                     fill
                     sizes="400px"
-                    className="pointer-events-none object-cover opacity-25 mix-blend-overlay"
-                  />
-                  <div
-                    aria-hidden
-                    className="pointer-events-none absolute -left-10 -top-16 size-56 rounded-full bg-orange-600/40 blur-3xl"
+                    className="pointer-events-none object-cover opacity-20 mix-blend-overlay"
                   />
 
                   <div className="relative flex items-start justify-between">
                     <span
                       aria-hidden
-                      className="flex size-12 select-none items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 text-2xl font-extrabold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_10px_24px_-8px_rgba(234,88,12,0.8)]"
+                      className="flex size-12 select-none items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 text-2xl font-extrabold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_8px_20px_-8px_rgba(234,88,12,0.7)]"
                     >
                       {user.first_name.charAt(0).toUpperCase()}
                     </span>
@@ -1257,8 +1226,8 @@ export function ProfileSheet({
                       {fullName}
                     </h2>
                     <div className="mt-2 flex items-center gap-1.5">
-                      <Mail className="size-3.5 shrink-0 text-orange-300/70" />
-                      <span className="min-w-0 truncate text-xs text-orange-100/80">
+                      <Mail className="size-3.5 shrink-0 text-stone-400" />
+                      <span className="min-w-0 truncate text-xs text-stone-300">
                         {user.email}
                       </span>
                       <Tip label={copied ? "Copied" : "Copy email"} side="top">
@@ -1266,7 +1235,7 @@ export function ProfileSheet({
                           onClick={copyEmail}
                           aria-label="Copy email address"
                           className={cn(
-                            "ml-0.5 flex size-6 shrink-0 items-center justify-center rounded-md text-orange-200/70 transition hover:bg-white/10 hover:text-orange-50",
+                            "ml-0.5 flex size-6 shrink-0 items-center justify-center rounded-md text-stone-400 transition hover:bg-white/10 hover:text-orange-50",
                             FOCUS,
                           )}
                         >
@@ -1286,36 +1255,43 @@ export function ProfileSheet({
                   {/* tear line, sits exactly on the notches */}
                   <div
                     aria-hidden
-                    className="absolute inset-x-4 top-0 border-t-2 border-dashed border-orange-200"
+                    className="absolute inset-x-4 top-0 border-t-2 border-dashed border-stone-200"
                   />
 
                   <dl>
                     {rows.map((r) => (
-                      <div key={r.label} className="flex items-baseline gap-2 py-1.5 text-[13px]">
+                      <div
+                        key={r.label}
+                        className="flex items-baseline gap-2 py-1.5 text-[13px]"
+                      >
                         <dt className="flex shrink-0 items-center gap-2 text-stone-500">
-                          <r.icon className="size-3.5 text-orange-500/70" />
+                          <r.icon className="size-3.5 text-stone-400" />
                           {r.label}
                         </dt>
                         <span
                           aria-hidden
-                          className="min-w-4 flex-1 translate-y-[-3px] border-b border-dotted border-orange-300/70"
+                          className="min-w-4 flex-1 translate-y-[-3px] border-b border-dotted border-black/15"
                         />
                         <dd className="shrink-0">
                           {r.chip ? (
-                            <span className="inline-block -rotate-3 rounded-md border-2 border-orange-600/80 px-2 py-0.5 text-xs font-extrabold tracking-wide text-orange-700">
+                            <span className="inline-block rounded-md bg-orange-50 px-2 py-0.5 text-xs font-bold tracking-wide text-orange-700 ring-1 ring-inset ring-orange-200">
                               {r.value}
                             </span>
                           ) : (
-                            <span className="font-semibold tabular-nums">{r.value}</span>
+                            <span className="font-semibold tabular-nums">
+                              {r.value}
+                            </span>
                           )}
                         </dd>
                       </div>
                     ))}
                     <div className="flex items-baseline gap-2 py-1.5 text-[13px]">
-                      <dt className="shrink-0 pl-[1.375rem] text-stone-500">Member ID</dt>
+                      <dt className="shrink-0 pl-[1.375rem] text-stone-500">
+                        Member ID
+                      </dt>
                       <span
                         aria-hidden
-                        className="min-w-4 flex-1 translate-y-[-3px] border-b border-dotted border-orange-300/70"
+                        className="min-w-4 flex-1 translate-y-[-3px] border-b border-dotted border-black/15"
                       />
                       <dd className="shrink-0 font-mono text-[13px] font-semibold tracking-wider">
                         {memberId}
@@ -1326,7 +1302,14 @@ export function ProfileSheet({
                   <div className="mt-3 flex flex-col gap-2">
                     {isFree && (
                       <Tip label="See what Pro includes" side="top">
-                        <Link href="/plans" className={cn(BTN, "w-full rounded-xl py-2.5 text-sm font-bold", FOCUS)}>
+                        <Link
+                          href="/plans"
+                          className={cn(
+                            BTN,
+                            "w-full rounded-xl py-2.5 text-sm font-bold",
+                            FOCUS,
+                          )}
+                        >
                           <Crown className="size-4" /> Upgrade to Pro
                         </Link>
                       </Tip>
@@ -1336,7 +1319,7 @@ export function ProfileSheet({
                         href="/dashboard/settings"
                         onClick={onClose}
                         className={cn(
-                          "flex w-full items-center justify-center rounded-xl border border-orange-200 bg-white py-2.5 text-sm font-semibold text-[#2a1002] transition-colors hover:border-orange-300 hover:bg-orange-50",
+                          "flex w-full items-center justify-center rounded-xl border border-black/[0.08] bg-white py-2.5 text-sm font-semibold text-[#1c1410] transition-colors hover:border-black/20 hover:bg-stone-50",
                           FOCUS,
                         )}
                       >

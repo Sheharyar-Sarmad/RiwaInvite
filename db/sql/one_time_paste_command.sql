@@ -348,7 +348,13 @@ CREATE INDEX IF NOT EXISTS idx_guests_created_at ON guests(invitation_id, create
 CREATE INDEX IF NOT EXISTS idx_admin_notifications_admin ON admin_notifications(admin_id);
 CREATE INDEX IF NOT EXISTS idx_admin_notifications_unread ON admin_notifications(admin_id) WHERE read_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_admin_notifications_created ON admin_notifications(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_template_purchases_user_purchased
+  ON template_purchases (user_id, purchased_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_invitations_user_template
+  ON invitations (user_id, template_id);
+
+  
 CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_invitations_user_status ON invitations (user_id, status, expires_at);
 CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user_expires ON user_subscriptions (user_id, expires_at DESC);
