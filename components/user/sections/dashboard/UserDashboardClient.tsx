@@ -23,7 +23,6 @@ import {
   Activity,
   ArrowUpRight,
   BarChart3,
-  ChevronDown,
   ChevronRight,
   CreditCard,
   Crown,
@@ -33,6 +32,7 @@ import {
   Mail,
   UserCheck,
   Users,
+  Maximize2,
   Trophy,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "./ui/Tabs";
@@ -65,6 +65,7 @@ import {
   STICKY_TOP,
   Surface,
   TiltCard,
+  Tip,
   TOKENS,
   cn,
   fetcher,
@@ -73,6 +74,7 @@ import {
   timeAgo,
   titleCase,
   useProfile,
+  ProfileSheet,
   type ActivityItem,
   type Analytics,
   type Billing,
@@ -96,10 +98,10 @@ const ART = {
 } as const;
 
 const TABS = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "analytics", label: "Analytics", icon: BarChart3 },
-  { id: "activity", label: "Activity", icon: Activity },
-  { id: "billing", label: "Billing", icon: CreditCard },
+  { id: "overview", label: "Overview", icon: LayoutDashboard, tip: "Invitations at a glance" },
+  { id: "analytics", label: "Analytics", icon: BarChart3, tip: "Reply trends and charts" },
+  { id: "activity", label: "Activity", icon: Activity, tip: "Replies, payments, updates" },
+  { id: "billing", label: "Billing", icon: CreditCard, tip: "Plan and payment history" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -166,9 +168,9 @@ function DashboardHero({ firstName }: { firstName: string }) {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: EASE }}
-      className="relative overflow-hidden rounded-2xl border border-orange-100 shadow-sm bg-[#fff7ed]"
+      className="relative overflow-hidden rounded-2xl border border-orange-100 bg-[#fff7ed] shadow-sm"
     >
-      {/* 1. Image is now fully opaque */}
+      {/* Image is fully opaque */}
       <Image
         src={ART.hero}
         alt=""
@@ -178,7 +180,7 @@ function DashboardHero({ firstName }: { firstName: string }) {
         className="object-cover object-right opacity-100"
       />
 
-      {/* 2. Gradient only covers the left side for text readability, fading completely out on the right */}
+      {/* Gradient only covers the left side for text readability */}
       <div
         aria-hidden
         className="absolute inset-0 bg-gradient-to-r from-[#fff7ed] via-[#fff7ed]/90 to-transparent"
@@ -200,27 +202,32 @@ function DashboardHero({ firstName }: { firstName: string }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2 sm:shrink-0">
-          <Link
-            href="/dashboard/library"
-            className={cn(BTN, "rounded-lg px-4 py-2 text-sm shadow-md", FOCUS)}
-          >
-            <Plus className="size-4" strokeWidth={2.5} /> New invitation
-          </Link>
-          <Link
-            href="/dashboard/rsvps"
-            className={cn(
-              BTN_DARK,
-              "rounded-lg px-4 py-2 text-sm shadow-md",
-              FOCUS,
-            )}
-          >
-            View RSVPs <ArrowUpRight className="size-4" />
-          </Link>
+          <Tip label="Start from a template" side="bottom">
+            <Link
+              href="/dashboard/library"
+              className={cn(BTN, "rounded-lg px-4 py-2 text-sm shadow-md", FOCUS)}
+            >
+              <Plus className="size-4" strokeWidth={2.5} /> New invitation
+            </Link>
+          </Tip>
+          <Tip label="Every guest reply, in one list" side="bottom">
+            <Link
+              href="/dashboard/rsvps"
+              className={cn(
+                BTN_DARK,
+                "rounded-lg px-4 py-2 text-sm shadow-md",
+                FOCUS,
+              )}
+            >
+              View RSVPs <ArrowUpRight className="size-4" />
+            </Link>
+          </Tip>
         </div>
       </div>
     </motion.header>
   );
 }
+
 function Avatar({ name, className }: { name: string; className?: string }) {
   return (
     <span
@@ -238,20 +245,22 @@ function Avatar({ name, className }: { name: string; className?: string }) {
 
 function UpgradeLink({ className }: { className?: string }) {
   return (
-    <Link
-      href="/plans"
-      className={cn(
-        BTN,
-        "group/up justify-between px-4 py-2.5 text-sm",
-        FOCUS,
-        className,
-      )}
-    >
-      <span className="flex items-center gap-2">
-        <Crown className="size-4" strokeWidth={1.75} /> Upgrade to Pro
-      </span>
-      <ArrowUpRight className="size-4 transition-transform group-hover/up:-translate-y-0.5 group-hover/up:translate-x-0.5" />
-    </Link>
+    <Tip label="Compare plans" side="top">
+      <Link
+        href="/plans"
+        className={cn(
+          BTN,
+          "group/up justify-between px-4 py-2.5 text-sm",
+          FOCUS,
+          className,
+        )}
+      >
+        <span className="flex items-center gap-2">
+          <Crown className="size-4" strokeWidth={1.75} /> Upgrade to Pro
+        </span>
+        <ArrowUpRight className="size-4 transition-transform group-hover/up:-translate-y-0.5 group-hover/up:translate-x-0.5" />
+      </Link>
+    </Tip>
   );
 }
 
@@ -264,7 +273,7 @@ function DashboardDock({
   tab: TabId;
   onTab: (t: TabId) => void;
 }) {
-  const [open, setOpen] = React.useState(false);
+  const [sheetOpen, setSheetOpen] = React.useState(false);
   const { planName, isFree, fullName, rows } = useProfile(user);
 
   return (
@@ -272,62 +281,35 @@ function DashboardDock({
       <div
         className={cn("overflow-hidden rounded-2xl backdrop-blur-xl", RAISED)}
       >
+        {/* below xl the side card is hidden, so this row opens the profile sheet */}
         <div className="border-b border-orange-100 xl:hidden">
-          <button
-            onClick={() => setOpen((v) => !v)}
-            aria-expanded={open}
-            className={cn(
-              "flex w-full items-center gap-3 px-3 py-2 text-left",
-              FOCUS,
-            )}
-          >
-            <Avatar name={user.first_name} className="size-8 text-sm" />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-semibold">
-                {fullName}
-              </span>
-              <span className="block truncate text-xs text-stone-500">
-                {user.email}
-              </span>
-            </span>
-            <span className="shrink-0 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-xs font-semibold text-orange-800">
-              {planName}
-            </span>
-            <ChevronDown
+          <Tip label="Open your profile" side="bottom">
+            <button
+              onClick={() => setSheetOpen(true)}
+              aria-haspopup="dialog"
+              aria-label="Open your profile"
               className={cn(
-                "size-4 shrink-0 text-stone-400 transition-transform",
-                open && "rotate-180",
+                "flex w-full items-center gap-3 px-3 py-2 text-left",
+                FOCUS,
               )}
-            />
-          </button>
-          <AnimatePresence initial={false}>
-            {open && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.25, ease: EASE }}
-                className="overflow-hidden"
-              >
-                <dl className="grid grid-cols-2 gap-2 px-3 pb-3">
-                  {rows
-                    .filter((r) => !r.chip)
-                    .map((r) => (
-                      <div
-                        key={r.label}
-                        className="min-w-0 rounded-xl border border-orange-100 bg-white/70 px-3 py-2"
-                      >
-                        <dt className="text-xs text-stone-500">{r.label}</dt>
-                        <dd className="mt-0.5 truncate text-sm font-semibold tabular-nums">
-                          {r.value}
-                        </dd>
-                      </div>
-                    ))}
-                  {isFree && <UpgradeLink className="col-span-2" />}
-                </dl>
-              </motion.div>
-            )}
-          </AnimatePresence>
+            >
+              <Avatar name={user.first_name} className="size-8 text-sm" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">
+                  {fullName}
+                </span>
+                <span className="block truncate text-xs text-stone-500">
+                  {user.email}
+                </span>
+              </span>
+              <span className="shrink-0 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-xs font-semibold text-orange-800">
+                {planName}
+              </span>
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-orange-500 text-white ring-1 ring-orange-300/40">
+                <Maximize2 className="size-3.5" />
+              </span>
+            </button>
+          </Tip>
         </div>
 
         <Tabs value={tab} onValueChange={(v) => onTab(v as TabId)}>
@@ -338,93 +320,140 @@ function DashboardDock({
             {TABS.map((t) => {
               const active = tab === t.id;
               return (
-                <TabsTrigger
-                  key={t.id}
-                  value={t.id}
-                  className={cn(
-                    "relative flex-col gap-0.5 rounded-xl bg-transparent px-1 py-2 text-[11px] font-semibold shadow-none transition-colors sm:flex-row sm:gap-2 sm:px-3 sm:py-2.5 sm:text-sm",
-                    "data-[state=active]:bg-transparent data-[state=active]:text-orange-700 data-[state=active]:shadow-none",
-                    "data-[state=inactive]:text-stone-600 data-[state=inactive]:hover:text-[#431407]",
-                  )}
-                >
-                  {active && (
-                    <motion.span
-                      layoutId="dash-tab"
-                      className="absolute inset-0 rounded-xl bg-orange-100/80 shadow-[inset_0_1px_0_#fff,0_1px_2px_rgba(15,23,42,0.05)]"
-                      transition={{
-                        type: "spring",
-                        damping: 30,
-                        stiffness: 400,
-                      }}
-                    >
-                      <span
-                        aria-hidden
-                        className="absolute -left-px top-1/2 hidden h-4 w-[3px] -translate-y-1/2 rounded-full bg-orange-500 sm:block"
-                      />
-                    </motion.span>
-                  )}
-                  <t.icon
+                <Tip key={t.id} label={t.tip} side="bottom">
+                  <TabsTrigger
+                    value={t.id}
                     className={cn(
-                      "relative size-4",
-                      active && "text-orange-600",
+                      "relative flex-col gap-0.5 rounded-xl bg-transparent px-1 py-2 text-[11px] font-semibold shadow-none transition-colors sm:flex-row sm:gap-2 sm:px-3 sm:py-2.5 sm:text-sm",
+                      "data-[state=active]:bg-transparent data-[state=active]:text-orange-700 data-[state=active]:shadow-none",
+                      "data-[state=inactive]:text-stone-600 data-[state=inactive]:hover:text-[#431407]",
                     )}
-                    strokeWidth={1.75}
-                  />
-                  <span className="relative">{t.label}</span>
-                </TabsTrigger>
+                  >
+                    {active && (
+                      <motion.span
+                        layoutId="dash-tab"
+                        className="absolute inset-0 rounded-xl bg-orange-100/80 shadow-[inset_0_1px_0_#fff,0_1px_2px_rgba(15,23,42,0.05)]"
+                        transition={{
+                          type: "spring",
+                          damping: 30,
+                          stiffness: 400,
+                        }}
+                      >
+                        <span
+                          aria-hidden
+                          className="absolute -left-px top-1/2 hidden h-4 w-[3px] -translate-y-1/2 rounded-full bg-orange-500 sm:block"
+                        />
+                      </motion.span>
+                    )}
+                    <t.icon
+                      className={cn(
+                        "relative size-4",
+                        active && "text-orange-600",
+                      )}
+                      strokeWidth={1.75}
+                    />
+                    <span className="relative">{t.label}</span>
+                  </TabsTrigger>
+                </Tip>
               );
             })}
           </TabsList>
         </Tabs>
       </div>
+
+      <ProfileSheet
+        user={user}
+        isOpen={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        isFree={isFree}
+        fullName={fullName}
+        rows={rows}
+      />
     </div>
   );
 }
 
 function ProfileCard({ user }: { user: DashboardUser }) {
   const { isFree, fullName, rows } = useProfile(user);
+  const [isOpen, setIsOpen] = React.useState(false);
+
   return (
-    <aside
-      aria-label="Account"
-      className="hidden w-full xl:sticky xl:top-3 xl:block"
-    >
-      <Surface variant="dark" image={ART.texture} pad="p-5">
-        <div className="flex items-center gap-3">
-          <Avatar name={user.first_name} className="size-12 text-lg" />
-          <div className="min-w-0">
-            <h2 className={cn(HEADING, "truncate text-lg")}>{fullName}</h2>
-            <p
-              className="truncate text-xs text-orange-200/70"
-              title={user.email}
-            >
+    <>
+      <aside
+        aria-label="Account"
+        className="hidden w-full xl:sticky xl:top-3 xl:block"
+      >
+        <Surface variant="dark" image={ART.texture} pad="p-5">
+          <div className="relative">
+            <div className="absolute right-0 top-0 z-20">
+              <Tip label="Open full profile" side="left">
+                <button
+                  onClick={() => setIsOpen(true)}
+                  aria-label="Open full profile"
+                  className={cn(
+                    "flex size-8 items-center justify-center rounded-md bg-orange-500 text-white ring-1 ring-orange-300/40 transition hover:bg-orange-400 active:scale-95",
+                    FOCUS,
+                  )}
+                >
+                  <Maximize2 className="size-3.5" />
+                </button>
+              </Tip>
+            </div>
+
+            <div className="flex items-center gap-3 pr-10">
+              <Avatar name={user.first_name} className="size-11 text-base" />
+              <div className="min-w-0">
+                <h2
+                  className={cn(HEADING, "truncate text-base leading-tight")}
+                >
+                  {fullName}
+                </h2>
+                <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-orange-200/50">
+                  Account
+                </p>
+              </div>
+            </div>
+
+            <p className="mt-3 break-all text-xs text-orange-200/75">
               {user.email}
             </p>
           </div>
-        </div>
 
-        <dl className="mt-5 divide-y divide-orange-200/10 border-t border-orange-200/10">
-          {rows.map((r) => (
-            <div
-              key={r.label}
-              className="flex items-center justify-between gap-3 py-2.5 text-sm"
-            >
-              <dt className="text-orange-200/60">{r.label}</dt>
-              <dd className="min-w-0 truncate">
-                {r.chip ? (
-                  <span className="rounded-full border border-orange-400/30 bg-orange-400/15 px-2.5 py-0.5 text-xs font-semibold text-orange-200">
-                    {r.value}
-                  </span>
-                ) : (
-                  <span className="font-semibold tabular-nums">{r.value}</span>
-                )}
-              </dd>
-            </div>
-          ))}
-        </dl>
+          <dl className="mt-4 divide-y divide-orange-200/10 border-t border-orange-200/10">
+            {rows.map((r) => (
+              <div
+                key={r.label}
+                className="flex items-center justify-between gap-3 py-2.5 text-sm"
+              >
+                <dt className="text-orange-200/60">{r.label}</dt>
+                <dd className="min-w-0 truncate">
+                  {r.chip ? (
+                    <span className="rounded-full border border-orange-400/30 bg-orange-400/15 px-2.5 py-0.5 text-xs font-semibold text-orange-200">
+                      {r.value}
+                    </span>
+                  ) : (
+                    <span className="font-semibold tabular-nums">
+                      {r.value}
+                    </span>
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
 
-        {isFree && <UpgradeLink className="mt-4" />}
-      </Surface>
-    </aside>
+          {isFree && <UpgradeLink className="mt-4" />}
+        </Surface>
+      </aside>
+
+      <ProfileSheet
+        user={user}
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        isFree={isFree}
+        fullName={fullName}
+        rows={rows}
+      />
+    </>
   );
 }
 
@@ -561,7 +590,7 @@ function OverviewTab() {
       {slugs > 0 && (
         <Surface pad="p-3 sm:p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative h-14 w-20 shrink-0 rounded-xl overflow-hidden border border-orange-100 shadow-sm">
+            <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-xl border border-orange-100 shadow-sm">
               <Image
                 src={ART.slugs}
                 alt=""
@@ -578,19 +607,25 @@ function OverviewTab() {
                 Pick an invitation and give it a link your guests will remember.
               </p>
             </div>
-            <Link
-              href="/dashboard/invitations"
-              className={cn(BTN, "rounded-full px-4 py-2 text-xs", FOCUS)}
-            >
-              Choose invitation <ArrowUpRight className="size-3.5" />
-            </Link>
+            <Tip label="Set a custom link" side="top">
+              <Link
+                href="/dashboard/invitations"
+                className={cn(BTN, "rounded-full px-4 py-2 text-xs", FOCUS)}
+              >
+                Choose invitation <ArrowUpRight className="size-3.5" />
+              </Link>
+            </Tip>
           </div>
         </Surface>
       )}
 
       <div className="grid gap-4 lg:grid-cols-5">
         <Surface className="lg:col-span-3">
-          <CardHead title="Recent invitations" href="/dashboard/invitations" />
+          <CardHead
+            title="Recent invitations"
+            href="/dashboard/invitations"
+            tip="See all invitations"
+          />
           {invites.length === 0 ? (
             <EmptyState
               art={ART.builder}
@@ -635,7 +670,11 @@ function OverviewTab() {
         </Surface>
 
         <Surface className="lg:col-span-2">
-          <CardHead title="Latest replies" href="/dashboard/rsvps" />
+          <CardHead
+            title="Latest replies"
+            href="/dashboard/rsvps"
+            tip="See all replies"
+          />
           {rsvps.length === 0 ? (
             <EmptyState
               art={ART.rsvp}
@@ -846,15 +885,17 @@ function AnalyticsTab() {
           image={ART.texture}
           title="Guest responses"
           action={
-            <Link
-              href="/dashboard/rsvps"
-              className={cn(
-                "rounded-md text-xs font-semibold text-orange-200/70 transition-colors hover:text-orange-100",
-                FOCUS,
-              )}
-            >
-              Manage
-            </Link>
+            <Tip label="Review and edit RSVPs" side="left">
+              <Link
+                href="/dashboard/rsvps"
+                className={cn(
+                  "rounded-md text-xs font-semibold text-orange-200/70 transition-colors hover:text-orange-100",
+                  FOCUS,
+                )}
+              >
+                Manage
+              </Link>
+            </Tip>
           }
         >
           {total === 0 ? (
@@ -1060,6 +1101,7 @@ function ActivityTab() {
             title="Recent activity"
             href="/dashboard/notifications"
             cta="See all"
+            tip="Open all notifications"
           />
         </div>
         {data.length === 0 ? (
@@ -1177,17 +1219,19 @@ function BillingTab() {
                 : "Upgrade whenever your event grows."}
             </p>
             {!sub && (
-              <Link
-                href="/plans"
-                className={cn(
-                  BTN,
-                  "mt-4 rounded-full px-4 py-2 text-sm",
-                  FOCUS,
-                )}
-              >
-                <Crown className="size-4" strokeWidth={1.75} /> Upgrade{" "}
-                <ArrowUpRight className="size-3.5" />
-              </Link>
+              <Tip label="Compare plans" side="top">
+                <Link
+                  href="/plans"
+                  className={cn(
+                    BTN,
+                    "mt-4 rounded-full px-4 py-2 text-sm",
+                    FOCUS,
+                  )}
+                >
+                  <Crown className="size-4" strokeWidth={1.75} /> Upgrade{" "}
+                  <ArrowUpRight className="size-3.5" />
+                </Link>
+              </Tip>
             )}
           </div>
         </Surface>
@@ -1209,6 +1253,7 @@ function BillingTab() {
             title="Payment history"
             href="/dashboard/billing"
             cta="Full billing"
+            tip="Open full billing"
           />
         </div>
         {orders.length === 0 ? (

@@ -1,10 +1,12 @@
 // app/api/v1/admin/dashboard/templates/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/db/connections/postgres_connection";
-import { getRedisClient } from "@/db/connections/redis_connection";
 import { UpdateTemplateSchema } from "@/lib/validations/admin";
 import { ZodError } from "zod";
 import { STATUS_CODE } from "@/lib/status_codes";
+import { isValidUuid, safeInvalidateCache } from "@/lib/api/helpers";
+
+type PgError = { code?: string };
 
 // GET: Fetch a single template by ID
 export async function GET(
@@ -21,13 +23,18 @@ export async function GET(
 
     const { id } = await params;
 
-    // We join the templates table with template_bodies to get the design_schema
+    if (!isValidUuid(id))
+      return NextResponse.json(
+        { status: "error", message: "Invalid template id" },
+        { status: STATUS_CODE.BAD_REQUEST },
+      );
+
     const [template] = await sql`
       SELECT t.*, c.name as category_name, tb.design_schema
       FROM templates t
       LEFT JOIN template_categories c ON t.category_id = c.id
       LEFT JOIN template_bodies tb ON t.id = tb.template_id AND tb.version = 1
-      WHERE t.id = ${id}
+      WHERE t.id = ${id}::uuid
     `;
 
     if (!template) {
@@ -41,7 +48,7 @@ export async function GET(
       { status: "success", data: template },
       { status: STATUS_CODE.OK },
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[GET_SINGLE_TEMPLATE_ERROR]", error);
     return NextResponse.json(
       { status: "error", message: "Internal server error" },
@@ -65,9 +72,7 @@ export async function PATCH(
 
     const { id } = await params;
 
-    if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
-    ) {
+    if (!isValidUuid(id)) {
       return NextResponse.json(
         { status: "error", message: "Invalid template id" },
         { status: STATUS_CODE.BAD_REQUEST },
@@ -77,7 +82,6 @@ export async function PATCH(
     const json = await req.json();
     const parsed = UpdateTemplateSchema.parse(json);
 
-    // design_schema lives in template_bodies, not templates
     const { design_schema, ...body } = parsed as typeof parsed & {
       design_schema?: unknown;
     };
@@ -92,7 +96,6 @@ export async function PATCH(
       );
     }
 
-    // JSON values are sent as plain strings and cast to jsonb in SQL.
     const j = (v: unknown) => (v === undefined ? null : JSON.stringify(v));
 
     const updatedTemplate = await sql.begin(async (tx) => {
@@ -161,14 +164,7 @@ export async function PATCH(
       );
     }
 
-    // Cache invalidation must never fail a save that already succeeded.
-    try {
-      const redis = await getRedisClient();
-      const cacheKeys = await redis.keys("admin:templates:*");
-      if (cacheKeys.length > 0) await redis.del(cacheKeys);
-    } catch (cacheErr) {
-      console.error("[UPDATE_TEMPLATE_CACHE_ERROR]", cacheErr);
-    }
+    await safeInvalidateCache("admin:templates:*");
 
     return NextResponse.json(
       {
@@ -178,26 +174,42 @@ export async function PATCH(
       },
       { status: STATUS_CODE.OK },
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof ZodError) {
       return NextResponse.json(
         { status: "error", message: "Validation failed", error: error.issues },
         { status: STATUS_CODE.BAD_REQUEST },
       );
     }
+
+    const e = error as { code?: string };
+    // 23503 = bad category_id, 22P02 = invalid enum (e.g. unknown status)
+    if (e?.code === "23503") {
+      return NextResponse.json(
+        { status: "error", message: "Invalid category_id" },
+        { status: STATUS_CODE.BAD_REQUEST },
+      );
+    }
+    if (e?.code === "22P02") {
+      return NextResponse.json(
+        { status: "error", message: "Invalid value for one of the fields" },
+        { status: STATUS_CODE.BAD_REQUEST },
+      );
+    }
+
     console.error("[UPDATE_TEMPLATE_ERROR]", error);
     return NextResponse.json(
       {
         status: "error",
         message: "Internal server error",
-        error: error.message,
+        error: "Internal server error",
       },
       { status: STATUS_CODE.INTERNAL_SERVER_ERROR },
     );
   }
 }
 
-// DELETE: Delete Template
+// DELETE: Delete Template (guarded — refuses to destroy business records)
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -212,9 +224,36 @@ export async function DELETE(
 
     const { id } = await params;
 
+    if (!isValidUuid(id)) {
+      return NextResponse.json(
+        { status: "error", message: "Invalid template id" },
+        { status: STATUS_CODE.BAD_REQUEST },
+      );
+    }
+
+    // Guard: template_purchases has ON DELETE CASCADE, so a naive delete
+    // silently erases users' purchase records / payment evidence.
+    const [guard] = await sql`
+      SELECT
+        (SELECT COUNT(*)::int FROM template_purchases WHERE template_id = ${id}::uuid) AS purchases,
+        (SELECT COUNT(*)::int FROM invitations WHERE template_id = ${id}::uuid) AS invitations
+    `;
+
+    if (guard.purchases > 0 || guard.invitations > 0) {
+      return NextResponse.json(
+        {
+          status: "error",
+          message:
+            "This template has existing purchases or invitations and cannot be deleted. Archive it instead (set status to 'archived').",
+          error: "TEMPLATE_IN_USE",
+        },
+        { status: STATUS_CODE.CONFLICT },
+      );
+    }
+
     const [deletedTemplate] = await sql`
-      DELETE FROM templates 
-      WHERE id = ${id} 
+      DELETE FROM templates
+      WHERE id = ${id}::uuid
       RETURNING id
     `;
 
@@ -225,10 +264,7 @@ export async function DELETE(
       );
     }
 
-    // Invalidate Cache
-    const redis = await getRedisClient();
-    const cacheKeys = await redis.keys("admin:templates:*");
-    if (cacheKeys.length > 0) await redis.del(cacheKeys);
+    await safeInvalidateCache("admin:templates:*");
 
     return NextResponse.json(
       {
@@ -238,13 +274,13 @@ export async function DELETE(
       },
       { status: STATUS_CODE.OK },
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[DELETE_TEMPLATE_ERROR]", error);
     return NextResponse.json(
       {
         status: "error",
         message: "Internal server error",
-        error: error.message,
+        error: "Internal server error",
       },
       { status: STATUS_CODE.INTERNAL_SERVER_ERROR },
     );

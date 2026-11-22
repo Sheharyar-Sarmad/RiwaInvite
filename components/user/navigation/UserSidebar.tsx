@@ -92,7 +92,6 @@ const ORB_ON =
   "bg-gradient-to-b from-orange-400 to-orange-600 text-white " +
   "shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_6px_12px_-4px_rgba(249,115,22,0.75)]";
 
-/** `/dashboard` is exact-match only; every other route also stays active on sub-pages. */
 function isActive(pathname: string | null, href: string) {
   if (!pathname) return false;
   if (href === "/dashboard") return pathname === href;
@@ -153,10 +152,6 @@ function Panel({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/*  Logout (shared by desktop + mobile)                                       */
-/* -------------------------------------------------------------------------- */
 
 type LogoutState = { open: boolean; allDevices: boolean };
 
@@ -257,10 +252,6 @@ function LogoutModal({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Sidebar body                                                              */
-/* -------------------------------------------------------------------------- */
-
 function SidebarBody({
   user,
   collapsed,
@@ -272,7 +263,6 @@ function SidebarBody({
   user: UserSession;
   collapsed: boolean;
   layoutId: string;
-  /** Larger tap targets for the mobile drawer. */
   touch?: boolean;
   onToggleCollapsed?: () => void;
   onLogoutRequest: (allDevices: boolean) => void;
@@ -292,7 +282,6 @@ function SidebarBody({
 
   return (
     <>
-      {/* Brand */}
       <div
         className={`relative flex h-[60px] shrink-0 items-center ${
           collapsed ? "justify-center px-3" : "gap-3 px-5"
@@ -345,7 +334,6 @@ function SidebarBody({
         className="mx-4 h-px shrink-0 bg-gradient-to-r from-transparent via-orange-200 to-transparent"
       />
 
-      {/* Nav Container */}
       <div className="relative flex-1 min-h-0 flex flex-col">
         <nav
           role="navigation"
@@ -467,7 +455,6 @@ function SidebarBody({
         </nav>
       </div>
 
-      {/* Profile & Sign Out Section */}
       <div
         className={`shrink-0 p-2 relative z-20 ${touch ? "pb-[max(0.5rem,env(safe-area-inset-bottom))]" : ""}`}
       >
@@ -503,7 +490,6 @@ function SidebarBody({
             )}
           </div>
 
-          {/* Sign out triggers the modal */}
           {!collapsed && (
             <div className="mt-1 flex flex-col gap-0.5 border-t border-orange-100/50 pt-1">
               <button
@@ -533,10 +519,6 @@ function SidebarBody({
     </>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/*  Desktop sidebar                                                           */
-/* -------------------------------------------------------------------------- */
 
 export function UserSidebar({
   user,
@@ -577,10 +559,6 @@ export function UserSidebar({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Mobile nav                                                                */
-/* -------------------------------------------------------------------------- */
-
 export function UserMobileNav({ user }: { user: UserSession }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -612,16 +590,43 @@ export function UserMobileNav({ user }: { user: UserSession }) {
   }, [open]);
 
   return (
-    <div className="lg:hidden">
+    <div className="flex items-center gap-3 lg:hidden">
       <button
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open menu"
         aria-expanded={open}
-        className={`flex h-10 w-10 items-center justify-center rounded-xl text-neutral-600 active:scale-95 ${RAISED_BTN} ${FOCUS}`}
+        aria-controls="mobile-nav-drawer"
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-neutral-600 active:scale-95 ${RAISED_BTN} ${FOCUS}`}
       >
         <Menu aria-hidden="true" className="h-5 w-5" />
       </button>
+
+      <Link
+        href="/dashboard"
+        aria-label="Riwainvite, go to overview"
+        className={`group flex min-w-0 items-center gap-2.5 rounded-xl py-1 pr-2 ${FOCUS}`}
+      >
+        <span className="relative shrink-0">
+          <span
+            aria-hidden
+            className="absolute inset-0 rounded-xl bg-orange-400/40 blur-md"
+          />
+          <span className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl border border-orange-100 bg-gradient-to-b from-white to-orange-50 shadow-[inset_0_1px_0_#fff,0_8px_16px_-6px_rgba(249,115,22,0.6)] transition-transform duration-200 group-active:scale-95">
+            <Image
+              src="/logo.png"
+              alt=""
+              width={28}
+              height={28}
+              priority
+              className="object-contain"
+            />
+          </span>
+        </span>
+        <span className="truncate font-[family-name:var(--font-display)] text-[15px] font-semibold leading-none tracking-tight text-neutral-900">
+          Riwainvite
+        </span>
+      </Link>
 
       {mounted &&
         createPortal(
@@ -633,12 +638,14 @@ export function UserMobileNav({ user }: { user: UserSession }) {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
                   onClick={() => setOpen(false)}
                   aria-hidden="true"
                   className="fixed inset-0 z-40 bg-orange-950/25 backdrop-blur-sm lg:hidden"
                 />
                 <motion.aside
                   key="panel"
+                  id="mobile-nav-drawer"
                   role="dialog"
                   aria-modal="true"
                   aria-label="Navigation menu"
@@ -647,7 +654,6 @@ export function UserMobileNav({ user }: { user: UserSession }) {
                   animate={{ x: 0 }}
                   exit={{ x: "-110%" }}
                   transition={{ type: "spring", damping: 30, stiffness: 300 }}
-                  // Native-feel: swipe left to dismiss
                   drag="x"
                   dragDirectionLock
                   dragConstraints={{ left: 0, right: 0 }}

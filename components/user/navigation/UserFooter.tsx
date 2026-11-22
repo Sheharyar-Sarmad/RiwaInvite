@@ -12,8 +12,9 @@ import {
   useSpring,
 } from "framer-motion";
 import { ArrowUp, ArrowUpRight, Check, Copy, Mail, Sparkles } from "lucide-react";
+import { Tip } from "@/components/user/sections/dashboard/ui/DashboardUI";
 
-// Custom Brand SVGs (Lucide removed brand icons)
+// Custom Brand SVGs
 const FacebookIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
     <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
@@ -47,11 +48,11 @@ const itemV = {
   show: { opacity: 1, y: 0, transition: { duration: 0.55, ease: EASE } },
 };
 
-/* Icon that leans toward the cursor */
 function MagneticSocial({ href, label, children }: { href: string; label: string; children: React.ReactNode }) {
   const reduce = useReducedMotion() ?? false;
   const mx = useSpring(useMotionValue(0), { stiffness: 260, damping: 16 });
   const my = useSpring(useMotionValue(0), { stiffness: 260, damping: 16 });
+
   return (
     <motion.a
       href={href}
@@ -79,7 +80,6 @@ function MagneticSocial({ href, label, children }: { href: string; label: string
   );
 }
 
-/* Link with a sliding underline and a nudge arrow */
 function FootLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <Link
@@ -95,7 +95,6 @@ function FootLink({ href, children }: { href: string; children: React.ReactNode 
   );
 }
 
-/* Back-to-top with a ring that fills as the page scrolls */
 function TopButton({ onClick }: { onClick: () => void }) {
   const [p, setP] = React.useState(0);
   React.useEffect(() => {
@@ -113,6 +112,7 @@ function TopButton({ onClick }: { onClick: () => void }) {
       window.removeEventListener("scroll", read);
     };
   }, []);
+
   return (
     <motion.button
       onClick={onClick}
@@ -153,7 +153,6 @@ export function UserFooter() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Cursor-following spotlight across the whole footer
   const gx = useMotionValue(-500);
   const gy = useMotionValue(-500);
   const spot = useMotionTemplate`radial-gradient(420px circle at ${gx}px ${gy}px, rgba(249,115,22,0.16), transparent 70%)`;
@@ -198,7 +197,6 @@ export function UserFooter() {
       }}
       className="relative mt-12 overflow-hidden rounded-[2rem] border border-orange-200/80 bg-gradient-to-br from-orange-50/90 via-white to-orange-50/50 pb-6 shadow-[inset_0_1px_0_#fff,0_30px_60px_-30px_rgba(154,52,18,0.25)] backdrop-blur-xl"
     >
-      {/* Ambient layers */}
       <div aria-hidden className="pointer-events-none absolute inset-0 select-none overflow-hidden">
         <motion.div
           className="absolute -right-24 -top-24 size-[460px] rounded-full bg-orange-300/30 blur-[100px]"
@@ -224,7 +222,6 @@ export function UserFooter() {
       </div>
 
       <div className="relative z-10 mx-auto max-w-7xl px-5 py-10 sm:px-8 lg:py-14">
-        {/* CTA band */}
         <motion.div
           initial={{ opacity: 0, y: 24, scale: 0.98 }}
           whileInView={{ opacity: 1, y: 0, scale: 1 }}
@@ -249,17 +246,18 @@ export function UserFooter() {
               </h2>
             </div>
             <motion.div whileHover={{ y: -3 }} whileTap={{ scale: 0.96 }} className="shrink-0">
-              <Link
-                href="/dashboard/library"
-                className="inline-flex items-center gap-2 rounded-full bg-gradient-to-b from-orange-400 to-orange-600 px-6 py-3.5 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_14px_30px_-8px_rgba(249,115,22,0.9)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-              >
-                Browse templates <ArrowUpRight className="size-4" />
-              </Link>
+              <Tip label="Browse all templates" side="left">
+                <Link
+                  href="/dashboard/library"
+                  className="inline-flex items-center gap-2 rounded-full bg-gradient-to-b from-orange-400 to-orange-600 px-6 py-3.5 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_14px_30px_-8px_rgba(249,115,22,0.9)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                >
+                  Browse templates <ArrowUpRight className="size-4" />
+                </Link>
+              </Tip>
             </motion.div>
           </div>
         </motion.div>
 
-        {/* Columns */}
         <div className="grid grid-cols-2 gap-x-6 gap-y-10 md:grid-cols-3 lg:grid-cols-5">
           <motion.div
             variants={colV}
@@ -287,9 +285,11 @@ export function UserFooter() {
             </motion.p>
             <motion.div variants={itemV} className="mt-6 flex gap-3">
               {socials.map((s) => (
-                <MagneticSocial key={s.label} href={s.href} label={s.label}>
-                  <s.icon className="size-[18px]" />
-                </MagneticSocial>
+                <Tip key={s.label} label={s.label} side="top">
+                  <MagneticSocial href={s.href} label={s.label}>
+                    <s.icon className="size-[18px]" />
+                  </MagneticSocial>
+                </Tip>
               ))}
             </motion.div>
           </motion.div>
@@ -302,7 +302,9 @@ export function UserFooter() {
               <ul className="space-y-3">
                 {items.map((l) => (
                   <motion.li key={l.label} variants={itemV}>
-                    <FootLink href={l.href}>{l.label}</FootLink>
+                    <Tip label={`Go to ${l.label}`} side="top">
+                      <FootLink href={l.href}>{l.label}</FootLink>
+                    </Tip>
                   </motion.li>
                 ))}
               </ul>
@@ -310,7 +312,6 @@ export function UserFooter() {
           ))}
         </div>
 
-        {/* Bottom bar */}
         <motion.div
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
@@ -321,30 +322,34 @@ export function UserFooter() {
           <p className="text-xs font-medium text-slate-500">© {new Date().getFullYear()} Riwainvite. All rights reserved.</p>
 
           <div className="flex flex-wrap items-center justify-center gap-3 sm:justify-end">
-            <motion.button
-              onClick={copyEmail}
-              whileTap={{ scale: 0.96 }}
-              aria-live="polite"
-              className="group flex items-center gap-2 rounded-full border border-orange-200 bg-white/90 px-4 py-2.5 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:border-orange-300 hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
-            >
-              <Mail className="size-4 text-orange-500" />
-              {email}
-              <span className="relative flex size-4 items-center justify-center">
-                <AnimatePresence mode="wait" initial={false}>
-                  {copied ? (
-                    <motion.span key="ok" initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0 }} transition={{ type: "spring", stiffness: 500, damping: 18 }}>
-                      <Check className="size-3.5 text-emerald-500" strokeWidth={3} />
-                    </motion.span>
-                  ) : (
-                    <motion.span key="cp" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
-                      <Copy className="size-3.5 text-slate-400 group-hover:text-orange-500" />
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-              </span>
-            </motion.button>
+            <Tip label={copied ? "Copied!" : "Copy email address"} side="top">
+              <motion.button
+                onClick={copyEmail}
+                whileTap={{ scale: 0.96 }}
+                aria-live="polite"
+                className="group flex items-center gap-2 rounded-full border border-orange-200 bg-white/90 px-4 py-2.5 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:border-orange-300 hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
+              >
+                <Mail className="size-4 text-orange-500" />
+                {email}
+                <span className="relative flex size-4 items-center justify-center">
+                  <AnimatePresence mode="wait" initial={false}>
+                    {copied ? (
+                      <motion.span key="ok" initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0 }} transition={{ type: "spring", stiffness: 500, damping: 18 }}>
+                        <Check className="size-3.5 text-emerald-500" strokeWidth={3} />
+                      </motion.span>
+                    ) : (
+                      <motion.span key="cp" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
+                        <Copy className="size-3.5 text-slate-400 group-hover:text-orange-500" />
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </span>
+              </motion.button>
+            </Tip>
 
-            <TopButton onClick={scrollToTop} />
+            <Tip label="Back to top" side="top">
+              <TopButton onClick={scrollToTop} />
+            </Tip>
           </div>
         </motion.div>
       </div>

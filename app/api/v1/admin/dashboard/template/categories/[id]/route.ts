@@ -1,9 +1,10 @@
+// app/api/v1/admin/dashboard/template/categories/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/db/connections/postgres_connection";
-import { getRedisClient } from "@/db/connections/redis_connection";
 import { UpdateCategorySchema } from "@/lib/validations/admin";
 import { ZodError } from "zod";
 import { STATUS_CODE } from "@/lib/status_codes";
+import { isValidUuid, safeInvalidateCache } from "@/lib/api/helpers";
 
 // PATCH: Update Category
 export async function PATCH(
@@ -19,6 +20,14 @@ export async function PATCH(
       );
 
     const { id } = await params;
+
+    if (!isValidUuid(id)) {
+      return NextResponse.json(
+        { status: "error", message: "Invalid category id" },
+        { status: STATUS_CODE.BAD_REQUEST },
+      );
+    }
+
     const json = await req.json();
     const body = UpdateCategorySchema.parse(json);
 
@@ -35,9 +44,9 @@ export async function PATCH(
     );
 
     const [updatedCategory] = await sql`
-      UPDATE template_categories 
+      UPDATE template_categories
       SET ${sql(updates, validKeys)}, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${id}
+      WHERE id = ${id}::uuid
       RETURNING *
     `;
 
@@ -53,9 +62,9 @@ export async function PATCH(
       await sql`
         INSERT INTO admin_notifications (admin_id, type, title, message)
         VALUES (
-          ${adminId}, 
-          'system', 
-          'Category Updated', 
+          ${adminId},
+          'system',
+          'Category Updated',
           ${`Category "${updatedCategory.name}" was updated.`}
         )
       `;
@@ -63,17 +72,14 @@ export async function PATCH(
       console.warn("[NOTIFICATION_ERROR]", notifError);
     }
 
-    // Invalidate Redis Cache
-    const redis = await getRedisClient();
-    const cacheKeys = await redis.keys("admin:categories:*");
-    if (cacheKeys.length > 0) await redis.del(cacheKeys);
+    await safeInvalidateCache("admin:categories:*", "admin:templates:*");
 
     return NextResponse.json({
       status: "success",
       message: "Category updated successfully",
       data: updatedCategory,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof ZodError) {
       return NextResponse.json(
         { status: "error", message: "Validation failed", error: error.issues },
@@ -81,7 +87,7 @@ export async function PATCH(
       );
     }
     // 23505 = Unique Violation
-    if (error.code === "23505") {
+    if ((error as { code?: string }).code === "23505") {
       return NextResponse.json(
         {
           status: "error",
@@ -90,13 +96,20 @@ export async function PATCH(
         { status: STATUS_CODE.CONFLICT },
       );
     }
+    // 23503 = category_id FK (bad id format / nonexistent references)
+    if ((error as { code?: string }).code === "23503") {
+      return NextResponse.json(
+        { status: "error", message: "Invalid reference for one of the fields" },
+        { status: STATUS_CODE.BAD_REQUEST },
+      );
+    }
 
     console.error("[UPDATE_CATEGORY_ERROR]", error);
     return NextResponse.json(
       {
         status: "error",
         message: "Internal server error",
-        error: error.message,
+        error: "Internal server error",
       },
       { status: STATUS_CODE.INTERNAL_SERVER_ERROR },
     );
@@ -106,28 +119,35 @@ export async function PATCH(
 // Delete Category
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const adminId = req.headers.get("x-admin-id");
     if (!adminId)
       return NextResponse.json(
         { status: "error", message: "Unauthorized" },
-        { status: STATUS_CODE.UNAUTHORIZED }
+        { status: STATUS_CODE.UNAUTHORIZED },
       );
 
     const { id } = await params;
 
+    if (!isValidUuid(id)) {
+      return NextResponse.json(
+        { status: "error", message: "Invalid category id" },
+        { status: STATUS_CODE.BAD_REQUEST },
+      );
+    }
+
     const [deletedCategory] = await sql`
-      DELETE FROM template_categories 
-      WHERE id = ${id} 
+      DELETE FROM template_categories
+      WHERE id = ${id}::uuid
       RETURNING id, name
     `;
 
     if (!deletedCategory) {
       return NextResponse.json(
         { status: "error", message: "Category not found" },
-        { status: STATUS_CODE.NOT_FOUND }
+        { status: STATUS_CODE.NOT_FOUND },
       );
     }
 
@@ -136,9 +156,9 @@ export async function DELETE(
       await sql`
         INSERT INTO admin_notifications (admin_id, type, title, message)
         VALUES (
-          ${adminId}, 
-          'alert', 
-          'Category Deleted', 
+          ${adminId},
+          'alert',
+          'Category Deleted',
           ${`Category "${deletedCategory.name}" was permanently deleted.`}
         )
       `;
@@ -146,25 +166,29 @@ export async function DELETE(
       console.warn("[NOTIFICATION_ERROR]", notifError);
     }
 
-    // Invalidate Cache
-    const redis = await getRedisClient();
-    const cacheKeys = await redis.keys("admin:categories:*");
-    if (cacheKeys.length > 0) await redis.del(cacheKeys);
+    await safeInvalidateCache("admin:categories:*", "admin:templates:*");
 
     return NextResponse.json(
-      { status: "success", message: "Category deleted successfully", data: { id } },
-      { status: STATUS_CODE.OK }
+      {
+        status: "success",
+        message: "Category deleted successfully",
+        data: { id },
+      },
+      { status: STATUS_CODE.OK },
     );
-
-  } catch (error: any) {
-    if (error.code === "23001" || error.code === "23503") {
+  } catch (error: unknown) {
+    if (
+      (error as { code?: string }).code === "23001" ||
+      (error as { code?: string }).code === "23503"
+    ) {
       return NextResponse.json(
         {
           status: "error",
-          message: "Cannot delete category because it is currently being used by one or more templates. Please delete or reassign those templates first.",
+          message:
+            "Cannot delete category because it is currently being used by one or more templates. Please delete or reassign those templates first.",
           error: "FOREIGN_KEY_VIOLATION",
         },
-        { status: STATUS_CODE.CONFLICT }
+        { status: STATUS_CODE.CONFLICT },
       );
     }
 
@@ -173,9 +197,9 @@ export async function DELETE(
       {
         status: "error",
         message: "Internal server error",
-        error: error.message,
+        error: "Internal server error",
       },
-      { status: STATUS_CODE.INTERNAL_SERVER_ERROR }
+      { status: STATUS_CODE.INTERNAL_SERVER_ERROR },
     );
   }
 }
