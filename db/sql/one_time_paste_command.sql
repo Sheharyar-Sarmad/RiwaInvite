@@ -531,3 +531,35 @@ $$ LANGUAGE plpgsql;
 -- Create the composite unique index required for ON CONFLICT (user_id, template_id)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_drafts_unique 
 ON user_drafts (user_id, template_id);
+
+-- Fresh installs (same table as before, new default):
+CREATE TABLE IF NOT EXISTS user_ai_credentials (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider VARCHAR(20) NOT NULL DEFAULT 'groq',
+    encrypted_key TEXT NOT NULL,
+    key_iv TEXT NOT NULL,
+    key_tag TEXT NOT NULL,
+    model VARCHAR(50) NOT NULL DEFAULT 'openai/gpt-oss-120b',
+    is_valid BOOLEAN NOT NULL DEFAULT TRUE,
+    last_validated_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_user_provider UNIQUE (user_id, provider)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_ai_credentials_user_provider
+ON user_ai_credentials (user_id, provider);
+
+DROP TRIGGER IF EXISTS trg_update_user_ai_credentials_updated_at ON user_ai_credentials;
+CREATE TRIGGER trg_update_user_ai_credentials_updated_at
+BEFORE UPDATE ON user_ai_credentials
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Existing installs (your schema's safe-alter pattern):
+ALTER TABLE user_ai_credentials
+  ALTER COLUMN model SET DEFAULT 'openai/gpt-oss-120b';
+
+UPDATE user_ai_credentials
+SET model = 'openai/gpt-oss-120b'
+WHERE provider = 'groq' AND model IS DISTINCT FROM 'openai/gpt-oss-120b';

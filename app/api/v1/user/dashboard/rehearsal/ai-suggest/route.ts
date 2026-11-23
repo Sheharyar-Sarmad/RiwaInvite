@@ -4,20 +4,24 @@
 //   ideas   -> { data: { suggestion, suggestions: [{ target, styles, reason }] } }
 //   builder -> { data: { suggestion, actions: { details?, page?, edits?, adds?, removes? } } }
 //
+// Errors the client should handle by `code`:
+//   AI_KEY_MISSING  -> user has not added a Groq API key (show "Add your key in Settings")
+//   AI_KEY_INVALID  -> stored key was rejected by Groq (show "Your key is invalid, update it")
+//   AI_KEY_LIMIT    -> user's key hit its Groq rate limit / quota
+//
 // Builder actions are PROPOSALS. The client shows them to the user (human in the loop)
 // and only applies them after the user approves.
 //
 // Security model:
 //  - The user id comes only from the `x-user-id` header your proxy injects.
 //  - The draft in `context.draft_id` must belong to that user.
+//  - The user's API key is stored encrypted (AES-256-GCM) and decrypted only in memory here.
+//    It is never logged and never returned to the client.
 //  - The model only ever sees a short outline (ids, types, <= 80 chars of text, colours, fonts).
-//  - Everything the model returns is re-validated here: allow-listed CSS properties,
-//    safe values, known element ids, valid dates and times. The client validates again.
-//  - html blocks can be used as an anchor ("after the hero") but never edited or removed.
-//
-// Provider: Groq (via settings()). callModel is the only provider-specific code.
+//  - Everything the model returns is re-validated here.
 
 import { NextRequest, NextResponse } from "next/server";
+import { createDecipheriv } from "node:crypto";
 import { z } from "zod";
 import { sql } from "@/db/connections/postgres_connection";
 import { errorResponse } from "@/lib/api/errors";
@@ -91,6 +95,63 @@ function rateLimited(userId: string): boolean {
     for (const [k, v] of hits) if (v.every((t) => now - t >= WINDOW_MS)) hits.delete(k);
   }
   return false;
+}
+
+/* ========================================================================== */
+/*  User API key (encrypted at rest)                                          */
+/* ========================================================================== */
+
+const DEFAULT_MODEL = "openai/gpt-oss-120b";
+
+type Credential = { apiKey: string; model: string };
+
+/** Accepts a 32-byte key as 64 hex chars or base64. */
+function getMasterKey(): Buffer {
+  const raw = String(config.aiEncryptionKey ?? "");
+  const key = /^[0-9a-f]{64}$/i.test(raw) ? Buffer.from(raw, "hex") : Buffer.from(raw, "base64");
+  if (key.length !== 32) throw new ModelError("config", "AI encryption key must be 32 bytes");
+  return key;
+}
+
+/** AES-256-GCM. encrypted_key, key_iv and key_tag are stored base64 (change encoding here if yours differs). */
+function decryptKey(encrypted: string, iv: string, tag: string): string {
+  const decipher = createDecipheriv("aes-256-gcm", getMasterKey(), Buffer.from(iv, "base64"));
+  decipher.setAuthTag(Buffer.from(tag, "base64"));
+  return Buffer.concat([decipher.update(Buffer.from(encrypted, "base64")), decipher.final()]).toString("utf8");
+}
+
+/** Returns the user's Groq credential, or null if they never added a usable key. */
+async function loadCredential(userId: string): Promise<Credential | null> {
+  const [row] = await sql`
+    SELECT encrypted_key, key_iv, key_tag, model, is_valid
+    FROM user_ai_credentials
+    WHERE user_id = ${userId} AND provider = 'groq'
+    LIMIT 1
+  `;
+  if (!row || !row.encrypted_key) return null;
+  if (row.is_valid === false) throw new ModelError("invalid_key", "Stored key is marked invalid");
+
+  try {
+    const apiKey = decryptKey(row.encrypted_key, row.key_iv, row.key_tag);
+    if (!apiKey) return null;
+    return { apiKey, model: (row.model as string) || DEFAULT_MODEL };
+  } catch (err) {
+    if (err instanceof ModelError) throw err;
+    // Could not decrypt (corrupted data or rotated master key): treat as invalid key.
+    throw new ModelError("invalid_key", "Stored key could not be decrypted");
+  }
+}
+
+async function markKeyInvalid(userId: string): Promise<void> {
+  try {
+    await sql`
+      UPDATE user_ai_credentials
+      SET is_valid = FALSE, last_validated_at = CURRENT_TIMESTAMP
+      WHERE user_id = ${userId} AND provider = 'groq'
+    `;
+  } catch {
+    /* best effort */
+  }
 }
 
 /* ========================================================================== */
@@ -306,29 +367,31 @@ function userPrompt(message: string, ctx: Context, mode: Mode): string {
 }
 
 /* ========================================================================== */
-/*  Model call (the only provider-specific code) — Groq                       */
+/*  Model call (the only provider-specific code) — Groq, user's own key       */
 /* ========================================================================== */
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const UPSTREAM_TIMEOUT_MS = 12_000;
 
+type ModelErrorKind = "config" | "upstream" | "unreadable" | "invalid_key" | "key_limit";
+
 class ModelError extends Error {
   constructor(
-    readonly kind: "config" | "upstream" | "unreadable",
+    readonly kind: ModelErrorKind,
     message: string,
   ) {
     super(message);
   }
 }
 
-/** Calls one Groq model and returns the raw text. Throws ModelError on any failure. */
-async function callOneModel(model: string, system: string, user: string): Promise<string> {
+/** Calls one Groq model with the user's key and returns the raw text. Throws ModelError on failure. */
+async function callOneModel(apiKey: string, model: string, system: string, user: string): Promise<string> {
   let res: Response;
   try {
     res = await fetch(GROQ_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${config.groqApiKey}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -347,8 +410,11 @@ async function callOneModel(model: string, system: string, user: string): Promis
   } catch {
     throw new ModelError("upstream", `Model request failed or timed out (${model})`);
   }
+
   if (!res.ok) {
     await res.body?.cancel();
+    if (res.status === 401 || res.status === 403) throw new ModelError("invalid_key", "Groq rejected the key");
+    if (res.status === 429) throw new ModelError("key_limit", "Groq rate limit or quota reached");
     throw new ModelError("upstream", `Model responded with ${res.status} (${model})`);
   }
 
@@ -360,16 +426,18 @@ async function callOneModel(model: string, system: string, user: string): Promis
   return text;
 }
 
-/** Tries the primary model, then the fallback. Throws ModelError("config") if no key. */
-async function callModel(system: string, user: string): Promise<string> {
-  if (!config.groqApiKey) throw new ModelError("config", "GROQ_API_KEY is not set");
-
-  const models = [config.llmModel, config.fallbackLlmModel].filter(Boolean);
+/**
+ * Tries the user's chosen model, then the default model (if different).
+ * Key problems (invalid / rate limit) stop immediately: another model won't fix them.
+ */
+async function callModel(cred: Credential, system: string, user: string): Promise<string> {
+  const models = [...new Set([cred.model, DEFAULT_MODEL])];
   let lastErr: unknown;
   for (const model of models) {
     try {
-      return await callOneModel(model, system, user);
+      return await callOneModel(cred.apiKey, model, system, user);
     } catch (err) {
+      if (err instanceof ModelError && (err.kind === "invalid_key" || err.kind === "key_limit")) throw err;
       lastErr = err;
       console.warn("[REHEARSAL_AI_FALLBACK]", model, err instanceof Error ? err.message : "unknown");
     }
@@ -394,6 +462,20 @@ function parseJsonObject(text: string): Rec | null {
 /* ========================================================================== */
 /*  Handler                                                                   */
 /* ========================================================================== */
+
+const keyMissingResponse = () =>
+  errorResponse(
+    STATUS_CODE.FORBIDDEN,
+    "AI_KEY_MISSING",
+    "You haven't added an AI API key yet. Add your Groq API key in Settings to use the AI assistant.",
+  );
+
+const keyInvalidResponse = () =>
+  errorResponse(
+    STATUS_CODE.FORBIDDEN,
+    "AI_KEY_INVALID",
+    "Your Groq API key isn't working. Please update it in Settings.",
+  );
 
 export async function POST(req: NextRequest) {
   const userId = req.headers.get("x-user-id");
@@ -429,7 +511,20 @@ export async function POST(req: NextRequest) {
       return errorResponse(STATUS_CODE.FORBIDDEN, "DRAFT_NOT_FOUND", "Draft not found");
     }
 
-    const raw = await callModel(systemPrompt(mode), userPrompt(message, context, mode));
+    // The user must have their own API key.
+    const cred = await loadCredential(userId);
+    if (!cred) return keyMissingResponse();
+
+    let raw: string;
+    try {
+      raw = await callModel(cred, systemPrompt(mode), userPrompt(message, context, mode));
+    } catch (err) {
+      if (err instanceof ModelError && err.kind === "invalid_key") {
+        await markKeyInvalid(userId);
+      }
+      throw err;
+    }
+
     const obj = parseJsonObject(raw);
     if (!obj) throw new ModelError("unreadable", "Model reply was not JSON");
 
@@ -446,11 +541,22 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     if (err instanceof ModelError) {
       console.error("[REHEARSAL_AI_ERROR]", err.kind);
-      return err.kind === "config"
-        ? errorResponse(STATUS_CODE.SERVICE_UNAVAILABLE, "AI_UNAVAILABLE", "The assistant is not available right now")
-        : errorResponse(STATUS_CODE.BAD_GATEWAY, "AI_FAILED", "The assistant could not answer. Please try again.");
+      switch (err.kind) {
+        case "invalid_key":
+          return keyInvalidResponse();
+        case "key_limit":
+          return errorResponse(
+            STATUS_CODE.TOO_MANY_REQUESTS,
+            "AI_KEY_LIMIT",
+            "Your Groq API key has reached its rate limit or quota. Please try again later.",
+          );
+        case "config":
+          return errorResponse(STATUS_CODE.SERVICE_UNAVAILABLE, "AI_UNAVAILABLE", "The assistant is not available right now");
+        default:
+          return errorResponse(STATUS_CODE.BAD_GATEWAY, "AI_FAILED", "The assistant could not answer. Please try again.");
+      }
     }
-    // Name only: never log prompts, page text or user content.
+    // Name only: never log prompts, page text, keys or user content.
     console.error("[REHEARSAL_AI_ERROR]", err instanceof Error ? err.name : "unknown");
     return errorResponse(STATUS_CODE.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Something went wrong");
   }

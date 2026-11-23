@@ -1,3 +1,4 @@
+// config/settings_config.ts
 class Settings {
   // App Config
   readonly appName: string;
@@ -20,10 +21,10 @@ class Settings {
   readonly cloudinaryApiKey: string;
   readonly cloudinaryApiSecret: string;
 
-  // LLM / AI
-  readonly groqApiKey: string;
+  // LLM / AI (each user brings their own Groq key; there is no platform-wide key)
+  readonly aiEncryptionKey: string; // 32 bytes: 64 hex chars or base64. Encrypts user API keys at rest.
   readonly apiBase: string;
-  readonly llmModel: string;
+  readonly llmModel: string; // default model for new users
   readonly fallbackLlmModel: string;
 
   // Rate Limiting
@@ -35,7 +36,7 @@ class Settings {
   readonly aiMaxTokens: number;
 
   // PAYMENTS CONFIGURATION
-  
+
   // Mock System (Set to true to test payments without real gateway)
   readonly mockPaymentEnabled: boolean;
 
@@ -81,10 +82,11 @@ class Settings {
     this.cloudinaryApiKey = this.getRequired("CLOUDINARY_API_KEY");
     this.cloudinaryApiSecret = this.getRequired("CLOUDINARY_API_SECRET");
 
-    // LLM
-    this.groqApiKey = this.getRequired("GROQ_API_KEY");
+    // LLM / AI
+    this.aiEncryptionKey = this.getRequired("AI_ENCRYPTION_KEY");
+    this.assertValidEncryptionKey(this.aiEncryptionKey);
     this.apiBase = this.getString("API_BASE", "http://localhost:8000/api/v1");
-    this.llmModel = this.getString("LLM_MODEL", "openai/gpt-oss-20b");
+    this.llmModel = this.getString("LLM_MODEL", "openai/gpt-oss-120b");
     this.fallbackLlmModel = this.getString(
       "FALLBACK_LLM_MODEL",
       "openai/gpt-oss-120b",
@@ -93,12 +95,12 @@ class Settings {
     // Rate Limiting
     this.rateLimitWindowMs = this.getNumber("RATE_LIMIT_WINDOW_MS", 900000);
     this.rateLimitMaxRequests = this.getNumber("RATE_LIMIT_MAX_REQUESTS", 100);
-    
+
     this.aiDailyLimit = this.getNumber("AI_DAILY_LIMIT", 50);
     this.aiMaxTokens = this.getNumber("AI_MAX_TOKENS", 2048);
 
     // PAYMENTS (JazzCash Only)
-    
+
     // Mock System
     this.mockPaymentEnabled = this.getBoolean("MOCK_PAYMENT_ENABLED", true);
 
@@ -109,6 +111,11 @@ class Settings {
     this.jazzcashIntegritySalt = this.getString("JAZZCASH_INTEGRITY_SALT", "dummy_salt_32_characters_long_1234");
     this.jazzcashReturnUrl = this.getString("JAZZCASH_RETURN_URL", `${this.appUrl}/api/v1/webhooks/jazzcash`);
     this.jazzcashWebhookSecret = this.getString("JAZZCASH_WEBHOOK_SECRET", "dummy_webhook_secret");
+
+    // Never run live payments with dummy/mock settings
+    if (this.isProduction && this.mockPaymentEnabled) {
+      console.warn("[SETTINGS] MOCK_PAYMENT_ENABLED is true in production.");
+    }
   }
 
   // Convenience Helpers
@@ -121,6 +128,17 @@ class Settings {
   }
 
   // Private Parsers
+  private assertValidEncryptionKey(raw: string): void {
+    const key = /^[0-9a-f]{64}$/i.test(raw)
+      ? Buffer.from(raw, "hex")
+      : Buffer.from(raw, "base64");
+    if (key.length !== 32) {
+      throw new Error(
+        "AI_ENCRYPTION_KEY must be 32 bytes (64 hex characters or base64). Generate one with: openssl rand -hex 32",
+      );
+    }
+  }
+
   private getRequired(key: string): string {
     const value = process.env[key];
     if (!value || value.trim() === "") {
