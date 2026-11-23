@@ -4,9 +4,6 @@ import { errorResponse } from "@/lib/api/errors";
 import { STATUS_CODE } from "@/lib/status_codes";
 import { generateCloudinarySignature } from "@/config/cloudinary";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 /**
  * Generates a scoped upload signature for rehearsal users.
  * All uploads are isolated to rehearsal/{userId} folder.

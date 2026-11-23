@@ -1,0 +1,78 @@
+// app/dashboard/invitations/page.tsx
+import type { Metadata } from "next";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { InvitationsClient } from "@/components/user/sections/invitations/InvitationsClient";
+import settings from "@/config/settings_config";
+import { getUserServerSide } from "@/lib/server/getUser";
+
+// Absolute base URL so social crawlers can resolve the OG image and page URL.
+const baseUrl = (settings().appUrl || "https://riwainvite.com").replace(/\/$/, "");
+const pageUrl = `${baseUrl}/dashboard/invitations`;
+const ogImage = `/og-user-invitations.png`;
+
+export const metadata: Metadata = {
+  title: "My Invitations | Riwainvite",
+  description:
+    "View and manage your invitations, and create new ones from the templates you have purchased.",
+
+  // User dashboards should NOT be indexed for privacy
+  robots: {
+    index: false,
+    follow: false,
+    googleBot: { index: false, follow: false },
+  },
+
+  openGraph: {
+    title: "My Invitations | Riwainvite",
+    description:
+      "Manage your invitations and start new ones from your purchased templates.",
+    url: pageUrl,
+    siteName: "Riwainvite",
+    images: [{ url: ogImage, width: 1200, height: 630, alt: "Riwainvite Invitations" }],
+    locale: "en_US",
+    type: "website",
+  },
+
+  twitter: {
+    card: "summary_large_image",
+    title: "My Invitations | Riwainvite",
+    description:
+      "Manage your invitations and start new ones from your purchased templates.",
+    images: [ogImage],
+  },
+
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
+};
+
+export default async function InvitationsPage() {
+  const h = await headers();
+
+  // 1. Identity headers injected by proxy.ts (auth is enforced by the proxy).
+  const id = h.get("x-user-id") ?? "";
+  const email = h.get("x-user-email") ?? "";
+  const first_name = h.get("x-user-first-name") || h.get("x-user-name") || "User";
+
+  // 2. No identity means not authenticated.
+  if (!id || !email) redirect("/login");
+
+  // 3. Full user record (fallback to headers if the lookup fails).
+  const dbUser = await getUserServerSide(id);
+
+  const user = {
+    id,
+    email: dbUser?.email || email,
+    first_name: dbUser?.first_name || first_name,
+    last_name: dbUser?.last_name || "",
+    phone_number: dbUser?.phone_number || "",
+    created_at: dbUser?.created_at || undefined,
+  };
+
+  // 4. Render the client component. It loads the user's invitations and
+  //    purchased templates, and lets them create an invitation from a template.
+  return <InvitationsClient user={user} />;
+}

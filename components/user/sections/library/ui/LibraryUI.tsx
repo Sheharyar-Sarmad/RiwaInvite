@@ -245,7 +245,7 @@ export const IcReceipt = (p: IconProps) => (
 export const LIBRARY_ROUTES = {
   /** Start a new invitation from an owned template. */
   create: (templateId: string) =>
-    `/dashboard/invitations/new?template=${encodeURIComponent(templateId)}`,
+    `/dashboard/invitations?template=${encodeURIComponent(templateId)}`,
   invitations: "/dashboard/invitations",
   browse: "/templates",
 } as const;
