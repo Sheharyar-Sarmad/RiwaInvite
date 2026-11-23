@@ -10,7 +10,7 @@ export const getUserServerSide = cache(async (userId: string): Promise<any | nul
     const config = settings();
     const h = await headers();
     
-    // FIX: Extract the raw cookie string from the server headers
+    // Extract the raw cookie string from the server headers
     const cookie = h.get("cookie") || "";
 
     const res = await apiClient.get("/user/dashboard/account_settings", {
@@ -19,7 +19,7 @@ export const getUserServerSide = cache(async (userId: string): Promise<any | nul
         "x-user-id": userId,
         "x-user-email": h.get("x-user-email") || "",
         "x-user-name": h.get("x-user-name") || "",
-        "Cookie": cookie, // FIX: Pass the cookie to bypass proxy.ts
+        "Cookie": cookie,
       },
     });
 
@@ -35,12 +35,13 @@ export const getUserServerSide = cache(async (userId: string): Promise<any | nul
       created_at: user.created_at || undefined,
     };
   } catch (error: any) {
-    // 👇 FIX: Better error logging so you can see exactly what broke
-    console.error("--- API FETCH ERROR ---");
-    console.error("Status:", error.response?.status);
-    console.error("Data:", JSON.stringify(error.response?.data, null, 2));
-    console.error("Message:", error.message);
-    console.error("-----------------------");
+    // ✅ FIX: Use console.warn instead of console.error to prevent Next.js from crashing the page
+    // This is expected behavior if the session is expired or the API is momentarily down.
+    console.warn(
+      `[getUserServerSide] Failed to fetch user data for ID: ${userId}. Status: ${error.response?.status || "Network Error"}. Falling back to headers.`
+    );
+    
+    // Return null so the page can gracefully fall back to the proxy headers
     return null;
   }
 });

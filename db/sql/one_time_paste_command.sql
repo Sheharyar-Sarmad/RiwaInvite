@@ -340,6 +340,14 @@ CREATE INDEX IF NOT EXISTS idx_template_purchases_user_purchased
 CREATE INDEX IF NOT EXISTS idx_invitations_user_template
   ON invitations (user_id, template_id);
 
+CREATE INDEX IF NOT EXISTS idx_templates_name_trgm 
+ON templates USING GIN (name gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS idx_invitations_template_id 
+ON invitations(template_id);
+
+CREATE INDEX IF NOT EXISTS idx_user_drafts_lookup 
+ON user_drafts(user_id, template_id);
   
 CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_invitations_user_status ON invitations (user_id, status, expires_at);
