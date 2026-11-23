@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
+  BrainCircuit,
   ChevronLeft,
   CreditCard,
+  FlaskConical,
   LayoutDashboard,
   LayoutTemplate,
   Loader2,
@@ -31,19 +33,36 @@ export type UserSession = {
   first_name: string;
 };
 
-type NavItem = { label: string; href: string; icon: LucideIcon };
-
+type NavItem = { label: string; href: string; icon: LucideIcon; tip: string };
 type NavGroup = { label: string; items: NavItem[] };
 
 export const NAV: NavGroup[] = [
   {
     label: "Workspace",
     items: [
-      { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
+      {
+        label: "Overview",
+        href: "/dashboard",
+        icon: LayoutDashboard,
+        tip: "Stats and recent activity",
+      },
+      {
+        label: "AI Studio",
+        href: "/dashboard/ai-studio",
+        icon: BrainCircuit,
+        tip: "Create invites using AI",
+      },
+      {
+        label: "Rehearsal Sandbox",
+        href: "/dashboard/rehearsal",
+        icon: FlaskConical,
+        tip: "Practice before going live",
+      },
       {
         label: "My Library",
         href: "/dashboard/library",
         icon: LayoutTemplate,
+        tip: "Saved designs and templates",
       },
     ],
   },
@@ -54,8 +73,14 @@ export const NAV: NavGroup[] = [
         label: "My Invitations",
         href: "/dashboard/invitations",
         icon: Mail,
+        tip: "Manage your invitations",
       },
-      { label: "RSVPs", href: "/dashboard/rsvps", icon: Users },
+      {
+        label: "RSVPs",
+        href: "/dashboard/rsvps",
+        icon: Users,
+        tip: "See guest responses",
+      },
     ],
   },
   {
@@ -65,12 +90,19 @@ export const NAV: NavGroup[] = [
         label: "Billing & Plan",
         href: "/dashboard/billing",
         icon: CreditCard,
+        tip: "Plan, invoices, payments",
       },
-      { label: "Settings", href: "/dashboard/settings", icon: Settings },
+      {
+        label: "Settings",
+        href: "/dashboard/settings",
+        icon: Settings,
+        tip: "Profile and security",
+      },
       {
         label: "Notifications",
         href: "/dashboard/notifications",
         icon: Bell,
+        tip: "Alerts and updates",
       },
     ],
   },
@@ -104,25 +136,135 @@ function trackPointer(e: React.PointerEvent<HTMLElement>) {
   e.currentTarget.style.setProperty("--y", `${e.clientY - r.top}px`);
 }
 
-type Tip = { text: string; top: number; left: number } | null;
+/* ========================================================================== */
+/*  Tip: hover / focus label for any button or link                           */
+/*  Lives here so both the sidebar and the dashboard can import it without    */
+/*  a circular dependency.                                                    */
+/* ========================================================================== */
 
-function Tooltip({ tip }: { tip: NonNullable<Tip> }) {
+export type TipSide = "top" | "bottom" | "left" | "right";
+
+const TIP_ORIGIN: Record<TipSide, string> = {
+  top: "translate(-50%, -100%)",
+  bottom: "translate(-50%, 0)",
+  left: "translate(-100%, -50%)",
+  right: "translate(0, -50%)",
+};
+const TIP_NUDGE = {
+  top: { y: 4 },
+  bottom: { y: -4 },
+  left: { x: 4 },
+  right: { x: -4 },
+} as const;
+
+/** Wraps a single button/link. Shows a label on hover (mouse only) and on keyboard focus. */
+export function Tip({
+  label,
+  hint,
+  side = "top",
+  disabled = false,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  side?: TipSide;
+  /** When true the tip never shows. */
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  const wrap = useRef<HTMLSpanElement>(null);
+  const timer = useRef<number | undefined>(undefined);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  // close immediately if the tip gets disabled while open
+  useEffect(() => {
+    if (disabled) {
+      window.clearTimeout(timer.current);
+      setPos(null);
+    }
+  }, [disabled]);
+
+  // hide on scroll so it never floats away from its button
+  useEffect(() => {
+    if (!pos) return;
+    const off = () => setPos(null);
+    window.addEventListener("scroll", off, true);
+    return () => window.removeEventListener("scroll", off, true);
+  }, [pos]);
+
+  const show = (delay: number) => {
+    if (disabled) return;
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      const el = wrap.current?.firstElementChild as HTMLElement | null;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const g = 10;
+      setPos(
+        side === "top"
+          ? { x: r.left + r.width / 2, y: r.top - g }
+          : side === "bottom"
+            ? { x: r.left + r.width / 2, y: r.bottom + g }
+            : side === "left"
+              ? { x: r.left - g, y: r.top + r.height / 2 }
+              : { x: r.right + g, y: r.top + r.height / 2 },
+      );
+    }, delay);
+  };
+  const hide = () => {
+    window.clearTimeout(timer.current);
+    setPos(null);
+  };
+
   return (
-    <div
-      className="pointer-events-none fixed z-[70] -translate-y-1/2"
-      style={{ top: tip.top, left: tip.left }}
-    >
-      <motion.span
-        initial={{ opacity: 0, x: -6, scale: 0.96 }}
-        animate={{ opacity: 1, x: 0, scale: 1 }}
-        exit={{ opacity: 0, x: -6 }}
-        transition={{ duration: 0.15 }}
-        role="tooltip"
-        className={`block whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium text-neutral-700 ${RAISED}`}
+    <>
+      {/* display:contents keeps the child's layout untouched */}
+      <span
+        ref={wrap}
+        className="contents"
+        onPointerEnter={(e) => e.pointerType === "mouse" && show(350)}
+        onPointerLeave={hide}
+        onPointerDown={hide}
+        onFocus={(e) =>
+          (e.target as HTMLElement).matches(":focus-visible") && show(0)
+        }
+        onBlur={hide}
       >
-        {tip.text}
-      </motion.span>
-    </div>
+        {children}
+      </span>
+      {mounted &&
+        createPortal(
+          <AnimatePresence>
+            {pos && !disabled && (
+              <div
+                role="tooltip"
+                className="pointer-events-none fixed z-[300]"
+                style={{ left: pos.x, top: pos.y, transform: TIP_ORIGIN[side] }}
+              >
+                <motion.div
+                  initial={{ opacity: 0, ...TIP_NUDGE[side] }}
+                  animate={{ opacity: 1, x: 0, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.12, ease: "easeOut" }}
+                  className="flex items-center gap-2 whitespace-nowrap rounded-md bg-[#1c1410] px-2.5 py-1.5 text-xs font-medium text-orange-50 shadow-[0_4px_14px_rgba(28,20,16,0.25)] ring-1 ring-white/10"
+                >
+                  {label}
+                  {hint && (
+                    <kbd className="rounded border border-white/20 px-1 font-mono text-[10px] text-stone-300">
+                      {hint}
+                    </kbd>
+                  )}
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
+    </>
   );
 }
 
@@ -268,17 +410,9 @@ function SidebarBody({
   onLogoutRequest: (allDevices: boolean) => void;
 }) {
   const pathname = usePathname();
-  const [tip, setTip] = useState<Tip>(null);
 
   const displayName = user.first_name || user.email.split("@")[0] || "Member";
   const initial = displayName.charAt(0).toUpperCase();
-
-  const showTip = (text: string) => (e: React.SyntheticEvent<HTMLElement>) => {
-    if (!collapsed) return;
-    const r = e.currentTarget.getBoundingClientRect();
-    setTip({ text, top: r.top + r.height / 2, left: r.right + 12 });
-  };
-  const hideTip = () => setTip(null);
 
   return (
     <>
@@ -315,17 +449,22 @@ function SidebarBody({
         )}
 
         {onToggleCollapsed && (
-          <button
-            type="button"
-            onClick={onToggleCollapsed}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className={`absolute right-0 top-1/2 flex h-6 w-6 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full text-neutral-500 hover:text-orange-600 ${RAISED_BTN} ${FOCUS} z-50`}
+          <Tip
+            label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            side="right"
           >
-            <ChevronLeft
-              aria-hidden="true"
-              className={`h-3.5 w-3.5 transition-transform duration-300 ${collapsed ? "rotate-180" : ""}`}
-            />
-          </button>
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className={`absolute right-0 top-1/2 flex h-6 w-6 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full text-neutral-500 hover:text-orange-600 ${RAISED_BTN} ${FOCUS} z-50`}
+            >
+              <ChevronLeft
+                aria-hidden="true"
+                className={`h-3.5 w-3.5 transition-transform duration-300 ${collapsed ? "rotate-180" : ""}`}
+              />
+            </button>
+          </Tip>
         )}
       </div>
 
@@ -338,7 +477,6 @@ function SidebarBody({
         <nav
           role="navigation"
           aria-label="Dashboard"
-          onScroll={hideTip}
           style={{
             scrollbarWidth: "thin",
             scrollbarColor: "#fb923c transparent",
@@ -380,72 +518,75 @@ function SidebarBody({
                   const Icon = item.icon;
                   return (
                     <li key={item.href} className="relative">
-                      <Link
-                        href={item.href}
-                        aria-current={active ? "page" : undefined}
-                        aria-label={collapsed ? item.label : undefined}
-                        onPointerMove={trackPointer}
-                        onMouseEnter={showTip(item.label)}
-                        onMouseLeave={hideTip}
-                        onFocus={showTip(item.label)}
-                        onBlur={hideTip}
-                        className={`group relative flex items-center rounded-lg font-medium transition-colors ${FOCUS} ${
-                          touch
-                            ? "min-h-[48px] gap-3 py-2 pl-2 pr-3 text-[15px] active:scale-[0.98]"
-                            : "gap-2.5 py-1.5 pl-1.5 pr-2.5 text-[13px]"
-                        } ${collapsed ? "justify-center" : ""} ${
-                          active
-                            ? "text-orange-700"
-                            : "text-neutral-600 hover:text-neutral-900"
-                        }`}
+                      <Tip
+                        label={
+                          collapsed ? `${item.label} · ${item.tip}` : item.tip
+                        }
+                        side="right"
                       >
-                        <span
-                          aria-hidden
-                          className="pointer-events-none absolute inset-0 rounded-lg opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-                          style={{
-                            background:
-                              "radial-gradient(110px circle at var(--x,50%) var(--y,50%), rgba(249,115,22,0.20), transparent 70%)",
-                          }}
-                        />
-                        <AnimatePresence>
-                          {active && (
-                            <motion.div
-                              layoutId={layoutId}
-                              className="absolute inset-0 rounded-lg border border-orange-200/80 bg-gradient-to-b from-white to-orange-100/70 shadow-[inset_0_1px_0_#fff,0_1px_2px_rgba(15,23,42,0.05),0_10px_20px_-8px_rgba(249,115,22,0.5)]"
-                              transition={{
-                                type: "spring",
-                                damping: 30,
-                                stiffness: 400,
-                              }}
-                            >
-                              <span
-                                aria-hidden
-                                className="absolute -left-[3px] top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.9)]"
-                              />
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                        <span
-                          className={`relative flex shrink-0 items-center justify-center rounded-md transition-all duration-200 ${
-                            touch ? "h-8 w-8" : "h-6 w-6"
-                          } ${
+                        <Link
+                          href={item.href}
+                          aria-current={active ? "page" : undefined}
+                          aria-label={collapsed ? item.label : undefined}
+                          onPointerMove={trackPointer}
+                          className={`group relative flex items-center rounded-lg font-medium transition-colors ${FOCUS} ${
+                            touch
+                              ? "min-h-[48px] gap-3 py-2 pl-2 pr-3 text-[15px] active:scale-[0.98]"
+                              : "gap-2.5 py-1.5 pl-1.5 pr-2.5 text-[13px]"
+                          } ${collapsed ? "justify-center" : ""} ${
                             active
-                              ? ORB_ON
-                              : "border border-orange-100/70 bg-white/70 text-neutral-400 group-hover:-translate-y-px group-hover:text-orange-500 group-hover:shadow-[0_6px_10px_-4px_rgba(249,115,22,0.4)]"
+                              ? "text-orange-700"
+                              : "text-neutral-600 hover:text-neutral-900"
                           }`}
                         >
-                          <Icon
-                            aria-hidden="true"
-                            strokeWidth={1.75}
-                            className={touch ? "h-4 w-4" : "h-3.5 w-3.5"}
+                          <span
+                            aria-hidden
+                            className="pointer-events-none absolute inset-0 rounded-lg opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                            style={{
+                              background:
+                                "radial-gradient(110px circle at var(--x,50%) var(--y,50%), rgba(249,115,22,0.20), transparent 70%)",
+                            }}
                           />
-                        </span>
-                        {!collapsed && (
-                          <span className="relative truncate">
-                            {item.label}
+                          <AnimatePresence>
+                            {active && (
+                              <motion.div
+                                layoutId={layoutId}
+                                className="absolute inset-0 rounded-lg border border-orange-200/80 bg-gradient-to-b from-white to-orange-100/70 shadow-[inset_0_1px_0_#fff,0_1px_2px_rgba(15,23,42,0.05),0_10px_20px_-8px_rgba(249,115,22,0.5)]"
+                                transition={{
+                                  type: "spring",
+                                  damping: 30,
+                                  stiffness: 400,
+                                }}
+                              >
+                                <span
+                                  aria-hidden
+                                  className="absolute -left-[3px] top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.9)]"
+                                />
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                          <span
+                            className={`relative flex shrink-0 items-center justify-center rounded-md transition-all duration-200 ${
+                              touch ? "h-8 w-8" : "h-6 w-6"
+                            } ${
+                              active
+                                ? ORB_ON
+                                : "border border-orange-100/70 bg-white/70 text-neutral-400 group-hover:-translate-y-px group-hover:text-orange-500 group-hover:shadow-[0_6px_10px_-4px_rgba(249,115,22,0.4)]"
+                            }`}
+                          >
+                            <Icon
+                              aria-hidden="true"
+                              strokeWidth={1.75}
+                              className={touch ? "h-4 w-4" : "h-3.5 w-3.5"}
+                            />
                           </span>
-                        )}
-                      </Link>
+                          {!collapsed && (
+                            <span className="relative truncate">
+                              {item.label}
+                            </span>
+                          )}
+                        </Link>
+                      </Tip>
                     </li>
                   );
                 })}
@@ -461,15 +602,21 @@ function SidebarBody({
         <div className="flex flex-col gap-1 rounded-xl border border-orange-100/70 bg-white/60 p-2 shadow-sm backdrop-blur-sm">
           <div className="flex items-center gap-2.5">
             <div className="relative shrink-0">
-              <div
-                aria-hidden={!collapsed}
-                aria-label={
-                  collapsed ? `${displayName} · ${user.email}` : undefined
-                }
-                className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${ORB_ON}`}
+              <Tip
+                label={`${displayName} · ${user.email}`}
+                side="right"
+                disabled={!collapsed}
               >
-                {initial}
-              </div>
+                <div
+                  aria-hidden={!collapsed}
+                  aria-label={
+                    collapsed ? `${displayName} · ${user.email}` : undefined
+                  }
+                  className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${ORB_ON}`}
+                >
+                  {initial}
+                </div>
+              </Tip>
               <span
                 aria-hidden
                 className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5"
@@ -492,30 +639,32 @@ function SidebarBody({
 
           {!collapsed && (
             <div className="mt-1 flex flex-col gap-0.5 border-t border-orange-100/50 pt-1">
-              <button
-                onClick={() => onLogoutRequest(false)}
-                className={`flex w-full items-center gap-2 rounded-md px-2 font-semibold text-rose-600 transition-colors hover:bg-rose-50 active:bg-rose-50 ${
-                  touch ? "min-h-[44px] text-[13px]" : "py-1.5 text-[11px]"
-                }`}
-              >
-                <LogOut className="size-3.5" />
-                Sign out
-              </button>
-              <button
-                onClick={() => onLogoutRequest(true)}
-                className={`flex w-full items-center gap-2 rounded-md px-2 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 active:bg-neutral-100 ${
-                  touch ? "min-h-[44px] text-xs" : "py-1.5 text-[10px]"
-                }`}
-              >
-                <MonitorSmartphone className="size-3.5" />
-                Sign out from all devices
-              </button>
+              <Tip label="End this session" side="right">
+                <button
+                  onClick={() => onLogoutRequest(false)}
+                  className={`flex w-full items-center gap-2 rounded-md px-2 font-semibold text-rose-600 transition-colors hover:bg-rose-50 active:bg-rose-50 ${
+                    touch ? "min-h-[44px] text-[13px]" : "py-1.5 text-[11px]"
+                  }`}
+                >
+                  <LogOut className="size-3.5" />
+                  Sign out
+                </button>
+              </Tip>
+              <Tip label="Log out every device" side="right">
+                <button
+                  onClick={() => onLogoutRequest(true)}
+                  className={`flex w-full items-center gap-2 rounded-md px-2 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 active:bg-neutral-100 ${
+                    touch ? "min-h-[44px] text-xs" : "py-1.5 text-[10px]"
+                  }`}
+                >
+                  <MonitorSmartphone className="size-3.5" />
+                  Sign out from all devices
+                </button>
+              </Tip>
             </div>
           )}
         </div>
       </div>
-
-      <AnimatePresence>{tip && <Tooltip tip={tip} />}</AnimatePresence>
     </>
   );
 }

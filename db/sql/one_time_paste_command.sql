@@ -498,3 +498,36 @@ DROP TRIGGER IF EXISTS trg_refresh_public_plans ON plans;
 CREATE TRIGGER trg_refresh_public_plans
 AFTER INSERT OR UPDATE OR DELETE ON plans
 FOR EACH STATEMENT EXECUTE FUNCTION refresh_public_plans();
+
+-- User Drafts Table: Stores in-progress rehearsal work
+CREATE TABLE IF NOT EXISTS user_drafts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+  
+  -- Full design schema (elements, styles, page settings)
+  design_schema JSONB NOT NULL DEFAULT '{}',
+  
+  -- Tracks uploaded asset URLs for secure cleanup on discard
+  cloudinary_assets TEXT[] DEFAULT '{}',
+  
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Critical indexes for fast lookups and upserts
+CREATE INDEX idx_user_drafts_user_template ON user_drafts(user_id, template_id);
+CREATE INDEX idx_user_drafts_updated ON user_drafts(updated_at DESC);
+
+-- Auto-update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create the composite unique index required for ON CONFLICT (user_id, template_id)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_drafts_unique 
+ON user_drafts (user_id, template_id);

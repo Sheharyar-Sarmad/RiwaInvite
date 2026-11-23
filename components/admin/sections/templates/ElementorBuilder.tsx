@@ -76,12 +76,11 @@ const genId = () => `el_${Math.random().toString(36).slice(2, 10)}`;
 const genSlotKey = (prefix: string) =>
   `${prefix}_${Math.random().toString(36).slice(2, 6)}`;
 const DEVICES = { desktop: 1200, tablet: 768, mobile: 375 } as const;
-type Device = keyof typeof DEVICES;
+export type Device = keyof typeof DEVICES;
 
 const REGISTRY: Record<string, WidgetDefinition> = Object.fromEntries(
   WIDGET_REGISTRY.map((w) => [w.type, w]),
 );
-const CATEGORIES = Array.from(new Set(WIDGET_REGISTRY.map((w) => w.category)));
 const ICON_NAMES: string[] = Object.keys(icons);
 
 type Asset = {
@@ -91,7 +90,76 @@ type Asset = {
   at: number;
 };
 const ASSET_KEY = "riwainvite:recent-assets";
+const REHEARSAL_ASSET_KEY = "riwainvite:rehearsal-recent-assets";
+const ADMIN_SIGNATURE_PATH = "/admin/dashboard/cloudinary-signature";
+const REHEARSAL_SIGNATURE_PATH = "/user/dashboard/rehearsal/cloudinary-signature";
 const PLACEHOLDER_IMG = "https://placehold.co/600x400/png?text=Photo";
+
+/** Widget types rehearsal users are never allowed to add (XSS / injection). */
+const REHEARSAL_BLOCKED_TYPES = new Set<string>(["html"]);
+
+/* ---- A1: Types ---------------------------------------------------------- */
+export type PageSettings = {
+  backgroundColor: string;
+  entranceAnimation: string;
+  customCss: string;
+  customCode: string;
+  customCodeLang: CodeLang;
+};
+
+/**
+ * The user's current design state, auto-saved by the Rehearsal page.
+ * Intentionally excludes admin-only metadata (price, category, premium,
+ * slug pricing, status, description).
+ */
+export type RehearsalSnapshot = {
+  elements: BuilderElement[];
+  pageSettings: PageSettings;
+  coreNames: { bride: string; groom: string };
+  galleryUrls: string[];
+  videoUrls: string[];
+  musicUrls: string[];
+  thumbnailUrl: string;
+};
+
+export type BuilderMode = "admin" | "rehearsal";
+
+/** Controls handed to a custom top bar (used by the Rehearsal page). */
+export type BuilderTopBarContext = {
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  preview: boolean;
+  setPreview: (v: boolean) => void;
+  /** Deselects the current element and enters preview mode. */
+  startPreview: () => void;
+  device: Device;
+  setDevice: (d: Device) => void;
+  uploading: boolean;
+};
+
+export type ElementorBuilderProps = {
+  initialTemplateId?: string;
+  /** "admin" (default) keeps the original behaviour. */
+  mode?: BuilderMode;
+  /** Rehearsal only: saved draft. Takes priority over the template defaults. */
+  initialDesign?: RehearsalSnapshot | null;
+  /** Rehearsal only: called (debounced) whenever the design changes. */
+  onSnapshot?: (snapshot: RehearsalSnapshot) => void;
+  /** Called after every successful Cloudinary upload with the asset URL. */
+  onAssetUploaded?: (url: string, info?: { kind: string; name: string }) => void;
+  /** Rehearsal only: replaces the admin header. */
+  topBar?: (ctx: BuilderTopBarContext) => React.ReactNode;
+  /** Endpoint used to load the template (default: the admin endpoint). */
+  loadPath?: string;
+  /** Cloudinary signature endpoint (default: admin, or the rehearsal one in rehearsal mode). */
+  signaturePath?: string;
+  /** Called with the raw template data once it has loaded. */
+  onLoaded?: (data: unknown) => void;
+  /** Called if loading the template fails. */
+  onLoadError?: () => void;
+};
 
 const ANIMATIONS: Record<string, { initial: any; animate: any }> = {
   none: { initial: {}, animate: {} },
@@ -263,23 +331,33 @@ const BIND_CHOICES = [
 ];
 
 /* ---- Cloudinary --------------------------------------------------------- */
-function useCloudinary() {
+/* A2: accepts a custom signature path + storage key + upload callback.      */
+function useCloudinary(opts?: {
+  signaturePath?: string;
+  storageKey?: string;
+  onUploaded?: (url: string, info?: { kind: string; name: string }) => void;
+}) {
+  const signaturePath = opts?.signaturePath ?? ADMIN_SIGNATURE_PATH;
+  const storageKey = opts?.storageKey ?? ASSET_KEY;
+  const onUploadedRef = React.useRef(opts?.onUploaded);
+  onUploadedRef.current = opts?.onUploaded;
+
   const [busy, setBusy] = React.useState(0);
   const [assets, setAssets] = React.useState<Asset[]>([]);
 
   React.useEffect(() => {
     try {
-      setAssets(JSON.parse(localStorage.getItem(ASSET_KEY) || "[]") as Asset[]);
+      setAssets(JSON.parse(localStorage.getItem(storageKey) || "[]") as Asset[]);
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [storageKey]);
 
   const remember = (a: Asset) =>
     setAssets((prev) => {
       const next = [a, ...prev.filter((p) => p.url !== a.url)].slice(0, 60);
       try {
-        localStorage.setItem(ASSET_KEY, JSON.stringify(next));
+        localStorage.setItem(storageKey, JSON.stringify(next));
       } catch {
         /* ignore */
       }
@@ -290,9 +368,7 @@ function useCloudinary() {
     async (file: File): Promise<string | null> => {
       setBusy((n) => n + 1);
       try {
-        const sigRes = await apiClient.get(
-          "/admin/dashboard/cloudinary-signature",
-        );
+        const sigRes = await apiClient.get(signaturePath);
         const sig = sigRes.data.data;
         const fd = new FormData();
         fd.append("file", file);
@@ -321,6 +397,14 @@ function useCloudinary() {
           name: file.name,
           at: Date.now(),
         });
+        try {
+          onUploadedRef.current?.(json.secure_url as string, {
+            kind,
+            name: file.name,
+          });
+        } catch {
+          /* never let a callback break the upload */
+        }
         toast.add({
           title: "Uploaded",
           description: `${file.name} is ready.`,
@@ -338,7 +422,8 @@ function useCloudinary() {
         setBusy((n) => n - 1);
       }
     },
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [signaturePath, storageKey],
   );
 
   return { upload, uploading: busy > 0, assets };
@@ -930,10 +1015,25 @@ function ShadowSection({ api }: { api: StyleApi }) {
 
 export function ElementorBuilder({
   initialTemplateId,
-}: {
-  initialTemplateId?: string;
-}) {
-  const cloud = useCloudinary();
+  mode = "admin",
+  initialDesign,
+  onSnapshot,
+  onAssetUploaded,
+  topBar,
+  loadPath,
+  signaturePath,
+  onLoaded,
+  onLoadError,
+}: ElementorBuilderProps) {
+  const isRehearsal = mode === "rehearsal";
+
+  const cloud = useCloudinary({
+    signaturePath:
+      signaturePath ??
+      (isRehearsal ? REHEARSAL_SIGNATURE_PATH : ADMIN_SIGNATURE_PATH),
+    storageKey: isRehearsal ? REHEARSAL_ASSET_KEY : ASSET_KEY,
+    onUploaded: onAssetUploaded,
+  });
   const { categories, refetch: refetchCats } = useCategories();
 
   const [device, setDevice] = React.useState<Device>("desktop");
@@ -1017,14 +1117,14 @@ export function ElementorBuilder({
   const [galleryUrls, setGalleryUrls] = React.useState<string[]>([]);
   const [videoUrls, setVideoUrls] = React.useState<string[]>([]);
   const [musicUrls, setMusicUrls] = React.useState<string[]>([]);
-  const [pageSettings, setPageSettings] = React.useState({
+  const [pageSettings, setPageSettings] = React.useState<PageSettings>({
     backgroundColor: "#ffffff",
     entranceAnimation: "none",
     customCss: "",
     customCode: "",
     customCodeLang: "html" as CodeLang,
   });
-  const patchPage = (p: Partial<typeof pageSettings>) =>
+  const patchPage = (p: Partial<PageSettings>) =>
     setPageSettings((s) => ({ ...s, ...p }));
 
   const [isSaving, setIsSaving] = React.useState(false);
@@ -1058,14 +1158,51 @@ export function ElementorBuilder({
     [coreNames, name, thumbnailUrl, galleryUrls, videoUrls, musicUrls],
   );
 
-  // ---- load existing template ----
+  /* ---- A4: load design (rehearsal: saved draft wins over template design) ---- */
+  const hydrated = React.useRef(false); // rehearsal only
+  const [ready, setReady] = React.useState(false); // rehearsal only
+  const armed = React.useRef(false);
+  const onLoadedRef = React.useRef(onLoaded);
+  onLoadedRef.current = onLoaded;
+  const onLoadErrorRef = React.useRef(onLoadError);
+  onLoadErrorRef.current = onLoadError;
+
+  const applyDraft = (d: RehearsalSnapshot) => {
+    const els = Array.isArray(d.elements) ? d.elements : [];
+    setElementsState(els);
+    elRef.current = els;
+    past.current = [];
+    future.current = [];
+    syncHist();
+    if (d.pageSettings) setPageSettings((s) => ({ ...s, ...d.pageSettings }));
+    setCoreNames({
+      bride: d.coreNames?.bride ?? "",
+      groom: d.coreNames?.groom ?? "",
+    });
+    setGalleryUrls(d.galleryUrls ?? []);
+    setVideoUrls(d.videoUrls ?? []);
+    setMusicUrls(d.musicUrls ?? []);
+    setThumbnailUrl(d.thumbnailUrl ?? "");
+  };
+
   React.useEffect(() => {
-    if (!initialTemplateId) return;
+    // Rehearsal: never re-hydrate once loaded (parent may re-pass the draft after each save).
+    if (isRehearsal && hydrated.current) return;
+
+    // Nothing to fetch: use the draft (if any) and finish.
+    if (!initialTemplateId) {
+      if (isRehearsal) {
+        if (initialDesign) applyDraft(initialDesign);
+        hydrated.current = true;
+        setReady(true);
+      }
+      return;
+    }
 
     const fetchTemplate = async () => {
       try {
         const res = await apiClient.get(
-          `/admin/dashboard/templates/${initialTemplateId}`,
+          loadPath ?? `/admin/dashboard/templates/${initialTemplateId}`,
         );
         const data = res.data.data;
 
@@ -1099,26 +1236,75 @@ export function ElementorBuilder({
           }
         }
 
-        toast.add({
-          title: "Success",
-          description: "Template data loaded successfully.",
-          type: "success",
-        });
+        // Rehearsal: the user's saved draft overrides the template defaults.
+        if (isRehearsal && initialDesign) applyDraft(initialDesign);
+
+        if (isRehearsal) {
+          hydrated.current = true;
+          setReady(true);
+        } else {
+          toast.add({
+            title: "Success",
+            description: "Template data loaded successfully.",
+            type: "success",
+          });
+        }
+        onLoadedRef.current?.(data);
       } catch (error: any) {
         console.error(
           "LOAD ERROR DETAILS:",
           error.response?.data || error.message,
         );
-        toast.add({
-          title: "Error",
-          description: "Failed to load template data.",
-          type: "error",
-        });
+        if (onLoadErrorRef.current) {
+          onLoadErrorRef.current();
+        } else {
+          toast.add({
+            title: "Error",
+            description: "Failed to load template data.",
+            type: "error",
+          });
+        }
       }
     };
 
     void fetchTemplate();
-  }, [initialTemplateId]);
+  }, [initialTemplateId, initialDesign, isRehearsal]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ---- A3/A4: emit snapshots to the Rehearsal page ---- */
+  const onSnapshotRef = React.useRef(onSnapshot);
+  onSnapshotRef.current = onSnapshot;
+
+  React.useEffect(() => {
+    if (!isRehearsal || !ready) return;
+    const emit = () =>
+      onSnapshotRef.current?.({
+        elements: elRef.current,
+        pageSettings,
+        coreNames,
+        galleryUrls,
+        videoUrls,
+        musicUrls,
+        thumbnailUrl,
+      });
+    // The first emission is the loaded state itself (the parent treats it as its saved baseline).
+    if (!armed.current) {
+      armed.current = true;
+      emit();
+      return;
+    }
+    const t = setTimeout(emit, 800);
+    return () => clearTimeout(t);
+  }, [
+    isRehearsal,
+    ready,
+    elements,
+    pageSettings,
+    coreNames,
+    galleryUrls,
+    videoUrls,
+    musicUrls,
+    thumbnailUrl,
+  ]);
 
   /* ---- element mutations ---- */
   const makeEl = (
@@ -1139,6 +1325,8 @@ export function ElementorBuilder({
     };
   };
   const insertEl = (el: BuilderElement, index: number) => {
+    // A6: rehearsal users can never add raw-HTML / code widgets.
+    if (isRehearsal && REHEARSAL_BLOCKED_TYPES.has(el.type)) return;
     commit((els) => {
       const n = [...els];
       n.splice(index, 0, el);
@@ -1170,6 +1358,7 @@ export function ElementorBuilder({
     const i = elRef.current.findIndex((e) => e.id === id);
     const src = elRef.current[i];
     if (i < 0 || !src) return;
+    if (isRehearsal && REHEARSAL_BLOCKED_TYPES.has(src.type)) return;
     const copy: BuilderElement = { ...structuredClone(src), id: genId() };
     commit((els) => {
       const n = [...els];
@@ -1272,7 +1461,9 @@ export function ElementorBuilder({
     return () => window.removeEventListener("keydown", h);
   }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* ---- A5: native "unsaved changes" warning is admin-only (rehearsal auto-saves) ---- */
   React.useEffect(() => {
+    if (isRehearsal) return;
     if (elements.length === 0) return;
     const h = (e: BeforeUnloadEvent) => {
       e.preventDefault();
@@ -1280,7 +1471,7 @@ export function ElementorBuilder({
     };
     window.addEventListener("beforeunload", h);
     return () => window.removeEventListener("beforeunload", h);
-  }, [elements.length]);
+  }, [elements.length, isRehearsal]);
 
   /* ---- drag & drop ---- */
   const hasDnD = (e: React.DragEvent) =>
@@ -1308,6 +1499,27 @@ export function ElementorBuilder({
       : "copy";
     setDropIndex(computeIndex(e.clientY));
   };
+
+  /* ---- A6: mode-aware widget lists ---- */
+  const widgetList = React.useMemo(
+    () =>
+      isRehearsal
+        ? WIDGET_REGISTRY.filter((w) => !REHEARSAL_BLOCKED_TYPES.has(w.type))
+        : WIDGET_REGISTRY,
+    [isRehearsal],
+  );
+  const categoryList = React.useMemo(
+    () => Array.from(new Set(widgetList.map((w) => w.category))),
+    [widgetList],
+  );
+  const dynamicList = React.useMemo(
+    () =>
+      isRehearsal
+        ? DYNAMIC_AVAILABLE.filter((d) => !REHEARSAL_BLOCKED_TYPES.has(d.type))
+        : DYNAMIC_AVAILABLE,
+    [isRehearsal],
+  );
+
   const onDrop = (e: React.DragEvent) => {
     if (!hasDnD(e)) return;
     e.preventDefault();
@@ -1315,7 +1527,7 @@ export function ElementorBuilder({
     const w = e.dataTransfer.getData("application/x-widget");
     const el = e.dataTransfer.getData("application/x-element");
     if (w.startsWith("dyn:")) {
-      const d = DYNAMIC_AVAILABLE.find((x) => `dyn:${x.id}` === w);
+      const d = dynamicList.find((x) => `dyn:${x.id}` === w);
       if (d) insertDynamic(d, idx);
     } else {
       const def2 = w ? REGISTRY[w] : undefined;
@@ -1328,20 +1540,20 @@ export function ElementorBuilder({
   /* ---- widgets search ---- */
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
-    return WIDGET_REGISTRY.filter(
+    return widgetList.filter(
       (w) =>
         !q ||
         w.name.toLowerCase().includes(q) ||
         w.category.toLowerCase().includes(q) ||
         w.type.includes(q),
     );
-  }, [search]);
+  }, [search, widgetList]);
   const dynFiltered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
-    return DYNAMIC_AVAILABLE.filter(
+    return dynamicList.filter(
       (d) => !q || d.name.toLowerCase().includes(q) || "dynamic".includes(q),
     );
-  }, [search]);
+  }, [search, dynamicList]);
 
   /* ---- code tab ---- */
   const selectedIsCode = selected?.type === "html";
@@ -1361,6 +1573,7 @@ export function ElementorBuilder({
     else patchPage({ customCodeLang: l });
   };
   const insertCodeBlock = () => {
+    if (isRehearsal) return;
     const w = REGISTRY["html"];
     const el: BuilderElement = {
       id: genId(),
@@ -1386,7 +1599,7 @@ export function ElementorBuilder({
     });
   };
 
-  /* ---- save ---- */
+  /* ---- save (admin only; rehearsal saves through onSnapshot) ---- */
   const handleSave = async () => {
     // List every required field that is still empty so the user knows exactly what to fix.
     const missing: string[] = [];
@@ -1697,7 +1910,9 @@ export function ElementorBuilder({
   const visibleKeys = contentKeys.filter(
     (k) =>
       !(k === "lang" && selected?.type === "html") &&
-      !(boundProp !== null && k === boundProp),
+      !(boundProp !== null && k === boundProp) &&
+      // A6: no raw code / language fields in rehearsal
+      !(isRehearsal && (k === "code" || k === "lang")),
   );
 
   const anim = ANIMATIONS[pageSettings.entranceAnimation] ?? ANIMATIONS.none;
@@ -1709,117 +1924,141 @@ export function ElementorBuilder({
     .join("\n")
     .replace(/<\/style/gi, "");
 
+  /* ---- A5: context handed to a custom top bar ---- */
+  const topBarCtx: BuilderTopBarContext = {
+    undo,
+    redo,
+    canUndo: hist.undo,
+    canRedo: hist.redo,
+    preview,
+    setPreview: (v: boolean) => {
+      if (v) setSelectedId(null);
+      setPreview(v);
+    },
+    startPreview: () => {
+      setSelectedId(null);
+      setPreview(true);
+    },
+    device,
+    setDevice,
+    uploading: cloud.uploading,
+  };
+
   /* ====================================================================== */
   return (
     <div className="fixed inset-0 z-[60] flex h-dvh w-full flex-col overflow-hidden bg-[#fffafb] font-[family-name:var(--font-body)] text-slate-800">
       {/* TOP BAR */}
-      <header className="z-30 flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 px-4 shadow-sm backdrop-blur-xl">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/admin/dashboard/templates/new"
-            aria-label="Back"
-            className="rounded-lg p-2 text-slate-500 hover:bg-orange-50 hover:text-orange-600"
-          >
-            <ArrowLeft className="size-5" />
-          </Link>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            aria-label="Template name"
-            className="w-64 border-b border-transparent bg-transparent text-sm font-semibold text-slate-800 outline-none focus:border-orange-500"
-          />
-          <div className="ml-2 flex items-center gap-0.5">
-            <button
-              type="button"
-              onClick={undo}
-              disabled={!hist.undo}
-              title="Undo (Ctrl+Z)"
-              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+      {isRehearsal ? (
+        (topBar?.(topBarCtx) ?? null)
+      ) : (
+        <header className="z-30 flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 px-4 shadow-sm backdrop-blur-xl">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/admin/dashboard/templates/new"
+              aria-label="Back"
+              className="rounded-lg p-2 text-slate-500 hover:bg-orange-50 hover:text-orange-600"
             >
-              <Undo2 className="size-4" />
-            </button>
-            <button
-              type="button"
-              onClick={redo}
-              disabled={!hist.redo}
-              title="Redo (Ctrl+Shift+Z)"
-              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
-            >
-              <Redo2 className="size-4" />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-100/80 p-1">
-          {(
-            [
-              ["desktop", Monitor],
-              ["tablet", Tablet],
-              ["mobile", Smartphone],
-            ] as const
-          ).map(([d, Ic]) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => setDevice(d)}
-              aria-label={d}
-              aria-pressed={device === d}
-              className={`relative rounded-lg p-1.5 ${device === d ? "text-orange-500" : "text-slate-500 hover:text-slate-800"}`}
-            >
-              {device === d && (
-                <motion.span
-                  layoutId="device-pill"
-                  className="absolute inset-0 rounded-lg bg-white shadow-sm"
-                />
-              )}
-              <Ic className="relative size-4" />
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedId(null);
-              setPreview(true);
-            }}
-            title="Preview (Esc to exit)"
-            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-orange-300 hover:text-orange-600"
-          >
-            <Eye className="size-4" />
-            Preview
-          </button>
-          <div className="w-36">
-            <AceternitySelect
-              value={status}
-              onChange={(v) => setStatus(v === "published" ? "published" : "draft")}
-              options={[
-                { label: "Draft", value: "draft" },
-                { label: "Published", value: "published" },
-              ]}
+              <ArrowLeft className="size-5" />
+            </Link>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              aria-label="Template name"
+              className="w-64 border-b border-transparent bg-transparent text-sm font-semibold text-slate-800 outline-none focus:border-orange-500"
             />
+            <div className="ml-2 flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={undo}
+                disabled={!hist.undo}
+                title="Undo (Ctrl+Z)"
+                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+              >
+                <Undo2 className="size-4" />
+              </button>
+              <button
+                type="button"
+                onClick={redo}
+                disabled={!hist.redo}
+                title="Redo (Ctrl+Shift+Z)"
+                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+              >
+                <Redo2 className="size-4" />
+              </button>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => void handleSave()}
-            disabled={isSaving || cloud.uploading}
-            className="flex cursor-pointer items-center gap-2 rounded-xl bg-gradient-to-b from-orange-400 to-orange-600 px-5 py-2 text-sm font-medium text-white shadow-lg shadow-orange-500/30 transition hover:opacity-90 disabled:opacity-60"
-          >
-            {isSaving ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Save className="size-4" />
-            )}{" "}
-            {templateId ? "Update Template" : "Save Template"}
-          </button>
-        </div>
-      </header>
+
+          <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-100/80 p-1">
+            {(
+              [
+                ["desktop", Monitor],
+                ["tablet", Tablet],
+                ["mobile", Smartphone],
+              ] as const
+            ).map(([d, Ic]) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDevice(d)}
+                aria-label={d}
+                aria-pressed={device === d}
+                className={`relative rounded-lg p-1.5 ${device === d ? "text-orange-500" : "text-slate-500 hover:text-slate-800"}`}
+              >
+                {device === d && (
+                  <motion.span
+                    layoutId="device-pill"
+                    className="absolute inset-0 rounded-lg bg-white shadow-sm"
+                  />
+                )}
+                <Ic className="relative size-4" />
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedId(null);
+                setPreview(true);
+              }}
+              title="Preview (Esc to exit)"
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-orange-300 hover:text-orange-600"
+            >
+              <Eye className="size-4" />
+              Preview
+            </button>
+            <div className="w-36">
+              <AceternitySelect
+                value={status}
+                onChange={(v) => setStatus(v === "published" ? "published" : "draft")}
+                options={[
+                  { label: "Draft", value: "draft" },
+                  { label: "Published", value: "published" },
+                ]}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={isSaving || cloud.uploading}
+              className="flex cursor-pointer items-center gap-2 rounded-xl bg-gradient-to-b from-orange-400 to-orange-600 px-5 py-2 text-sm font-medium text-white shadow-lg shadow-orange-500/30 transition hover:opacity-90 disabled:opacity-60"
+            >
+              {isSaving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Save className="size-4" />
+              )}{" "}
+              {templateId ? "Update Template" : "Save Template"}
+            </button>
+          </div>
+        </header>
+      )}
 
       <div className="flex min-h-0 flex-1">
         {/* LEFT PANEL */}
         <aside
-          className={`z-20 flex shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-200 ${preview ? "hidden" : ""} ${leftTab === "code" && codeWide ? "w-[560px]" : "w-72"}`}
+          className={`z-20 flex shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-200 ${preview ? "hidden" : ""} ${leftTab === "code" && codeWide && !isRehearsal ? "w-[560px]" : "w-72"}`}
         >
           <div className="flex border-b border-slate-200 bg-slate-50/50">
             {(
@@ -1828,17 +2067,19 @@ export function ElementorBuilder({
                 ["layers", "Layers", Layers],
                 ["code", "Code", Code],
               ] as const
-            ).map(([k, l, Ic]) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setLeftTab(k)}
-                className={`flex flex-1 items-center justify-center gap-2 border-b-2 py-3 text-xs font-semibold ${leftTab === k ? "border-orange-500 bg-white text-orange-600" : "border-transparent text-slate-500"}`}
-              >
-                <Ic className="size-4" />
-                {l}
-              </button>
-            ))}
+            )
+              .filter(([k]) => !(isRehearsal && k === "code"))
+              .map(([k, l, Ic]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setLeftTab(k)}
+                  className={`flex flex-1 items-center justify-center gap-2 border-b-2 py-3 text-xs font-semibold ${leftTab === k ? "border-orange-500 bg-white text-orange-600" : "border-transparent text-slate-500"}`}
+                >
+                  <Ic className="size-4" />
+                  {l}
+                </button>
+              ))}
           </div>
 
           {leftTab === "widgets" ? (
@@ -1849,7 +2090,7 @@ export function ElementorBuilder({
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder={`Search ${WIDGET_REGISTRY.length + DYNAMIC_AVAILABLE.length} widgets…`}
+                    placeholder={`Search ${widgetList.length + dynamicList.length} widgets…`}
                     className={`${inputCls} pl-9`}
                   />
                 </div>
@@ -1883,7 +2124,7 @@ export function ElementorBuilder({
                     </div>
                   </section>
                 )}
-                {CATEGORIES.map((cat) => {
+                {categoryList.map((cat) => {
                   const list = filtered.filter((w) => w.category === cat);
                   if (!list.length) return null;
                   return (
@@ -1916,7 +2157,7 @@ export function ElementorBuilder({
                 )}
               </div>
             </>
-          ) : leftTab === "layers" ? (
+          ) : leftTab === "layers" || isRehearsal ? (
             <div
               className="min-h-0 flex-1 overflow-y-auto p-3"
               onDragLeave={(e) => {
@@ -2385,7 +2626,7 @@ export function ElementorBuilder({
                         This widget has no content fields. Use the Style tab.
                       </p>
                     )}
-                    {selected.type === "html" && (
+                    {selected.type === "html" && !isRehearsal && (
                       <Field label="Language">
                         <AceternitySelect
                           value={String(selected.content.lang || "html")}
@@ -2769,55 +3010,60 @@ export function ElementorBuilder({
                         />
                       </Field>
                     </Row>
-                    <Field label="Inline CSS (any property)">
-                      <textarea
-                        key={selected.id + toCss(selected.styles).length}
-                        rows={8}
-                        spellCheck={false}
-                        defaultValue={toCss(selected.styles)}
-                        onBlur={(e) =>
-                          patchEl(selected.id, (el) => ({
-                            ...el,
-                            styles: parseCss(e.target.value),
-                          }))
-                        }
-                        className={`${areaCls} font-mono text-xs leading-5`}
-                      />
-                    </Field>
-                    <Field label="Scoped custom CSS (selectors allowed)">
-                      <textarea
-                        rows={6}
-                        spellCheck={false}
-                        placeholder={
-                          "&:hover { transform: scale(1.02); }\n.child { color: red; }"
-                        }
-                        value={
-                          selected.customCode?.language === "css"
-                            ? selected.customCode.code
-                            : ""
-                        }
-                        onChange={(e) =>
-                          patchEl(
-                            selected.id,
-                            (el) => ({
-                              ...el,
-                              customCode: e.target.value
-                                ? ({
-                                    language: "css",
-                                    code: e.target.value,
-                                  } as CustomCode)
-                                : null,
-                            }),
-                            `cc:${selected.id}`,
-                          )
-                        }
-                        className={`${areaCls} font-mono text-xs leading-5`}
-                      />
-                    </Field>
-                    <p className="text-xs text-slate-400">
-                      Inline CSS applies when you click away. Scoped CSS only
-                      affects this element.
-                    </p>
+                    {/* A6: raw / scoped CSS is admin-only */}
+                    {!isRehearsal && (
+                      <>
+                        <Field label="Inline CSS (any property)">
+                          <textarea
+                            key={selected.id + toCss(selected.styles).length}
+                            rows={8}
+                            spellCheck={false}
+                            defaultValue={toCss(selected.styles)}
+                            onBlur={(e) =>
+                              patchEl(selected.id, (el) => ({
+                                ...el,
+                                styles: parseCss(e.target.value),
+                              }))
+                            }
+                            className={`${areaCls} font-mono text-xs leading-5`}
+                          />
+                        </Field>
+                        <Field label="Scoped custom CSS (selectors allowed)">
+                          <textarea
+                            rows={6}
+                            spellCheck={false}
+                            placeholder={
+                              "&:hover { transform: scale(1.02); }\n.child { color: red; }"
+                            }
+                            value={
+                              selected.customCode?.language === "css"
+                                ? selected.customCode.code
+                                : ""
+                            }
+                            onChange={(e) =>
+                              patchEl(
+                                selected.id,
+                                (el) => ({
+                                  ...el,
+                                  customCode: e.target.value
+                                    ? ({
+                                        language: "css",
+                                        code: e.target.value,
+                                      } as CustomCode)
+                                    : null,
+                                }),
+                                `cc:${selected.id}`,
+                              )
+                            }
+                            className={`${areaCls} font-mono text-xs leading-5`}
+                          />
+                        </Field>
+                        <p className="text-xs text-slate-400">
+                          Inline CSS applies when you click away. Scoped CSS only
+                          affects this element.
+                        </p>
+                      </>
+                    )}
                     <div className="flex gap-2">
                       <button
                         type="button"
@@ -2844,115 +3090,120 @@ export function ElementorBuilder({
               <div className="space-y-5 p-4">
                 {inspectorTab === "content" && (
                   <>
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium text-slate-600">
-                        Template Category *
-                      </label>
-                      <div className="flex gap-2">
-                        <AceternitySelect
-                          className="flex-1"
-                          value={categoryId}
-                          onChange={setCategoryId}
-                          options={categories.map((c: any) => ({
-                            label: String(c.name),
-                            value: String(c.id),
-                          }))}
-                          placeholder="Select category"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setCatModal(true)}
-                          aria-label="New category"
-                          className="rounded-xl bg-orange-100 p-2.5 text-orange-600 hover:bg-orange-200"
-                        >
-                          <Plus className="size-4" />
-                        </button>
-                      </div>
-                    </div>
-                    <Field label="Description">
-                      <textarea
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        placeholder="A beautiful wedding invitation…"
-                        className={`${areaCls} h-20 resize-none`}
-                      />
-                    </Field>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <Field label="Price (PKR)">
+                    {/* A6: category / description / pricing are admin-only */}
+                    {!isRehearsal && (
+                      <>
                         <div>
-                          <div className="relative">
-                            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
-                              Rs
-                            </span>
-                            <input
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={price}
-                              onChange={(e) => setPrice(e.target.value)}
-                              className={`${inputCls} pl-8`}
+                          <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                            Template Category *
+                          </label>
+                          <div className="flex gap-2">
+                            <AceternitySelect
+                              className="flex-1"
+                              value={categoryId}
+                              onChange={setCategoryId}
+                              options={categories.map((c: any) => ({
+                                label: String(c.name),
+                                value: String(c.id),
+                              }))}
+                              placeholder="Select category"
                             />
+                            <button
+                              type="button"
+                              onClick={() => setCatModal(true)}
+                              aria-label="New category"
+                              className="rounded-xl bg-orange-100 p-2.5 text-orange-600 hover:bg-orange-200"
+                            >
+                              <Plus className="size-4" />
+                            </button>
                           </div>
-                          {Number(price) > 0 && (
-                            <span className="mt-1 block text-[11px] text-slate-400">
-                              {pkr.format(Number(price))}
+                        </div>
+                        <Field label="Description">
+                          <textarea
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            placeholder="A beautiful wedding invitation…"
+                            className={`${areaCls} h-20 resize-none`}
+                          />
+                        </Field>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <Field label="Price (PKR)">
+                            <div>
+                              <div className="relative">
+                                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                                  Rs
+                                </span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={price}
+                                  onChange={(e) => setPrice(e.target.value)}
+                                  className={`${inputCls} pl-8`}
+                                />
+                              </div>
+                              {Number(price) > 0 && (
+                                <span className="mt-1 block text-[11px] text-slate-400">
+                                  {pkr.format(Number(price))}
+                                </span>
+                              )}
+                            </div>
+                          </Field>
+                          <Field label="Premium">
+                            <span className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-600">
+                              <Crown className="size-3.5 text-orange-500" />
+                              <input
+                                type="checkbox"
+                                checked={isPremium}
+                                onChange={(e) => setIsPremium(e.target.checked)}
+                                className="size-4 accent-orange-500"
+                              />
+                              {isPremium ? "Yes" : "No"}
                             </span>
+                          </Field>
+                        </div>
+
+                        {/* Custom Slug Add-on */}
+                        <div className="space-y-3 rounded-xl border border-orange-100 bg-orange-50/40 p-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-700">
+                              Custom slug add-on
+                            </span>
+                            <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-600">
+                              Enable
+                              <input
+                                type="checkbox"
+                                checked={allowsCustomSlug}
+                                onChange={(e) => setAllowsCustomSlug(e.target.checked)}
+                                className="size-4 accent-orange-500"
+                              />
+                            </label>
+                          </div>
+                          {allowsCustomSlug && (
+                            <Field label="Add-on Price (PKR)">
+                              <div className="relative">
+                                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                                  Rs
+                                </span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="100"
+                                  value={customSlugPrice}
+                                  onChange={(e) => setCustomSlugPrice(e.target.value)}
+                                  className={`${inputCls} pl-8`}
+                                  placeholder="1000"
+                                />
+                              </div>
+                            </Field>
+                          )}
+                          {!allowsCustomSlug && (
+                            <p className="text-[11px] text-slate-500">Custom slug is disabled for this template.</p>
                           )}
                         </div>
-                      </Field>
-                      <Field label="Premium">
-                        <span className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-600">
-                          <Crown className="size-3.5 text-orange-500" />
-                          <input
-                            type="checkbox"
-                            checked={isPremium}
-                            onChange={(e) => setIsPremium(e.target.checked)}
-                            className="size-4 accent-orange-500"
-                          />
-                          {isPremium ? "Yes" : "No"}
-                        </span>
-                      </Field>
-                    </div>
-
-                    {/* Custom Slug Add-on */}
-                    <div className="space-y-3 rounded-xl border border-orange-100 bg-orange-50/40 p-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-700">
-                          Custom slug add-on
-                        </span>
-                        <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-600">
-                          Enable
-                          <input
-                            type="checkbox"
-                            checked={allowsCustomSlug}
-                            onChange={(e) => setAllowsCustomSlug(e.target.checked)}
-                            className="size-4 accent-orange-500"
-                          />
-                        </label>
-                      </div>
-                      {allowsCustomSlug && (
-                        <Field label="Add-on Price (PKR)">
-                          <div className="relative">
-                            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
-                              Rs
-                            </span>
-                            <input
-                              type="number"
-                              min="0"
-                              step="100"
-                              value={customSlugPrice}
-                              onChange={(e) => setCustomSlugPrice(e.target.value)}
-                              className={`${inputCls} pl-8`}
-                              placeholder="1000"
-                            />
-                          </div>
-                        </Field>
-                      )}
-                      {!allowsCustomSlug && (
-                        <p className="text-[11px] text-slate-500">Custom slug is disabled for this template.</p>
-                      )}
-                    </div>
+                      </>
+                    )}
 
                     <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                       <span className="block text-xs font-bold text-slate-700">
@@ -3022,17 +3273,20 @@ export function ElementorBuilder({
                       value={pageSettings.backgroundColor}
                       onChange={(v) => patchPage({ backgroundColor: v })}
                     />
-                    <Field label="Global custom CSS (applies to the whole invitation)">
-                      <textarea
-                        value={pageSettings.customCss}
-                        onChange={(e) =>
-                          patchPage({ customCss: e.target.value })
-                        }
-                        spellCheck={false}
-                        placeholder={".my-class { color: red; }"}
-                        className={`${areaCls} h-40 resize-none font-mono text-xs leading-5`}
-                      />
-                    </Field>
+                    {/* A6: global custom CSS is admin-only */}
+                    {!isRehearsal && (
+                      <Field label="Global custom CSS (applies to the whole invitation)">
+                        <textarea
+                          value={pageSettings.customCss}
+                          onChange={(e) =>
+                            patchPage({ customCss: e.target.value })
+                          }
+                          spellCheck={false}
+                          placeholder={".my-class { color: red; }"}
+                          className={`${areaCls} h-40 resize-none font-mono text-xs leading-5`}
+                        />
+                      </Field>
+                    )}
                   </>
                 )}
 
@@ -3068,11 +3322,13 @@ export function ElementorBuilder({
           <kbd className="rounded bg-white/15 px-1.5 text-[10px]">Esc</kbd>
         </button>
       )}
-      <CategoryModal
-        isOpen={catModal}
-        onClose={() => setCatModal(false)}
-        onSuccess={() => refetchCats()}
-      />
+      {!isRehearsal && (
+        <CategoryModal
+          isOpen={catModal}
+          onClose={() => setCatModal(false)}
+          onSuccess={() => refetchCats()}
+        />
+      )}
     </div>
   );
 }
