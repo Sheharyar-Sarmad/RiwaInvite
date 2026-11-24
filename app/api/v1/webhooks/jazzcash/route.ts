@@ -3,6 +3,7 @@ import { sql } from "@/db/connections/postgres_connection";
 import { STATUS_CODE } from "@/lib/status_codes";
 import settings from "@/config/settings_config";
 import crypto from "crypto";
+import { safeInvalidateCache } from "@/lib/api/helpers"; // <-- ADDED
 
 const config = settings();
 
@@ -62,11 +63,14 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. ACID TRANSACTION: Unlock the item
-    await sql.begin(async (tx) => {
+    // ADDED: We capture the return value (completedOrder) to get the userId for cache invalidation
+    const completedOrder = await sql.begin(async (tx) => {
       const [order] = await tx`SELECT * FROM orders WHERE provider_order_id = ${txnRefNo} FOR UPDATE`;
 
       if (!order) throw new Error("Order not found");
-      if (order.status === "completed") return;
+      
+      // ADDED: return null so we know it was already processed
+      if (order.status === "completed") return null;
 
       await tx`UPDATE orders SET status = 'completed', updated_at = NOW() WHERE id = ${order.id}`;
 
@@ -80,8 +84,6 @@ export async function POST(req: NextRequest) {
           VALUES (${order.user_id}, ${order.reference_id}, NOW(), ${expiresAt}, 'active')
         `;
       } else if (order.order_type === "template") {
-        // 4. UNLOCK TEMPLATE + CUSTOM SLUG ENTITLEMENT
-        // We cast to boolean just to be absolutely certain Postgres handles it natively
         const hasCustomSlug = Boolean(order.has_custom_slug);
 
         await tx`
@@ -101,10 +103,21 @@ export async function POST(req: NextRequest) {
         INSERT INTO admin_notifications (type, title, message)
         VALUES ('order', 'Payment Received', ${`Order ${txnRefNo} paid successfully. Amount: Rs ${order.amount}`})
       `;
+
+      // ADDED: Return the userId so we can clear their cache outside the transaction
+      return { userId: String(order.user_id) };
     });
 
     // 5. Mark log as processed
     await sql`UPDATE payment_logs SET status = 'processed' WHERE id = ${log.id}`;
+
+    // 6. INVALIDATE CACHES
+    // If the transaction completed successfully (and wasn't already processed), clear their dashboard caches
+    if (completedOrder?.userId) {
+      await safeInvalidateCache(`user_dashboard_billing:${completedOrder.userId}`);
+      await safeInvalidateCache(`user_dashboard_overview:${completedOrder.userId}`);
+      await safeInvalidateCache(`user_dashboard_activity:${completedOrder.userId}`);
+    }
 
     return NextResponse.json({ status: "success" }, { status: STATUS_CODE.OK });
 

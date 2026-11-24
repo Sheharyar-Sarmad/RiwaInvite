@@ -9,6 +9,18 @@ import { safeInvalidateCache } from "@/lib/api/helpers";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CACHE_TTL_SECONDS = 300;
 
+// Notification failures must never break the main request
+async function createNotification(userId: string, title: string, message: string) {
+  try {
+    await sql`
+      INSERT INTO notifications (user_id, title, message)
+      VALUES (${userId}, ${title}, ${message})
+    `;
+  } catch (e) {
+    console.warn("[RSVP_NOTIFICATION] Create failed:", e);
+  }
+}
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const userId = req.headers.get("x-user-id");
   if (!userId) return errorResponse(STATUS_CODE.UNAUTHORIZED, "UNAUTHORIZED", "Authentication required");
@@ -82,8 +94,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (!guestName) return errorResponse(STATUS_CODE.BAD_REQUEST, "INVALID_NAME", "Guest name is required");
 
-    // Verify ownership before inserting
-    const [inv] = await sql`SELECT id FROM invitations WHERE id = ${invitationId} AND user_id = ${userId} LIMIT 1`;
+    // Verify ownership before inserting (also fetch title for the notification)
+    const [inv] = await sql`SELECT id, title FROM invitations WHERE id = ${invitationId} AND user_id = ${userId} LIMIT 1`;
     if (!inv) return errorResponse(STATUS_CODE.NOT_FOUND, "NOT_FOUND", "Invitation not found");
 
     const [guest] = await sql`
@@ -92,7 +104,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       RETURNING id, guest_name, attendance_status, number_of_guests, comment, created_at
     `;
 
-    //  INVALIDATE BOTH CACHES
+    // CREATE NOTIFICATION
+    await createNotification(
+      userId,
+      "New Guest Added",
+      `${guestName} was added to "${inv.title}" with status "${status}" (${plusOnes} guest${plusOnes > 1 ? "s" : ""}).`
+    );
+
+    // INVALIDATE BOTH CACHES
     // 1. Clear the master dashboard cache (updates the totals)
     await safeInvalidateCache(`rsvp_master:v1:${userId}`);
     // 2. Clear the specific guest list cache (shows the new guest immediately)
