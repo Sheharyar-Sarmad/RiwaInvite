@@ -1,66 +1,84 @@
 import { NextRequest, NextResponse } from "next/server";
-import {sql} from "@/db/connections/postgres_connection";
-import { updateUserSettingsSchema } from "@/lib/validations/user"; 
+import { sql } from "@/db/connections/postgres_connection";
+import { updateUserSettingsSchema } from "@/lib/validations/user";
 import { verifyPassword, hashPassword } from "@/lib/auth";
 import { pgErrorToResponse } from "@/lib/api/errors";
 import { getRedisClient } from "@/db/connections/redis_connection";
 import { STATUS_CODE } from "@/lib/status_codes";
+
+const NO_STORE = { "Cache-Control": "no-store" };
+
+/** One consistent shape. created_at is always an ISO string (or null if the DB row has none). */
+function serializeUser(u: any) {
+  const created = u?.created_at ? new Date(u.created_at) : null;
+  return {
+    id: u.id,
+    first_name: u.first_name ?? "",
+    last_name: u.last_name ?? "",
+    email: u.email,
+    phone_number: u.phone_number ?? "",
+    created_at: created && !Number.isNaN(created.getTime()) ? created.toISOString() : null,
+  };
+}
 
 /**
  * GET: Fetch User Details (Excludes Password)
  */
 export async function GET(req: NextRequest) {
   try {
-    // 1. Middleware injects x-user-id for authenticated users
-    const userId = req.headers.get("x-user-id"); 
+    const userId = req.headers.get("x-user-id");
     if (!userId) {
       return NextResponse.json(
-        { error: "Unauthorized" }, 
-        { status: STATUS_CODE.UNAUTHORIZED }
+        { error: "Unauthorized" },
+        { status: STATUS_CODE.UNAUTHORIZED, headers: NO_STORE }
       );
     }
 
     const redis = await getRedisClient();
-    const cacheKey = `user_details:${userId}`; // <-- Distinct cache key for users
+    const cacheKey = `user_details:${userId}`;
 
-    // 2. Check Redis Cache
-    const cachedUser = await redis.get(cacheKey);
-    if (cachedUser) {
-      return NextResponse.json(
-        { user: JSON.parse(cachedUser) }, 
-        { status: STATUS_CODE.OK }
-      );
+    // Use the cache only when it holds a complete record (an old entry without created_at is skipped)
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed?.created_at) {
+          return NextResponse.json(
+            { user: parsed },
+            { status: STATUS_CODE.OK, headers: NO_STORE }
+          );
+        }
+      } catch {
+        /* bad cache entry: fall through to the database */
+      }
     }
 
-    // 3. Query Postgres
-    const [user] = await sql`
-      SELECT 
-        id, 
-        first_name, 
-        last_name, 
-        email, 
-        phone_number, 
+    const [row] = await sql`
+      SELECT
+        id,
+        first_name,
+        last_name,
+        email,
+        phone_number,
         created_at
-      FROM users 
-      WHERE id = ${userId} 
+      FROM users
+      WHERE id = ${userId}
       LIMIT 1
     `;
 
-    if (!user) {
+    if (!row) {
       return NextResponse.json(
-        { error: "User not found" }, 
-        { status: STATUS_CODE.NOT_FOUND }
+        { error: "User not found" },
+        { status: STATUS_CODE.NOT_FOUND, headers: NO_STORE }
       );
     }
 
-    // 4. Save to Redis (15 mins)
+    const user = serializeUser(row);
+
+    // Cache for 15 minutes
     await redis.setEx(cacheKey, 900, JSON.stringify(user));
 
-    return NextResponse.json(
-      { user }, 
-      { status: STATUS_CODE.OK }
-    );
-
+    return NextResponse.json({ user }, { status: STATUS_CODE.OK, headers: NO_STORE });
   } catch (error: any) {
     return pgErrorToResponse(error);
   }
@@ -74,7 +92,7 @@ export async function PATCH(req: NextRequest) {
     const userId = req.headers.get("x-user-id");
     if (!userId) {
       return NextResponse.json(
-        { error: "Unauthorized" }, 
+        { error: "Unauthorized" },
         { status: STATUS_CODE.UNAUTHORIZED }
       );
     }
@@ -99,7 +117,7 @@ export async function PATCH(req: NextRequest) {
 
     if (!user) {
       return NextResponse.json(
-        { error: "User not found" }, 
+        { error: "User not found" },
         { status: STATUS_CODE.NOT_FOUND }
       );
     }
@@ -108,7 +126,7 @@ export async function PATCH(req: NextRequest) {
     const isPasswordValid = await verifyPassword(currentPassword, user.password);
     if (!isPasswordValid) {
       return NextResponse.json(
-        { error: "Incorrect current password" }, 
+        { error: "Incorrect current password" },
         { status: STATUS_CODE.FORBIDDEN }
       );
     }
@@ -119,14 +137,14 @@ export async function PATCH(req: NextRequest) {
     if (lastName) updateData.last_name = lastName;
     if (email) updateData.email = email;
     if (phoneNumber) updateData.phone_number = phoneNumber;
-    
+
     if (newPassword) {
       updateData.password = await hashPassword(newPassword);
     }
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
-        { message: "No changes provided" }, 
+        { message: "No changes provided" },
         { status: STATUS_CODE.OK }
       );
     }
@@ -143,12 +161,14 @@ export async function PATCH(req: NextRequest) {
     const redis = await getRedisClient();
     await redis.del(`user_details:${userId}`);
 
-    // 7. Return Updated Details
-    return NextResponse.json({
-      message: "Account settings updated successfully",
-      user: updatedUser[0]
-    }, { status: STATUS_CODE.OK });
-
+    // 7. Return Updated Details (same shape as GET)
+    return NextResponse.json(
+      {
+        message: "Account settings updated successfully",
+        user: serializeUser(updatedUser[0]),
+      },
+      { status: STATUS_CODE.OK, headers: NO_STORE }
+    );
   } catch (error: any) {
     // Catches Unique Violations (23505) if email is already taken by another user
     return pgErrorToResponse(error);
