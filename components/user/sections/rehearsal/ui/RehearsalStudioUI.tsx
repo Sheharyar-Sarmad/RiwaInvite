@@ -47,7 +47,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { FOCUS } from "@/components/user/navigation/UserSidebar";
-import { BTN, EASE, ErrorCard, HEADING, cn } from "@/components/user/sections/dashboard/ui/DashboardUI";
+import {
+  BTN,
+  EASE,
+  ErrorCard,
+  HEADING,
+  cn,
+} from "@/components/user/sections/dashboard/ui/DashboardUI";
 import {
   GRID_CLASS,
   GridSkeleton,
@@ -57,6 +63,7 @@ import {
 import type { AiSuggestion, EditorBarApi } from "./RehearsalEditor";
 import { EventDateTimeFields } from "./DateTimePicker";
 import { RehearsalTemplateCard } from "./TemplateCard";
+import { slotsLeft, type PlanAllowance } from "../usePlanAllowance";
 
 /* ========================================================================== */
 /*  Types                                                                     */
@@ -93,12 +100,11 @@ export type PublicTemplate = {
   thumbnail_url: string;
   is_premium: boolean;
   price: number;
-  /** true when the user bought it (from the library API). */
   owned?: boolean;
-  /** true when the purchase includes a custom invitation link (from the library API). */
   has_custom_slug?: boolean;
+  /** true when the template is unlocked through the user's live plan, not bought. */
+  via_plan?: boolean;
 };
-
 /** A rehearsal the user already started (read from this device). */
 export type DraftSummary = {
   templateId: string;
@@ -107,6 +113,7 @@ export type DraftSummary = {
   updatedAt: number;
   unsynced: boolean;
   owned?: boolean;
+  viaPlan?: boolean;   // add this
 };
 
 export type BuilderBarApi = EditorBarApi;
@@ -148,7 +155,9 @@ export function useAssetTracker(max = 100) {
 
   const reset = React.useCallback(
     (urls: string[]) => {
-      urlsRef.current = Array.from(new Set(urls.filter((u) => typeof u === "string"))).slice(-max);
+      urlsRef.current = Array.from(
+        new Set(urls.filter((u) => typeof u === "string")),
+      ).slice(-max);
       setCount(urlsRef.current.length);
     },
     [max],
@@ -169,38 +178,82 @@ export function AssetTracker({ count }: { count: number }) {
 /*  Save status                                                               */
 /* ========================================================================== */
 
-const SAVE_META: Record<SaveState, { label: string; short: string; cls: string }> = {
-  idle: { label: "Draft", short: "Draft", cls: "bg-stone-100 text-stone-600 ring-black/[0.06]" },
-  dirty: { label: "Unsaved changes", short: "Unsaved", cls: "bg-amber-50 text-amber-700 ring-amber-200" },
-  saving: { label: "Saving…", short: "Saving", cls: "bg-orange-50 text-orange-700 ring-orange-200" },
-  saved: { label: "Saved", short: "Saved", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
-  error: { label: "Safe on this device", short: "Offline", cls: "bg-rose-50 text-rose-700 ring-rose-200" },
+const SAVE_META: Record<
+  SaveState,
+  { label: string; short: string; cls: string }
+> = {
+  idle: {
+    label: "Draft",
+    short: "Draft",
+    cls: "bg-stone-100 text-stone-600 ring-black/[0.06]",
+  },
+  dirty: {
+    label: "Unsaved changes",
+    short: "Unsaved",
+    cls: "bg-amber-50 text-amber-700 ring-amber-200",
+  },
+  saving: {
+    label: "Saving…",
+    short: "Saving",
+    cls: "bg-orange-50 text-orange-700 ring-orange-200",
+  },
+  saved: {
+    label: "Saved",
+    short: "Saved",
+    cls: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  },
+  error: {
+    label: "Safe on this device",
+    short: "Offline",
+    cls: "bg-rose-50 text-rose-700 ring-rose-200",
+  },
 };
 
-export function SaveStatusBadge({ state, savedAt }: { state: SaveState; savedAt?: number | null }) {
+export function SaveStatusBadge({
+  state,
+  savedAt,
+}: {
+  state: SaveState;
+  savedAt?: number | null;
+}) {
   const meta = SAVE_META[state];
   const time =
     state === "saved" && savedAt
-      ? new Date(savedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      ? new Date(savedAt).toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
+        })
       : null;
 
   return (
     <span
       role="status"
       aria-live="polite"
-      title={state === "error" ? "We couldn’t reach the server. Your work is kept on this device and will retry." : undefined}
+      title={
+        state === "error"
+          ? "We couldn’t reach the server. Your work is kept on this device and will retry."
+          : undefined
+      }
       className={cn(
         "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-[11px] font-semibold ring-1 sm:px-2.5",
         meta.cls,
       )}
     >
-      {state === "saving" && <Loader2 className="size-3 animate-spin motion-reduce:animate-none" />}
+      {state === "saving" && (
+        <Loader2 className="size-3 animate-spin motion-reduce:animate-none" />
+      )}
       {state === "saved" && <Check className="size-3" />}
-      {state === "dirty" && <span aria-hidden className="size-1.5 rounded-full bg-amber-500" />}
+      {state === "dirty" && (
+        <span aria-hidden className="size-1.5 rounded-full bg-amber-500" />
+      )}
       {state === "error" && <AlertTriangle className="size-3" />}
       <span className="max-sm:hidden">{meta.label}</span>
       <span className="sm:hidden">{meta.short}</span>
-      {time && <span className="font-medium tabular-nums opacity-70 max-md:hidden">{time}</span>}
+      {time && (
+        <span className="font-medium tabular-nums opacity-70 max-md:hidden">
+          {time}
+        </span>
+      )}
     </span>
   );
 }
@@ -209,7 +262,10 @@ export function SaveStatusBadge({ state, savedAt }: { state: SaveState; savedAt?
 /*  Shared modal focus handling                                               */
 /* ========================================================================== */
 
-function useModalFocus(open: boolean, initial: React.RefObject<HTMLElement | null>) {
+function useModalFocus(
+  open: boolean,
+  initial: React.RefObject<HTMLElement | null>,
+) {
   React.useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
@@ -295,12 +351,19 @@ export function DiscardConfirmModal({
             <span className="flex size-11 items-center justify-center rounded-full bg-rose-50 text-rose-600 ring-1 ring-rose-100">
               <AlertTriangle className="size-5" />
             </span>
-            <h2 id="discard-title" className={cn(HEADING, "mt-3 text-lg tracking-[-0.01em]")}>
+            <h2
+              id="discard-title"
+              className={cn(HEADING, "mt-3 text-lg tracking-[-0.01em]")}
+            >
               Not buying{name ? ` “${name}”` : ""}? Delete this draft
             </h2>
-            <p id="discard-desc" className="mt-1.5 text-[13px] leading-relaxed text-stone-600 sm:text-sm">
-              Your edits and every photo, song or video you uploaded for this rehearsal are deleted right away, from
-              this device and from our servers. This can’t be undone.
+            <p
+              id="discard-desc"
+              className="mt-1.5 text-[13px] leading-relaxed text-stone-600 sm:text-sm"
+            >
+              Your edits and every photo, song or video you uploaded for this
+              rehearsal are deleted right away, from this device and from our
+              servers. This can’t be undone.
             </p>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
@@ -325,7 +388,11 @@ export function DiscardConfirmModal({
                   FOCUS,
                 )}
               >
-                {busy ? <Loader2 className="size-4 animate-spin motion-reduce:animate-none" /> : <Trash2 className="size-4" />}
+                {busy ? (
+                  <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <Trash2 className="size-4" />
+                )}
                 {busy ? "Deleting…" : "Yes, delete everything"}
               </button>
             </div>
@@ -337,13 +404,22 @@ export function DiscardConfirmModal({
 }
 
 /** Prominent card on the template page that asks the user to read the guide. */
-export function GuideBanner({ seen, onOpen }: { seen: boolean; onOpen: () => void }) {
+export function GuideBanner({
+  seen,
+  onOpen,
+}: {
+  seen: boolean;
+  onOpen: () => void;
+}) {
   if (seen) {
     return (
       <button
         type="button"
         onClick={onOpen}
-        className={cn("inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-stone-500 hover:bg-orange-50 hover:text-orange-600", FOCUS)}
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-stone-500 hover:bg-orange-50 hover:text-orange-600",
+          FOCUS,
+        )}
       >
         <HelpCircle className="size-4" /> How does this work?
       </button>
@@ -356,14 +432,20 @@ export function GuideBanner({ seen, onOpen }: { seen: boolean; onOpen: () => voi
           <BookOpen className="size-5" />
         </span>
         <div>
-          <p className={cn(HEADING, "text-base leading-5 text-[#2a1002]")}>New here? Read the 2-minute guide</p>
+          <p className={cn(HEADING, "text-base leading-5 text-[#2a1002]")}>
+            New here? Read the 2-minute guide
+          </p>
           <p className="mt-0.5 text-[13px] leading-snug text-stone-600">
-            Learn how to edit with a few taps, let the AI build your layout, add scroll animations and delete a draft
-            you don’t want.
+            Learn how to edit with a few taps, let the AI build your layout, add
+            scroll animations and delete a draft you don’t want.
           </p>
         </div>
       </div>
-      <button type="button" onClick={onOpen} className={cn(BTN, "h-10 shrink-0 rounded-xl px-5 text-sm", FOCUS)}>
+      <button
+        type="button"
+        onClick={onOpen}
+        className={cn(BTN, "h-10 shrink-0 rounded-xl px-5 text-sm", FOCUS)}
+      >
         Open the guide
       </button>
     </div>
@@ -400,8 +482,14 @@ function TypingIndicator() {
         <motion.span
           key={i}
           className="size-1.5 rounded-full bg-stone-400"
-          animate={reduce ? undefined : { y: [0, -3, 0], opacity: [0.5, 1, 0.5] }}
-          transition={reduce ? undefined : { duration: 0.9, repeat: Infinity, delay: i * 0.15 }}
+          animate={
+            reduce ? undefined : { y: [0, -3, 0], opacity: [0.5, 1, 0.5] }
+          }
+          transition={
+            reduce
+              ? undefined
+              : { duration: 0.9, repeat: Infinity, delay: i * 0.15 }
+          }
         />
       ))}
     </div>
@@ -424,13 +512,18 @@ function SuggestionCard({
   return (
     <div className="rounded-xl border border-orange-100 bg-[#fffafb] p-2.5">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-orange-700">{s.target}</span>
+        <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-orange-700">
+          {s.target}
+        </span>
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => onCopy(css)}
             aria-label={`Copy CSS for ${s.target}`}
-            className={cn("inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-semibold text-stone-500 transition hover:bg-orange-50 hover:text-orange-600", FOCUS)}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-semibold text-stone-500 transition hover:bg-orange-50 hover:text-orange-600",
+              FOCUS,
+            )}
           >
             <Copy className="size-3" /> Copy
           </button>
@@ -439,12 +532,22 @@ function SuggestionCard({
             onClick={() => setResult(onApply(s))}
             className={cn(
               "inline-flex h-7 items-center gap-1 rounded-lg px-2.5 text-[11px] font-bold transition active:scale-95",
-              result && result > 0 ? "bg-emerald-100 text-emerald-700" : "bg-orange-500 text-white hover:bg-orange-600",
+              result && result > 0
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-orange-500 text-white hover:bg-orange-600",
               FOCUS,
             )}
           >
-            {result && result > 0 ? <Check className="size-3" /> : <Play className="size-3" />}
-            {result === null ? "Apply" : result > 0 ? "Applied" : "Nothing to change"}
+            {result && result > 0 ? (
+              <Check className="size-3" />
+            ) : (
+              <Play className="size-3" />
+            )}
+            {result === null
+              ? "Apply"
+              : result > 0
+                ? "Applied"
+                : "Nothing to change"}
           </button>
         </div>
       </div>
@@ -458,7 +561,9 @@ function SuggestionCard({
           </code>
         ))}
       </div>
-      {s.reason && <p className="mt-1.5 text-xs leading-snug text-stone-500">{s.reason}</p>}
+      {s.reason && (
+        <p className="mt-1.5 text-xs leading-snug text-stone-500">{s.reason}</p>
+      )}
     </div>
   );
 }
@@ -488,7 +593,10 @@ export function AiChatPanel({
   busy: boolean;
   firstName: string;
   getValues: () => BuilderValues;
-  onSend: (text: string, opts: { mode: AiMode; values?: BuilderValues }) => void;
+  onSend: (
+    text: string,
+    opts: { mode: AiMode; values?: BuilderValues },
+  ) => void;
   onApplyValues: (v: BuilderValues) => number;
   onApplySuggestion: (s: AiSuggestion) => number;
   onUndo: () => void;
@@ -498,7 +606,12 @@ export function AiChatPanel({
   const reduce = useReducedMotion();
   const [draft, setDraft] = React.useState("");
   const [values, setValues] = React.useState<BuilderValues>(() => ({
-    bride: "", groom: "", date: "", time: "", venue: "", address: "",
+    bride: "",
+    groom: "",
+    date: "",
+    time: "",
+    venue: "",
+    address: "",
   }));
   const [formOpen, setFormOpen] = React.useState(true);
   const [saved, setSaved] = React.useState(false);
@@ -521,7 +634,10 @@ export function AiChatPanel({
   }, [open, mode, getValues]);
 
   React.useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: reduce ? "auto" : "smooth" });
+    listRef.current?.scrollTo({
+      top: listRef.current.scrollHeight,
+      behavior: reduce ? "auto" : "smooth",
+    });
   }, [messages, busy, reduce]);
 
   React.useEffect(() => {
@@ -531,10 +647,11 @@ export function AiChatPanel({
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, [draft]);
 
-  const set = (k: keyof BuilderValues) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSaved(false);
-    setValues((v) => ({ ...v, [k]: e.target.value }));
-  };
+  const set =
+    (k: keyof BuilderValues) => (e: React.ChangeEvent<HTMLInputElement>) => {
+      setSaved(false);
+      setValues((v) => ({ ...v, [k]: e.target.value }));
+    };
 
   /** Used by the custom date and time pickers, which give back a plain string. */
   const setValue = (k: "date" | "time") => (v: string) => {
@@ -568,7 +685,11 @@ export function AiChatPanel({
           initial={{ x: "100%" }}
           animate={{ x: 0 }}
           exit={{ x: "100%" }}
-          transition={reduce ? { duration: 0 } : { type: "spring", damping: 34, stiffness: 380 }}
+          transition={
+            reduce
+              ? { duration: 0 }
+              : { type: "spring", damping: 34, stiffness: 380 }
+          }
           className="fixed inset-y-0 right-0 z-[80] flex h-dvh w-full flex-col bg-white text-[#2a1002] shadow-2xl ring-1 ring-black/[0.06] sm:w-[420px]"
         >
           {/* header */}
@@ -578,18 +699,31 @@ export function AiChatPanel({
                 <Bot className="size-5" />
               </span>
               <div>
-                <h2 className={cn(HEADING, "text-sm leading-4")}>AI assistant</h2>
-                <p className="text-[11px] leading-4 text-stone-500">Chats aren’t saved</p>
+                <h2 className={cn(HEADING, "text-sm leading-4")}>
+                  AI assistant
+                </h2>
+                <p className="text-[11px] leading-4 text-stone-500">
+                  Chats aren’t saved
+                </p>
               </div>
             </div>
-            <button type="button" onClick={onClose} aria-label="Close assistant" className={cn(ICON_BTN, FOCUS)}>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close assistant"
+              className={cn(ICON_BTN, FOCUS)}
+            >
               <X className="size-4" />
             </button>
           </div>
 
           {/* mode switch */}
           <div className="shrink-0 border-b border-black/[0.06] p-2.5">
-            <div role="tablist" aria-label="Assistant mode" className="relative grid grid-cols-2 gap-1 rounded-xl bg-stone-100 p-1">
+            <div
+              role="tablist"
+              aria-label="Assistant mode"
+              className="relative grid grid-cols-2 gap-1 rounded-xl bg-stone-100 p-1"
+            >
               {(
                 [
                   ["ideas", "Ideas", MessageCircle],
@@ -604,7 +738,9 @@ export function AiChatPanel({
                   onClick={() => onModeChange(id)}
                   className={cn(
                     "relative flex h-10 items-center justify-center gap-2 rounded-lg text-[13px] font-semibold transition-colors",
-                    mode === id ? "text-orange-600" : "text-stone-500 hover:text-stone-800",
+                    mode === id
+                      ? "text-orange-600"
+                      : "text-stone-500 hover:text-stone-800",
                     FOCUS,
                   )}
                 >
@@ -612,7 +748,11 @@ export function AiChatPanel({
                     <motion.span
                       layoutId="ai-mode-pill"
                       className="absolute inset-0 rounded-lg bg-white shadow-sm"
-                      transition={{ type: "spring", damping: 30, stiffness: 400 }}
+                      transition={{
+                        type: "spring",
+                        damping: 30,
+                        stiffness: 400,
+                      }}
                     />
                   )}
                   <Ic className="relative size-4" />
@@ -637,12 +777,17 @@ export function AiChatPanel({
                   type="button"
                   onClick={() => setFormOpen((o) => !o)}
                   aria-expanded={formOpen}
-                  className={cn("flex h-12 w-full items-center justify-between gap-2 px-3.5 text-left", FOCUS)}
+                  className={cn(
+                    "flex h-12 w-full items-center justify-between gap-2 px-3.5 text-left",
+                    FOCUS,
+                  )}
                 >
                   <span className="flex items-center gap-2 text-sm font-bold text-[#2a1002]">
                     <Users className="size-4 text-orange-600" /> My values
                   </span>
-                  <span className="text-xs font-semibold text-stone-500">{formOpen ? "Hide" : "Edit"}</span>
+                  <span className="text-xs font-semibold text-stone-500">
+                    {formOpen ? "Hide" : "Edit"}
+                  </span>
                 </button>
                 <AnimatePresence initial={false}>
                   {formOpen && (
@@ -655,11 +800,24 @@ export function AiChatPanel({
                     >
                       <div className="space-y-2 px-3.5 pb-3.5">
                         <p className="text-xs leading-snug text-stone-500">
-                          Fill what you know. They go onto your page first, then the AI arranges them the way you ask.
+                          Fill what you know. They go onto your page first, then
+                          the AI arranges them the way you ask.
                         </p>
                         <div className="grid grid-cols-2 gap-2">
-                          <input aria-label="Bride name" className={FIELD} placeholder="Bride" value={values.bride} onChange={set("bride")} />
-                          <input aria-label="Groom name" className={FIELD} placeholder="Groom" value={values.groom} onChange={set("groom")} />
+                          <input
+                            aria-label="Bride name"
+                            className={FIELD}
+                            placeholder="Bride"
+                            value={values.bride}
+                            onChange={set("bride")}
+                          />
+                          <input
+                            aria-label="Groom name"
+                            className={FIELD}
+                            placeholder="Groom"
+                            value={values.groom}
+                            onChange={set("groom")}
+                          />
                         </div>
                         <EventDateTimeFields
                           variant="compact"
@@ -668,8 +826,20 @@ export function AiChatPanel({
                           onDate={setValue("date")}
                           onTime={setValue("time")}
                         />
-                        <input aria-label="Venue name" className={FIELD} placeholder="Venue name" value={values.venue} onChange={set("venue")} />
-                        <input aria-label="Venue address" className={FIELD} placeholder="Venue address" value={values.address} onChange={set("address")} />
+                        <input
+                          aria-label="Venue name"
+                          className={FIELD}
+                          placeholder="Venue name"
+                          value={values.venue}
+                          onChange={set("venue")}
+                        />
+                        <input
+                          aria-label="Venue address"
+                          className={FIELD}
+                          placeholder="Venue address"
+                          value={values.address}
+                          onChange={set("address")}
+                        />
                         <button
                           type="button"
                           onClick={saveValues}
@@ -681,8 +851,14 @@ export function AiChatPanel({
                             FOCUS,
                           )}
                         >
-                          {saved ? <Check className="size-4" /> : <Save className="size-4" />}
-                          {saved ? "Added to your page" : "Add these to my page only"}
+                          {saved ? (
+                            <Check className="size-4" />
+                          ) : (
+                            <Save className="size-4" />
+                          )}
+                          {saved
+                            ? "Added to your page"
+                            : "Add these to my page only"}
                         </button>
                       </div>
                     </motion.div>
@@ -724,7 +900,10 @@ export function AiChatPanel({
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.25, ease: EASE }}
-                className={cn("flex flex-col gap-2", m.role === "user" ? "items-end" : "items-start")}
+                className={cn(
+                  "flex flex-col gap-2",
+                  m.role === "user" ? "items-end" : "items-start",
+                )}
               >
                 <div
                   className={cn(
@@ -743,13 +922,18 @@ export function AiChatPanel({
                   <div className="flex w-full max-w-[96%] items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
                     <span className="flex items-center gap-1.5">
                       <Check className="size-4" />
-                      {m.applied > 0 ? `Applied ${m.applied} change${m.applied === 1 ? "" : "s"}` : "No changes were needed"}
+                      {m.applied > 0
+                        ? `Applied ${m.applied} change${m.applied === 1 ? "" : "s"}`
+                        : "No changes were needed"}
                     </span>
                     {m.applied > 0 && (
                       <button
                         type="button"
                         onClick={onUndo}
-                        className={cn("inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100", FOCUS)}
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100",
+                          FOCUS,
+                        )}
                       >
                         <Undo2 className="size-3.5" /> Undo
                       </button>
@@ -760,7 +944,12 @@ export function AiChatPanel({
                 {m.suggestions && m.suggestions.length > 0 && (
                   <div className="w-full max-w-[96%] space-y-2">
                     {m.suggestions.map((s, i) => (
-                      <SuggestionCard key={`${m.id}-${i}`} s={s} onCopy={onCopyCss} onApply={onApplySuggestion} />
+                      <SuggestionCard
+                        key={`${m.id}-${i}`}
+                        s={s}
+                        onCopy={onCopyCss}
+                        onApply={onApplySuggestion}
+                      />
                     ))}
                   </div>
                 )}
@@ -782,12 +971,20 @@ export function AiChatPanel({
                   maxLength={1000}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    if (
+                      e.key === "Enter" &&
+                      !e.shiftKey &&
+                      !e.nativeEvent.isComposing
+                    ) {
                       e.preventDefault();
                       send(draft);
                     }
                   }}
-                  placeholder={mode === "builder" ? "How should I arrange your values?" : "Ask for design ideas…"}
+                  placeholder={
+                    mode === "builder"
+                      ? "How should I arrange your values?"
+                      : "Ask for design ideas…"
+                  }
                   className={cn(
                     "max-h-[120px] w-full resize-none rounded-xl border bg-white px-3 py-2.5 text-[13px] text-[#2a1002] placeholder:text-stone-400 sm:text-sm",
                     HAIRLINE,
@@ -801,17 +998,29 @@ export function AiChatPanel({
                 onClick={() => send(draft)}
                 disabled={busy || draft.trim().length === 0}
                 aria-label={mode === "builder" ? "Build it" : "Send message"}
-                className={cn(BTN, "size-11 shrink-0 rounded-xl p-0 disabled:opacity-50", FOCUS)}
+                className={cn(
+                  BTN,
+                  "size-11 shrink-0 rounded-xl p-0 disabled:opacity-50",
+                  FOCUS,
+                )}
               >
-                {busy ? <Loader2 className="size-4 animate-spin motion-reduce:animate-none" /> : <Send className="size-4" />}
+                {busy ? (
+                  <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <Send className="size-4" />
+                )}
               </button>
             </div>
             <p className="mt-1.5 flex items-center justify-between text-[10px] text-stone-400">
               <span className="flex items-center gap-1">
                 <MessageCircle className="size-3" />
-                {mode === "builder" ? "I edit your page. One tap undoes it." : "Ideas only. You stay in control."}
+                {mode === "builder"
+                  ? "I edit your page. One tap undoes it."
+                  : "Ideas only. You stay in control."}
               </span>
-              {draft.length > 800 && <span className="tabular-nums">{draft.length}/1000</span>}
+              {draft.length > 800 && (
+                <span className="tabular-nums">{draft.length}/1000</span>
+              )}
             </p>
           </div>
         </motion.aside>
@@ -839,7 +1048,10 @@ export function DraftsStrip({
       <h2 id="drafts-title" className={cn(HEADING, "text-base text-[#2a1002]")}>
         Continue where you left off
       </h2>
-      <ul data-lenis-prevent-wheel className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2">
+      <ul
+        data-lenis-prevent-wheel
+        className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2"
+      >
         {drafts.map((d, i) => (
           <motion.li
             key={d.templateId}
@@ -848,16 +1060,28 @@ export function DraftsStrip({
             transition={{ duration: 0.3, delay: i * 0.05, ease: EASE }}
             className="w-[16rem] shrink-0 snap-start"
           >
-            <div className={cn("flex items-center gap-3 rounded-2xl p-2.5", SURFACE)}>
+            <div
+              className={cn(
+                "flex items-center gap-3 rounded-2xl p-2.5",
+                SURFACE,
+              )}
+            >
               <button
                 type="button"
                 onClick={() => onOpen(d.templateId)}
                 aria-label={`Continue ${d.name}`}
-                className={cn("relative size-14 shrink-0 overflow-hidden rounded-xl bg-stone-100", FOCUS)}
+                className={cn(
+                  "relative size-14 shrink-0 overflow-hidden rounded-xl bg-stone-100",
+                  FOCUS,
+                )}
               >
                 {d.thumb ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={d.thumb} alt="" className="size-full object-cover" />
+                  <img
+                    src={d.thumb}
+                    alt=""
+                    className="size-full object-cover"
+                  />
                 ) : (
                   <span className="grid size-full place-items-center text-stone-400">
                     <IcImageOff className="size-5" />
@@ -865,7 +1089,10 @@ export function DraftsStrip({
                 )}
               </button>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-[#2a1002]" title={d.name}>
+                <p
+                  className="truncate text-sm font-bold text-[#2a1002]"
+                  title={d.name}
+                >
                   {d.name}
                 </p>
                 <p className="flex items-center gap-1.5 text-[11px] text-stone-500">
@@ -878,13 +1105,17 @@ export function DraftsStrip({
                   <button
                     type="button"
                     onClick={() => onOpen(d.templateId)}
-                    className={cn("text-xs font-bold text-orange-600 hover:text-orange-700", FOCUS)}
+                    className={cn(
+                      "text-xs font-bold text-orange-600 hover:text-orange-700",
+                      FOCUS,
+                    )}
                   >
                     Continue
                   </button>
                   {d.owned && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-200">
-                      <BadgeCheck className="size-3" /> Purchased
+                      <BadgeCheck className="size-3" />{" "}
+                      {d.viaPlan ? "In your plan" : "Purchased"}
                     </span>
                   )}
                 </div>
@@ -894,7 +1125,10 @@ export function DraftsStrip({
                 onClick={() => onDelete(d)}
                 aria-label={`Delete draft ${d.name}`}
                 title="Not buying? Delete this draft"
-                className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-red-50 hover:text-red-600", FOCUS)}
+                className={cn(
+                  "flex size-9 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-red-50 hover:text-red-600",
+                  FOCUS,
+                )}
               >
                 <Trash2 className="size-4" />
               </button>
@@ -921,10 +1155,30 @@ export function StatsRow({
   drafts: number;
   loadingOwned: boolean;
 }) {
-  const cards: { icon: LucideIcon; label: string; value: string; tone: string }[] = [
-    { icon: LayoutGrid, label: "Templates to try", value: total === null ? "…" : String(total), tone: "bg-orange-100 text-orange-600" },
-    { icon: BadgeCheck, label: "Purchased by you", value: loadingOwned ? "…" : String(owned), tone: "bg-emerald-100 text-emerald-600" },
-    { icon: PenTool, label: "Rehearsals in progress", value: String(drafts), tone: "bg-stone-100 text-stone-600" },
+  const cards: {
+    icon: LucideIcon;
+    label: string;
+    value: string;
+    tone: string;
+  }[] = [
+    {
+      icon: LayoutGrid,
+      label: "Templates to try",
+      value: total === null ? "…" : String(total),
+      tone: "bg-orange-100 text-orange-600",
+    },
+    {
+      icon: BadgeCheck,
+      label: "Purchased by you",
+      value: loadingOwned ? "…" : String(owned),
+      tone: "bg-emerald-100 text-emerald-600",
+    },
+    {
+      icon: PenTool,
+      label: "Rehearsals in progress",
+      value: String(drafts),
+      tone: "bg-stone-100 text-stone-600",
+    },
   ];
   return (
     <ul className="grid grid-cols-3 gap-2 sm:gap-3">
@@ -934,14 +1188,26 @@ export function StatsRow({
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, delay: i * 0.06, ease: EASE }}
-          className={cn("flex min-w-0 items-center gap-2.5 rounded-2xl p-2.5 sm:gap-3 sm:p-3.5", SURFACE)}
+          className={cn(
+            "flex min-w-0 items-center gap-2.5 rounded-2xl p-2.5 sm:gap-3 sm:p-3.5",
+            SURFACE,
+          )}
         >
-          <span className={cn("hidden size-10 shrink-0 items-center justify-center rounded-xl min-[420px]:flex", c.tone)}>
+          <span
+            className={cn(
+              "hidden size-10 shrink-0 items-center justify-center rounded-xl min-[420px]:flex",
+              c.tone,
+            )}
+          >
             <c.icon className="size-5" />
           </span>
           <div className="min-w-0">
-            <p className="text-lg font-bold leading-6 tabular-nums text-[#2a1002] sm:text-2xl sm:leading-7">{c.value}</p>
-            <p className="truncate text-[11px] leading-4 text-stone-500 sm:text-xs">{c.label}</p>
+            <p className="text-lg font-bold leading-6 tabular-nums text-[#2a1002] sm:text-2xl sm:leading-7">
+              {c.value}
+            </p>
+            <p className="truncate text-[11px] leading-4 text-stone-500 sm:text-xs">
+              {c.label}
+            </p>
           </div>
         </motion.li>
       ))}
@@ -960,11 +1226,19 @@ export function OwnershipTabs({
 }) {
   const tabs: { id: OwnershipTab; label: string; icon: LucideIcon }[] = [
     { id: "all", label: "All", icon: LayoutGrid },
-    { id: "owned", label: ownedCount === null ? "Purchased" : `Purchased (${ownedCount})`, icon: BadgeCheck },
+    {
+      id: "owned",
+      label: ownedCount === null ? "Purchased" : `Purchased (${ownedCount})`,
+      icon: BadgeCheck,
+    },
     { id: "unowned", label: "Not purchased", icon: Lock },
   ];
   return (
-    <div role="tablist" aria-label="Template filter" className="grid grid-cols-3 gap-1 rounded-xl bg-black/[0.05] p-1 sm:inline-grid sm:w-fit">
+    <div
+      role="tablist"
+      aria-label="Template filter"
+      className="grid grid-cols-3 gap-1 rounded-xl bg-black/[0.05] p-1 sm:inline-grid sm:w-fit"
+    >
       {tabs.map((t) => (
         <button
           key={t.id}
@@ -974,7 +1248,9 @@ export function OwnershipTabs({
           onClick={() => onChange(t.id)}
           className={cn(
             "relative flex h-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-xs font-semibold transition-colors sm:h-10 sm:px-4 sm:text-[13px]",
-            value === t.id ? "text-orange-600" : "text-stone-500 hover:text-[#2a1002]",
+            value === t.id
+              ? "text-orange-600"
+              : "text-stone-500 hover:text-[#2a1002]",
             FOCUS,
           )}
         >
@@ -1005,7 +1281,12 @@ export function CategoryChips({
   if (categories.length < 2) return null;
   const all = ["", ...categories];
   return (
-    <div data-lenis-prevent-wheel className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" role="group" aria-label="Category">
+    <div
+      data-lenis-prevent-wheel
+      className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1"
+      role="group"
+      aria-label="Category"
+    >
       {all.map((c) => (
         <button
           key={c || "all"}
@@ -1016,7 +1297,10 @@ export function CategoryChips({
             "h-11 shrink-0 rounded-full border px-3.5 text-xs font-semibold transition sm:h-9",
             value === c
               ? "border-[#2a1002] bg-[#2a1002] text-white"
-              : cn("bg-white text-stone-600 hover:border-orange-300 hover:text-orange-600", HAIRLINE),
+              : cn(
+                  "bg-white text-stone-600 hover:border-orange-300 hover:text-orange-600",
+                  HAIRLINE,
+                ),
             FOCUS,
           )}
         >
@@ -1038,28 +1322,39 @@ export function TemplatePicker({
   query,
   tab,
   draftIds,
+  invitationByTemplate,
   hasMore,
   loadingMore,
   onLoadMore,
   onRetry,
   onPick,
   onCreate,
+  onUpdate,
   unlockHref,
+  allowance,
+  unlockingId,
+  onUnlockWithPlan,
 }: {
   items: PublicTemplate[];
   status: "loading" | "ready" | "error";
   query: string;
   tab: OwnershipTab;
   draftIds: Set<string>;
+  /** template id -> id of the invitation already made from it. */
+  invitationByTemplate: Map<string, string>;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
   onRetry: () => void;
   onPick: (id: string) => void;
-  /** Optional: where "Create invitation" on an owned card goes. Defaults to the create page. */
-  onCreate?: (id: string) => void;
-  /** Optional: where "Unlock" goes. Defaults to the templates page. */
+  /** Create a new invitation from a template id. */
+  onCreate?: (templateId: string) => void;
+  /** Update an existing invitation by invitation id. */
+  onUpdate?: (invitationId: string) => void;
   unlockHref?: (id: string) => string;
+  allowance: PlanAllowance | null;
+  unlockingId: string | null;
+  onUnlockWithPlan: (id: string) => void;
 }) {
   if (status === "loading") return <GridSkeleton count={8} />;
   if (status === "error") return <ErrorCard onRetry={onRetry} />;
@@ -1096,9 +1391,18 @@ export function TemplatePicker({
             t={t}
             index={i}
             hasDraft={draftIds.has(t.id)}
+            invitationId={invitationByTemplate.get(t.id) ?? null}
             onPick={onPick}
             onCreate={onCreate}
+            onUpdate={onUpdate}
             unlockHref={unlockHref}
+            plan={
+              allowance?.subscription
+                ? { left: slotsLeft(allowance, t.is_premium) ?? 0, kind: t.is_premium ? "premium" : "simple" }
+                : null
+            }
+            unlocking={unlockingId === t.id}
+            onUnlockWithPlan={onUnlockWithPlan}
           />
         ))}
       </ul>
@@ -1127,7 +1431,10 @@ export function TemplatePicker({
 /*  Error boundary                                                            */
 /* ========================================================================== */
 
-export class RehearsalErrorBoundary extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {
+export class RehearsalErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { failed: boolean }
+> {
   state = { failed: false };
 
   static getDerivedStateFromError() {
@@ -1142,13 +1449,18 @@ export class RehearsalErrorBoundary extends React.Component<{ children: React.Re
   render() {
     if (!this.state.failed) return this.props.children;
     return (
-      <div className={cn("mx-auto max-w-md rounded-2xl p-6 text-center", SURFACE)}>
+      <div
+        className={cn("mx-auto max-w-md rounded-2xl p-6 text-center", SURFACE)}
+      >
         <span className="mx-auto flex size-11 items-center justify-center rounded-full bg-rose-50 text-rose-600">
           <AlertTriangle className="size-5" />
         </span>
-        <h2 className={cn(HEADING, "mt-3 text-lg text-[#2a1002]")}>The studio hit a snag</h2>
+        <h2 className={cn(HEADING, "mt-3 text-lg text-[#2a1002]")}>
+          The studio hit a snag
+        </h2>
         <p className="mt-1 text-sm text-stone-500">
-          Your work is kept on this device and in your last saved draft. Reload to pick up where you left off.
+          Your work is kept on this device and in your last saved draft. Reload
+          to pick up where you left off.
         </p>
         <button
           type="button"

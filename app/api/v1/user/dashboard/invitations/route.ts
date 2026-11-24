@@ -6,7 +6,8 @@ import { errorResponse, pgErrorToResponse } from "@/lib/api/errors";
 import { STATUS_CODE } from "@/lib/status_codes";
 import settings from "@/config/settings_config";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const config = settings();
 
 /* -------------------------------------------------------------------------- */
@@ -16,27 +17,46 @@ const IMG_EXT = /\.(png|jpe?g|webp|gif|avif|svg)(\?|#|$)/i;
 const IMG_KEY = /(image|photo|img|cover|picture|src)/i;
 
 const IGNORED_KEYS = new Set([
-  "thumbnailurl", "thumbnail_url", "thumbnail",
-  "galleryurls", "gallery_urls",
-  "videourls", "video_urls",
-  "musicurls", "music_urls"
+  "thumbnailurl",
+  "thumbnail_url",
+  "thumbnail",
+  "galleryurls",
+  "gallery_urls",
+  "videourls",
+  "video_urls",
+  "musicurls",
+  "music_urls",
 ]);
 
 function asObject(v: unknown): unknown {
   if (typeof v === "string") {
-    try { return JSON.parse(v); } catch { return null; }
+    try {
+      return JSON.parse(v);
+    } catch {
+      return null;
+    }
   }
   return v;
 }
 
-function collectImages(node: unknown, key = "", out: string[] = [], depth = 0): string[] {
+function collectImages(
+  node: unknown,
+  key = "",
+  out: string[] = [],
+  depth = 0,
+): string[] {
   if (out.length >= 200 || depth > 14 || node == null) return out;
-  
+
   if (IGNORED_KEYS.has(key.toLowerCase())) return out;
 
   if (typeof node === "string") {
     const isUrl = /^(https?:)?\/\//.test(node) || node.startsWith("/");
-    if (isUrl && node.length < 2048 && (IMG_EXT.test(node) || IMG_KEY.test(key))) out.push(node);
+    if (
+      isUrl &&
+      node.length < 2048 &&
+      (IMG_EXT.test(node) || IMG_KEY.test(key))
+    )
+      out.push(node);
     return out;
   }
   if (Array.isArray(node)) {
@@ -44,22 +64,26 @@ function collectImages(node: unknown, key = "", out: string[] = [], depth = 0): 
     return out;
   }
   if (typeof node === "object") {
-    for (const [k, v] of Object.entries(node as Record<string, unknown>)) collectImages(v, k, out, depth + 1);
+    for (const [k, v] of Object.entries(node as Record<string, unknown>))
+      collectImages(v, k, out, depth + 1);
   }
   return out;
 }
 
 function userCover(
-  schema: Record<string, any> | null, 
-  templateSchema: Record<string, any> | null, 
+  schema: Record<string, any> | null,
+  templateSchema: Record<string, any> | null,
   templateThumb: string | null,
-  userId: string
+  userId: string,
 ): string | null {
   const jsonString = JSON.stringify(schema);
   const prefix = `https://res.cloudinary.com/${config.cloudinaryCloudName}/rehearsal/${userId}/`;
 
   // 1. Try to find an image the user actually uploaded in their draft
-  const regex = new RegExp(`"(${prefix}[^"]+\\.(?:png|jpe?g|webp|gif|avif)(?:\\?[^"]*)?)"`, "i");
+  const regex = new RegExp(
+    `"(${prefix}[^"]+\\.(?:png|jpe?g|webp|gif|avif)(?:\\?[^"]*)?)"`,
+    "i",
+  );
   const match = jsonString.match(regex);
   if (match) return match[1];
 
@@ -81,24 +105,49 @@ function userCover(
 
 export async function POST(req: NextRequest) {
   const userId = req.headers.get("x-user-id");
-  if (!userId) return errorResponse(STATUS_CODE.UNAUTHORIZED, "UNAUTHORIZED", "Authentication required");
+  if (!userId)
+    return errorResponse(
+      STATUS_CODE.UNAUTHORIZED,
+      "UNAUTHORIZED",
+      "Authentication required",
+    );
 
   try {
     const body = await req.json().catch(() => null);
     const templateId = body?.template_id;
     if (typeof templateId !== "string" || !UUID_RE.test(templateId)) {
-      return errorResponse(STATUS_CODE.BAD_REQUEST, "INVALID_TEMPLATE", "Valid template_id is required");
+      return errorResponse(
+        STATUS_CODE.BAD_REQUEST,
+        "INVALID_TEMPLATE",
+        "Valid template_id is required",
+      );
     }
 
     const [owned] = await sql`
-      SELECT t.name, t.status, tp.has_custom_slug
-      FROM template_purchases tp
-      JOIN templates t ON t.id = tp.template_id
-      WHERE tp.user_id = ${userId} AND tp.template_id = ${templateId}
-      LIMIT 1
-    `;
+  SELECT t.name, t.status, COALESCE(tp.has_custom_slug, FALSE) AS has_custom_slug
+  FROM templates t
+  LEFT JOIN template_purchases tp ON tp.template_id = t.id AND tp.user_id = ${userId}
+  WHERE t.id = ${templateId}
+    AND (
+      tp.id IS NOT NULL
+      OR EXISTS (
+        SELECT 1
+        FROM subscription_template_unlocks u
+        JOIN user_subscriptions us ON us.id = u.subscription_id
+        WHERE u.user_id = ${userId}
+          AND u.template_id = t.id
+          AND us.status = 'active'
+          AND us.expires_at > NOW()
+      )
+    )
+  LIMIT 1
+`;
     if (!owned) {
-      return errorResponse(STATUS_CODE.FORBIDDEN, "TEMPLATE_NOT_OWNED", "You must purchase this template before creating an invitation.");
+      return errorResponse(
+        STATUS_CODE.FORBIDDEN,
+        "TEMPLATE_NOT_OWNED",
+        "You must purchase this template before creating an invitation.",
+      );
     }
 
     const result = await sql.begin(async (tx) => {
@@ -146,7 +195,9 @@ export async function POST(req: NextRequest) {
 
       const draftSchema = draft?.design_schema;
       const hasDraft = draftSchema && Object.keys(draftSchema).length > 0;
-      const designSchema = hasDraft ? draftSchema : (tplBody?.design_schema ?? {});
+      const designSchema = hasDraft
+        ? draftSchema
+        : (tplBody?.design_schema ?? {});
 
       let slug: string = crypto.randomUUID();
       let isCustom = false;
@@ -160,7 +211,8 @@ export async function POST(req: NextRequest) {
         `;
         const wanted: string | undefined = order?.preferred_slug;
         if (wanted) {
-          const [taken] = await tx`SELECT 1 FROM invitations WHERE LOWER(slug) = LOWER(${wanted}) LIMIT 1`;
+          const [taken] =
+            await tx`SELECT 1 FROM invitations WHERE LOWER(slug) = LOWER(${wanted}) LIMIT 1`;
           if (!taken) {
             slug = wanted;
             isCustom = true;
@@ -180,12 +232,17 @@ export async function POST(req: NextRequest) {
         RETURNING id, slug, is_custom_slug, status, created_at, event_date
       `;
 
-      if (draft) await tx`DELETE FROM user_drafts WHERE id = ${draft.id} AND user_id = ${userId}`;
+      if (draft)
+        await tx`DELETE FROM user_drafts WHERE id = ${draft.id} AND user_id = ${userId}`;
       return { inv, existed: false };
     });
 
     if ("retired" in result) {
-      return errorResponse(STATUS_CODE.BAD_REQUEST, "TEMPLATE_RETIRED", "This template was retired and can't start new invitations.");
+      return errorResponse(
+        STATUS_CODE.BAD_REQUEST,
+        "TEMPLATE_RETIRED",
+        "This template was retired and can't start new invitations.",
+      );
     }
 
     return NextResponse.json(
@@ -200,7 +257,12 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const userId = req.headers.get("x-user-id");
-  if (!userId) return errorResponse(STATUS_CODE.UNAUTHORIZED, "UNAUTHORIZED", "Authentication required");
+  if (!userId)
+    return errorResponse(
+      STATUS_CODE.UNAUTHORIZED,
+      "UNAUTHORIZED",
+      "Authentication required",
+    );
 
   try {
     const rows = await sql`
@@ -225,23 +287,39 @@ export async function GET(req: NextRequest) {
       ORDER BY created_at DESC
     `;
 
-    const invitations = rows.map(({ design_schema, template_schema, template_thumb, ...rest }) => {
-      const schemaStr = JSON.stringify(design_schema);
-      const prefix = `https://res.cloudinary.com/${config.cloudinaryCloudName}/rehearsal/${userId}/`;
+    const invitations = rows.map(
+      ({ design_schema, template_schema, template_thumb, ...rest }) => {
+        const schemaStr = JSON.stringify(design_schema);
+        const prefix = `https://res.cloudinary.com/${config.cloudinaryCloudName}/rehearsal/${userId}/`;
 
-      // Detect if the user has uploaded specific media types
-      const has_gallery = new RegExp(`"(${prefix}[^"]+\\.(?:png|jpe?g|webp|gif|avif)(?:\\?[^"]*)?)"`, "i").test(schemaStr);
-      const has_video = new RegExp(`"(${prefix}[^"]+\\.(?:mp4|webm|mov)(?:\\?[^"]*)?)"`, "i").test(schemaStr);
-      const has_audio = new RegExp(`"(${prefix}[^"]+\\.(?:mp3|wav|ogg|m4a)(?:\\?[^"]*)?)"`, "i").test(schemaStr);
+        // Detect if the user has uploaded specific media types
+        const has_gallery = new RegExp(
+          `"(${prefix}[^"]+\\.(?:png|jpe?g|webp|gif|avif)(?:\\?[^"]*)?)"`,
+          "i",
+        ).test(schemaStr);
+        const has_video = new RegExp(
+          `"(${prefix}[^"]+\\.(?:mp4|webm|mov)(?:\\?[^"]*)?)"`,
+          "i",
+        ).test(schemaStr);
+        const has_audio = new RegExp(
+          `"(${prefix}[^"]+\\.(?:mp3|wav|ogg|m4a)(?:\\?[^"]*)?)"`,
+          "i",
+        ).test(schemaStr);
 
-      return {
-        ...rest,
-        cover_url: userCover(design_schema, template_schema, template_thumb, userId),
-        has_gallery,
-        has_video,
-        has_audio,
-      };
-    });
+        return {
+          ...rest,
+          cover_url: userCover(
+            design_schema,
+            template_schema,
+            template_thumb,
+            userId,
+          ),
+          has_gallery,
+          has_video,
+          has_audio,
+        };
+      },
+    );
 
     return NextResponse.json({ data: invitations }, { status: STATUS_CODE.OK });
   } catch (err) {

@@ -557,3 +557,43 @@ ALTER TABLE user_ai_credentials
 UPDATE user_ai_credentials
 SET model = 'openai/gpt-oss-120b'
 WHERE provider = 'groq' AND model IS DISTINCT FROM 'openai/gpt-oss-120b';
+
+-- ==========================================
+-- SINGLE LIVE SUBSCRIPTION PER USER
+-- ==========================================
+CREATE OR REPLACE FUNCTION enforce_single_active_subscription()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM user_subscriptions
+        WHERE user_id = NEW.user_id
+          AND status = 'active'
+          AND expires_at > NOW()
+          AND id <> NEW.id
+    ) THEN
+        RAISE EXCEPTION 'SINGLE_ACTIVE_SUBSCRIPTION: user already has a live subscription.';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_single_active_subscription ON user_subscriptions;
+CREATE TRIGGER trg_single_active_subscription
+BEFORE INSERT OR UPDATE ON user_subscriptions
+FOR EACH ROW EXECUTE FUNCTION enforce_single_active_subscription();
+
+-- One row per template a user unlocked with their subscription.
+-- Counts against the plan's max_simple_templates / max_premium_templates.
+-- is_premium is a snapshot taken at unlock time, so later template edits can't change past usage.
+CREATE TABLE IF NOT EXISTS subscription_template_unlocks (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    subscription_id UUID NOT NULL REFERENCES user_subscriptions(id) ON DELETE CASCADE,
+    template_id     UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+    is_premium      BOOLEAN NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (subscription_id, template_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sub_unlocks_user_created ON subscription_template_unlocks (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sub_unlocks_template     ON subscription_template_unlocks (template_id);

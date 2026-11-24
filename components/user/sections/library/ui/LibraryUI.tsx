@@ -4,11 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { createPortal } from "react-dom";
-import {
-  AnimatePresence,
-  motion,
-  useDragControls,
-} from "framer-motion";
+import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { FOCUS } from "@/components/user/navigation/UserSidebar";
 import {
   BTN,
@@ -21,10 +17,7 @@ import {
   fmtDate,
   money,
 } from "@/components/user/sections/dashboard/ui/DashboardUI";
-import type {
-  LibraryItem,
-  LibraryMeta,
-} from "@/lib/types/library";
+import type { LibraryItem, LibraryMeta } from "@/lib/types/library";
 import { AceternitySelect } from "@/components/ui/aceternity-select";
 
 /* ========================================================================== */
@@ -65,7 +58,11 @@ function categoryDot(name: string) {
 
 type IconProps = React.SVGProps<SVGSVGElement>;
 
-const TINT = { fill: "currentColor", fillOpacity: 0.14, stroke: "none" } as const;
+const TINT = {
+  fill: "currentColor",
+  fillOpacity: 0.14,
+  stroke: "none",
+} as const;
 
 function Svg({ children, ...props }: IconProps) {
   return (
@@ -92,17 +89,35 @@ export const IcLibrary = (p: IconProps) => (
   <Svg {...p}>
     <rect x="3.5" y="4" width="4.6" height="16" rx="1.3" {...TINT} />
     <rect x="9.6" y="4" width="4.6" height="16" rx="1.3" {...TINT} />
-    <rect x="15.6" y="5" width="4.6" height="15.2" rx="1.3" transform="rotate(-13 17.9 12.6)" {...TINT} />
+    <rect
+      x="15.6"
+      y="5"
+      width="4.6"
+      height="15.2"
+      rx="1.3"
+      transform="rotate(-13 17.9 12.6)"
+      {...TINT}
+    />
     <rect x="3.5" y="4" width="4.6" height="16" rx="1.3" />
     <rect x="9.6" y="4" width="4.6" height="16" rx="1.3" />
-    <rect x="15.6" y="5" width="4.6" height="15.2" rx="1.3" transform="rotate(-13 17.9 12.6)" />
+    <rect
+      x="15.6"
+      y="5"
+      width="4.6"
+      height="15.2"
+      rx="1.3"
+      transform="rotate(-13 17.9 12.6)"
+    />
     <path d="M3.5 8.6h4.6M9.6 8.6h4.6" />
   </Svg>
 );
 
 export const IcCrown = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M3.5 8.5l4.2 3.6L12 5l4.3 7.1 4.2-3.6-1.6 9.4H5.1L3.5 8.5z" {...TINT} />
+    <path
+      d="M3.5 8.5l4.2 3.6L12 5l4.3 7.1 4.2-3.6-1.6 9.4H5.1L3.5 8.5z"
+      {...TINT}
+    />
     <path d="M3.5 8.5l4.2 3.6L12 5l4.3 7.1 4.2-3.6-1.6 9.4H5.1L3.5 8.5z" />
     <path d="M5.8 21h12.4" />
     <circle cx="3.5" cy="8.5" r="1" fill="currentColor" stroke="none" />
@@ -124,10 +139,40 @@ export const IcEnvelope = (p: IconProps) => (
 /** Two chain links, end to end. */
 export const IcLink = (p: IconProps) => (
   <Svg {...p}>
-    <rect x="3.6" y="12.2" width="10.4" height="5.6" rx="2.8" transform="rotate(-45 8.8 15)" {...TINT} />
-    <rect x="10" y="6.2" width="10.4" height="5.6" rx="2.8" transform="rotate(-45 15.2 9)" {...TINT} />
-    <rect x="3.6" y="12.2" width="10.4" height="5.6" rx="2.8" transform="rotate(-45 8.8 15)" />
-    <rect x="10" y="6.2" width="10.4" height="5.6" rx="2.8" transform="rotate(-45 15.2 9)" />
+    <rect
+      x="3.6"
+      y="12.2"
+      width="10.4"
+      height="5.6"
+      rx="2.8"
+      transform="rotate(-45 8.8 15)"
+      {...TINT}
+    />
+    <rect
+      x="10"
+      y="6.2"
+      width="10.4"
+      height="5.6"
+      rx="2.8"
+      transform="rotate(-45 15.2 9)"
+      {...TINT}
+    />
+    <rect
+      x="3.6"
+      y="12.2"
+      width="10.4"
+      height="5.6"
+      rx="2.8"
+      transform="rotate(-45 8.8 15)"
+    />
+    <rect
+      x="10"
+      y="6.2"
+      width="10.4"
+      height="5.6"
+      rx="2.8"
+      transform="rotate(-45 15.2 9)"
+    />
   </Svg>
 );
 
@@ -145,7 +190,10 @@ export const IcArrowUpRight = (p: IconProps) => (
 
 export const IcEye = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M2.5 12s3.6-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.6 6.5-9.5 6.5S2.5 12 2.5 12z" {...TINT} />
+    <path
+      d="M2.5 12s3.6-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.6 6.5-9.5 6.5S2.5 12 2.5 12z"
+      {...TINT}
+    />
     <path d="M2.5 12s3.6-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.6 6.5-9.5 6.5S2.5 12 2.5 12z" />
     <circle cx="12" cy="12" r="3" />
     <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
@@ -182,7 +230,10 @@ export const IcCheck = (p: IconProps) => (
 /** Four-point spark with a small companion. */
 export const IcSparkle = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M10.5 4c.7 4.4 2.9 6.6 7.3 7.3-4.4.7-6.6 2.9-7.3 7.3-.7-4.4-2.9-6.6-7.3-7.3C7.6 10.6 9.8 8.4 10.5 4z" {...TINT} />
+    <path
+      d="M10.5 4c.7 4.4 2.9 6.6 7.3 7.3-4.4.7-6.6 2.9-7.3 7.3-.7-4.4-2.9-6.6-7.3-7.3C7.6 10.6 9.8 8.4 10.5 4z"
+      {...TINT}
+    />
     <path d="M10.5 4c.7 4.4 2.9 6.6 7.3 7.3-4.4.7-6.6 2.9-7.3 7.3-.7-4.4-2.9-6.6-7.3-7.3C7.6 10.6 9.8 8.4 10.5 4z" />
     <path d="M19 3.5v3M17.5 5h3" />
   </Svg>
@@ -232,7 +283,10 @@ export const IcImageOff = (p: IconProps) => (
 
 export const IcReceipt = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M6 3.5h12v17l-2.5-1.7-2 1.7-1.5-1.7-1.5 1.7-2-1.7L6 20.5v-17z" {...TINT} />
+    <path
+      d="M6 3.5h12v17l-2.5-1.7-2 1.7-1.5-1.7-1.5 1.7-2-1.7L6 20.5v-17z"
+      {...TINT}
+    />
     <path d="M6 3.5h12v17l-2.5-1.7-2 1.7-1.5-1.7-1.5 1.7-2-1.7L6 20.5v-17z" />
     <path d="M9 8.5h6M9 12h6" />
   </Svg>
@@ -429,7 +483,11 @@ export function SelectField<T extends string | number>({
   );
 
   return (
-    <div role="group" aria-label={label} className={cn("relative block", className)}>
+    <div
+      role="group"
+      aria-label={label}
+      className={cn("relative block", className)}
+    >
       <AceternitySelect
         value={String(value)}
         options={opts}
@@ -473,7 +531,9 @@ export function ActiveFilters({
             FOCUS,
           )}
         >
-          <span className="max-w-[10rem] truncate sm:max-w-[12rem]">{c.label}</span>
+          <span className="max-w-[10rem] truncate sm:max-w-[12rem]">
+            {c.label}
+          </span>
           <IcClose className="size-3 text-stone-400 group-hover/chip:text-stone-700" />
         </button>
       ))}
@@ -551,7 +611,12 @@ const BADGE =
 /** Dark "Pro"-style pill: same family as the dark secondary button. */
 function PremiumBadge() {
   return (
-    <span className={cn(BADGE, "bg-neutral-900/90 text-amber-200 ring-1 ring-white/10")}>
+    <span
+      className={cn(
+        BADGE,
+        "bg-neutral-900/90 text-amber-200 ring-1 ring-white/10",
+      )}
+    >
       <IcCrown className="size-3 sm:size-3.5" /> Premium
     </span>
   );
@@ -559,7 +624,12 @@ function PremiumBadge() {
 
 function UsageBadge({ count }: { count: number }) {
   return (
-    <span className={cn(BADGE, "bg-white/90 text-[#1c1410] ring-1 ring-black/[0.06]")}>
+    <span
+      className={cn(
+        BADGE,
+        "bg-white/90 text-[#1c1410] ring-1 ring-black/[0.06]",
+      )}
+    >
       <span
         aria-hidden
         className={cn(
@@ -573,7 +643,7 @@ function UsageBadge({ count }: { count: number }) {
 }
 
 const acquisitionLabel = (a: LibraryItem["acquisition"]) =>
-  a === "subscription" ? "Included in your plan" : "Purchased";
+  a === "purchase" ? "Purchased" : "Included in your plan";
 
 /* ========================================================================== */
 /*  Card layout constants                                                     */
@@ -593,6 +663,23 @@ const CARD_ACTIONS = "mt-auto flex h-9 items-center gap-2 sm:h-10";
 /*  Template card                                                             */
 /* ========================================================================== */
 
+/* Ticket tokens (same as the Rehearsal, Billing and Invitation cards) */
+const TICKET_PAPER =
+  "bg-gradient-to-br from-[#fffdfa] via-[#fff8f1] to-[#ffeddc]";
+const TICKET_LIFT_FX =
+  "transition-transform duration-300 motion-reduce:transition-none [filter:drop-shadow(0_1px_1px_rgba(28,20,16,0.08))_drop-shadow(0_14px_20px_rgba(28,20,16,0.10))] hover:-translate-y-1 hover:[filter:drop-shadow(0_1px_1px_rgba(28,20,16,0.10))_drop-shadow(0_22px_26px_rgba(28,20,16,0.16))]";
+const TICKET_STUB_H = "4.5rem";
+const TICKET_MASK_FX = `radial-gradient(circle 9px at 0 calc(100% - ${TICKET_STUB_H}), #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 9px at 100% calc(100% - ${TICKET_STUB_H}), #0000 97%, #000) right / 51% 100% no-repeat`;
+
+function TicketSheen() {
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute inset-y-0 -left-1/2 z-10 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-0 transition-all duration-700 group-hover/card:left-full group-hover/card:opacity-100 motion-reduce:hidden"
+    />
+  );
+}
+
 export function TemplateCard({
   item,
   index,
@@ -604,66 +691,81 @@ export function TemplateCard({
 }) {
   const archived = item.status === "archived";
   const dot = categoryDot(item.category_name || "");
+  const viaPlan = item.acquisition !== "purchase";
 
   return (
     <motion.li
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: Math.min(index, 8) * 0.035, ease: EASE }}
-      className="group/card min-w-0"
+      transition={{
+        duration: 0.4,
+        delay: Math.min(index, 8) * 0.035,
+        ease: EASE,
+      }}
+      className="min-w-0"
     >
-      <article
-        className={cn(
-          CARD_SHELL,
-          "relative flex h-full flex-col",
-          "transition-[transform,box-shadow] duration-300",
-          "hover:-translate-y-0.5 hover:shadow-[0_1px_2px_rgba(28,20,16,0.05),0_22px_40px_-20px_rgba(28,20,16,0.32)]",
-        )}
-      >
-        <button
-          type="button"
-          onClick={() => onOpen(item)}
-          aria-label={`Preview ${item.name}`}
+      <div className={cn("group/card h-full", TICKET_LIFT_FX)}>
+        <article
+          style={{ WebkitMask: TICKET_MASK_FX, mask: TICKET_MASK_FX }}
           className={cn(
-            "relative block w-full overflow-hidden bg-stone-100 text-left",
-            CARD_THUMB,
-            FOCUS,
+            "relative flex h-full flex-col overflow-hidden rounded-2xl border",
+            TICKET_PAPER,
+            viaPlan ? "border-[#1c1410]/40" : "border-black/[0.07]",
           )}
         >
-          <Thumb
-            src={item.thumbnail_url}
-            sizes="(min-width: 1280px) 22vw, (min-width: 1024px) 30vw, (min-width: 480px) 45vw, 92vw"
-            className={cn(
-              "transition-transform duration-700 ease-out group-hover/card:scale-[1.03]",
-              archived && "grayscale-[0.6]",
-            )}
-          />
-          {/* hairline inside the image edge so light previews don't bleed into the card */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-black/[0.05]"
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/35 to-transparent opacity-0 transition-opacity duration-300 group-hover/card:opacity-100"
-          />
-          {item.is_premium && (
-            <div className="absolute left-2 top-2 sm:left-3 sm:top-3">
-              <PremiumBadge />
-            </div>
+          <TicketSheen />
+          {viaPlan && (
+            <span
+              aria-hidden
+              className="absolute inset-x-0 top-0 z-20 h-1 bg-[#1c1410]"
+            />
           )}
-          <div className="absolute right-2 top-2 sm:right-3 sm:top-3">
-            <UsageBadge count={item.invitation_count} />
-          </div>
-          <span className="absolute inset-x-3 bottom-3 flex translate-y-1 items-center justify-center gap-1.5 rounded-lg bg-white/95 py-2 text-xs font-semibold text-[#1c1410] opacity-0 shadow-md transition-all duration-300 group-hover/card:translate-y-0 group-hover/card:opacity-100 group-focus-within/card:translate-y-0 group-focus-within/card:opacity-100 max-sm:hidden">
-            <IcEye className="size-4" /> Quick preview
-          </span>
-        </button>
 
-        <div className={CARD_BODY}>
-          <div className={CARD_TEXT}>
-            <p className="flex h-4 items-center gap-1.5 text-[11px] font-semibold uppercase leading-4 tracking-[0.06em] text-stone-500">
-              <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", dot)} />
+          <button
+            type="button"
+            onClick={() => onOpen(item)}
+            aria-label={`Preview ${item.name}`}
+            className={cn(
+              "relative block w-full overflow-hidden bg-stone-100 text-left",
+              CARD_THUMB,
+              FOCUS,
+            )}
+          >
+            <Thumb
+              src={item.thumbnail_url}
+              sizes="(min-width: 1280px) 22vw, (min-width: 1024px) 30vw, (min-width: 480px) 45vw, 92vw"
+              className={cn(
+                "transition-transform duration-700 ease-out group-hover/card:scale-[1.03]",
+                archived && "grayscale-[0.6]",
+              )}
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-black/[0.05]"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/35 to-transparent opacity-0 transition-opacity duration-300 group-hover/card:opacity-100"
+            />
+            {item.is_premium && (
+              <div className="absolute left-2 top-3 sm:left-3">
+                <PremiumBadge />
+              </div>
+            )}
+            <div className="absolute right-2 top-3 sm:right-3">
+              <UsageBadge count={item.invitation_count} />
+            </div>
+            <span className="absolute inset-x-3 bottom-3 flex translate-y-1 items-center justify-center gap-1.5 rounded-lg bg-white/95 py-2 text-xs font-semibold text-[#1c1410] opacity-0 shadow-md transition-all duration-300 group-hover/card:translate-y-0 group-hover/card:opacity-100 group-focus-within/card:translate-y-0 group-focus-within/card:opacity-100 max-sm:hidden">
+              <IcEye className="size-4" /> Quick preview
+            </span>
+          </button>
+
+          <div className="flex flex-1 flex-col gap-1 p-3 sm:p-4">
+            <p className="flex h-4 items-center gap-1.5 text-[11px] font-semibold uppercase leading-4 tracking-[0.12em] text-stone-500">
+              <span
+                aria-hidden
+                className={cn("size-1.5 shrink-0 rounded-full", dot)}
+              />
               <span className="truncate">{item.category_name}</span>
             </p>
             <h3
@@ -675,42 +777,55 @@ export function TemplateCard({
             >
               {item.name}
             </h3>
-            <p className={cn("line-clamp-2 text-xs text-stone-500", CARD_DESC)}>
+            <p className="line-clamp-2 h-8 text-xs leading-4 text-stone-500 sm:h-10 sm:leading-5">
               {item.description || "No description added for this template."}
             </p>
+
+            <div className="mt-auto flex h-5 items-center gap-3 overflow-hidden whitespace-nowrap pt-1 text-[11px] leading-4 text-stone-500">
+              {viaPlan ? (
+                <span className="inline-flex items-center gap-1 font-semibold text-[#1c1410]">
+                  <IcWallet className="size-3.5 shrink-0 text-stone-400" />{" "}
+                  Unlocked with your plan
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 font-semibold tabular-nums text-stone-700">
+                  <IcWallet className="size-3.5 shrink-0 text-stone-400" />
+                  {item.price_paid > 0 ? money(item.price_paid) : "No charge"}
+                </span>
+              )}
+              {item.has_custom_slug ? (
+                <span
+                  className="inline-flex items-center gap-1 font-semibold text-orange-600"
+                  title="Custom link unlocked"
+                >
+                  <IcLink className="size-3.5 shrink-0" /> Custom link
+                </span>
+              ) : (
+                !viaPlan && <span className="truncate">Purchased</span>
+              )}
+            </div>
           </div>
 
-          <div className="flex h-4 items-center gap-3 overflow-hidden whitespace-nowrap text-[11px] leading-4 text-stone-500">
-            <span className="inline-flex items-center gap-1 font-semibold tabular-nums text-stone-700">
-              <IcWallet className="size-3.5 shrink-0 text-stone-400" />
-              {item.price_paid > 0 ? money(item.price_paid) : "No charge"}
-            </span>
-            {item.has_custom_slug ? (
-              <span
-                className="inline-flex items-center gap-1 font-semibold text-orange-600"
-                title="Custom link unlocked"
-              >
-                <IcLink className="size-3.5 shrink-0" /> Custom link
-              </span>
-            ) : (
-              <span className="truncate">
-                {item.acquisition === "subscription" ? "In your plan" : "Purchased"}
-              </span>
-            )}
-          </div>
-
-          <div className={CARD_ACTIONS}>
+          {/* perforated stub */}
+          <div
+            className="flex shrink-0 items-center gap-2 border-t border-dashed border-[#1c1410]/25 px-3 sm:px-4"
+            style={{ height: TICKET_STUB_H }}
+          >
             {archived ? (
-              <span className="flex h-full flex-1 items-center justify-center rounded-xl border border-black/[0.08] bg-stone-50 text-xs font-semibold text-stone-500">
+              <span className="flex h-11 flex-1 items-center justify-center rounded-xl border border-black/[0.08] bg-stone-50 text-xs font-semibold text-stone-500">
                 No longer available
               </span>
             ) : (
               <Tip label="Create an invitation from this template" side="top">
                 <Link
                   href={LIBRARY_ROUTES.create(item.id)}
-                  className={cn(BTN, "h-full flex-1 rounded-xl px-3 text-xs", FOCUS)}
+                  className={cn(
+                    BTN,
+                    "h-11 flex-1 whitespace-nowrap rounded-xl px-3 text-[13px]",
+                    FOCUS,
+                  )}
                 >
-                  Use template <IcArrowUpRight className="size-3.5" />
+                  Use template <IcArrowUpRight className="size-3.5 shrink-0" />
                 </Link>
               </Tip>
             )}
@@ -720,7 +835,7 @@ export function TemplateCard({
                 onClick={() => onOpen(item)}
                 aria-label={`Details for ${item.name}`}
                 className={cn(
-                  "flex size-9 shrink-0 items-center justify-center rounded-xl border bg-white text-stone-600 transition hover:border-black/20 hover:bg-stone-50 hover:text-[#1c1410] active:scale-95 sm:size-10",
+                  "flex size-11 shrink-0 items-center justify-center rounded-xl border bg-white text-stone-600 transition hover:border-orange-300 hover:text-orange-600 active:scale-95",
                   HAIRLINE,
                   FOCUS,
                 )}
@@ -729,8 +844,8 @@ export function TemplateCard({
               </button>
             </Tip>
           </div>
-        </div>
-      </article>
+        </article>
+      </div>
     </motion.li>
   );
 }
@@ -748,7 +863,11 @@ function BrowseTile({ index }: { index: number }) {
     <motion.li
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: Math.min(index, 8) * 0.035, ease: EASE }}
+      transition={{
+        duration: 0.4,
+        delay: Math.min(index, 8) * 0.035,
+        ease: EASE,
+      }}
       className="min-w-0"
     >
       <Link
@@ -829,14 +948,20 @@ export function GridSkeleton({ count = 12 }: { count?: number }) {
 /*  Pagination                                                                */
 /* ========================================================================== */
 
-function pageWindow(page: number, total: number): (number | "gap-l" | "gap-r")[] {
+function pageWindow(
+  page: number,
+  total: number,
+): (number | "gap-l" | "gap-r")[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
   const keep = new Set<number>([1, total, page - 1, page, page + 1]);
-  const sorted = [...keep].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b);
+  const sorted = [...keep]
+    .filter((n) => n >= 1 && n <= total)
+    .sort((a, b) => a - b);
   const out: (number | "gap-l" | "gap-r")[] = [];
   sorted.forEach((n, i) => {
     const prev = sorted[i - 1];
-    if (prev !== undefined && n - prev > 1) out.push(i < sorted.length / 2 ? "gap-l" : "gap-r");
+    if (prev !== undefined && n - prev > 1)
+      out.push(i < sorted.length / 2 ? "gap-l" : "gap-r");
     out.push(n);
   });
   return out;
@@ -876,7 +1001,9 @@ export function Pagination({
           {from}–{to}
         </span>{" "}
         of{" "}
-        <span className="font-semibold tabular-nums text-[#1c1410]">{total}</span>{" "}
+        <span className="font-semibold tabular-nums text-[#1c1410]">
+          {total}
+        </span>{" "}
         template{total === 1 ? "" : "s"}
       </p>
 
@@ -894,7 +1021,11 @@ export function Pagination({
 
           {pages.map((p) =>
             typeof p === "string" ? (
-              <span key={p} aria-hidden className="w-5 text-center text-sm text-stone-400">
+              <span
+                key={p}
+                aria-hidden
+                className="w-5 text-center text-sm text-stone-400"
+              >
                 …
               </span>
             ) : (
@@ -1074,7 +1205,10 @@ export function TemplateSheet({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-stone-500">
-                        <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", dot)} />
+                        <span
+                          aria-hidden
+                          className={cn("size-1.5 shrink-0 rounded-full", dot)}
+                        />
                         <span className="truncate">{item.category_name}</span>
                       </p>
                       <h2
@@ -1104,7 +1238,8 @@ export function TemplateSheet({
                   </div>
 
                   <p className="mt-2 text-[13px] leading-relaxed text-stone-600 sm:mt-3 sm:text-sm">
-                    {item.description || "No description added for this template."}
+                    {item.description ||
+                      "No description added for this template."}
                   </p>
 
                   <dl className="mt-3 divide-y divide-black/[0.06] border-t border-black/[0.06] sm:mt-4">
@@ -1113,7 +1248,9 @@ export function TemplateSheet({
                     </DetailRow>
                     <DetailRow icon={IcWallet} label="Price paid">
                       {item.price_paid > 0 ? (
-                        <span className="tabular-nums">{money(item.price_paid)}</span>
+                        <span className="tabular-nums">
+                          {money(item.price_paid)}
+                        </span>
                       ) : (
                         "No charge"
                       )}

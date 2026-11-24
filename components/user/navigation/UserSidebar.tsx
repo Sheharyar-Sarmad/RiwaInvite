@@ -93,16 +93,16 @@ export const NAV: NavGroup[] = [
         tip: "Plan, invoices, payments",
       },
       {
-        label: "Settings",
-        href: "/dashboard/settings",
-        icon: Settings,
-        tip: "Profile and security",
-      },
-      {
         label: "Notifications",
         href: "/dashboard/notifications",
         icon: Bell,
         tip: "Alerts and updates",
+      },
+      {
+        label: "Settings",
+        href: "/dashboard/settings",
+        icon: Settings,
+        tip: "Profile and security",
       },
     ],
   },

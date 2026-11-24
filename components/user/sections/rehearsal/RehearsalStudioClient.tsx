@@ -49,6 +49,7 @@ import {
 } from "./ui/RehearsalStudioUI";
 import { RehearsalTopBar } from "./ui/RehearsalTopBar";
 import { GuideModal } from "./ui/GuideModel";
+import { usePlanAllowance } from "./usePlanAllowance";
 
 /* ========================================================================== */
 /*  Types & constants                                                         */
@@ -71,15 +72,19 @@ const API = {
   library: "/user/dashboard/library",
   one: (id: string) => `/public/template/${encodeURIComponent(id)}`,
   draft: "/user/dashboard/rehearsal/draft",
-  draftById: (id: string) => `/user/dashboard/rehearsal/draft/${encodeURIComponent(id)}`,
-  invitation: (id: string) => `/user/dashboard/invitations/${encodeURIComponent(id)}`,
+  draftById: (id: string) =>
+    `/user/dashboard/rehearsal/draft/${encodeURIComponent(id)}`,
+  invitation: (id: string) =>
+    `/user/dashboard/invitations/${encodeURIComponent(id)}`,
   ai: "/user/dashboard/rehearsal/ai-suggest",
   signature: "/user/dashboard/rehearsal/cloudinary-signature",
+  invitations: "/user/dashboard/invitations",
 } as const;
 
 const ROUTES = {
   studio: "/dashboard/rehearsal",
-  unlock: (templateId: string) => `/checkout/template/${encodeURIComponent(templateId)}`,
+  unlock: (templateId: string) =>
+    `/checkout/template/${encodeURIComponent(templateId)}`,
   newInvitation: (templateId: string) =>
     `/dashboard/invitations?template=${encodeURIComponent(templateId)}`,
 } as const;
@@ -105,7 +110,8 @@ const GUIDE_KEY = "riwa:rehearsal:guide:v1";
 const uid = () => `m_${Math.random().toString(36).slice(2, 10)}`;
 
 function statusOf(err: unknown): number | null {
-  const s = (err as { response?: { status?: unknown } } | null)?.response?.status;
+  const s = (err as { response?: { status?: unknown } } | null)?.response
+    ?.status;
   return typeof s === "number" ? s : null;
 }
 
@@ -114,7 +120,9 @@ function str(v: unknown, fallback = ""): string {
 }
 
 function strArr(v: unknown): string[] {
-  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  return Array.isArray(v)
+    ? v.filter((x): x is string => typeof x === "string")
+    : [];
 }
 
 function pick(o: Rec | null | undefined, ...keys: string[]): unknown {
@@ -193,7 +201,10 @@ function readTemplate(raw: unknown): {
     normalizeDesign({
       elements: Array.isArray(schema.elements) ? schema.elements : [],
       pageSettings: schema.pageSettings,
-      coreNames: { bride: str(core.bride?.label), groom: str(core.groom?.label) },
+      coreNames: {
+        bride: str(core.bride?.label),
+        groom: str(core.groom?.label),
+      },
       galleryUrls: pick(t, "gallery_urls", "galleryUrls"),
       videoUrls: pick(t, "video_urls", "videoUrls"),
       musicUrls: pick(t, "music_urls", "musicUrls"),
@@ -211,13 +222,19 @@ function readTemplate(raw: unknown): {
 
 const HEX = /^#[0-9a-f]{3,8}$/i;
 
-function buildAiContext(design: RehearsalDesign, draftId: string, category: string, mode: AiMode) {
+function buildAiContext(
+  design: RehearsalDesign,
+  draftId: string,
+  category: string,
+  mode: AiMode,
+) {
   const palette = new Set<string>();
   const fonts = new Set<string>();
   const widgets = new Set<string>();
 
   const addColor = (v: unknown) => {
-    if (typeof v === "string" && HEX.test(v.trim())) palette.add(v.trim().slice(0, 32));
+    if (typeof v === "string" && HEX.test(v.trim()))
+      palette.add(v.trim().slice(0, 32));
   };
 
   addColor(design.pageSettings?.backgroundColor);
@@ -226,7 +243,8 @@ function buildAiContext(design: RehearsalDesign, draftId: string, category: stri
     const s = (el.styles ?? {}) as Record<string, string>;
     addColor(s.color);
     addColor(s.backgroundColor);
-    if (typeof s.fontFamily === "string" && s.fontFamily.trim()) fonts.add(s.fontFamily.trim().slice(0, 60));
+    if (typeof s.fontFamily === "string" && s.fontFamily.trim())
+      fonts.add(s.fontFamily.trim().slice(0, 60));
   }
 
   const base = {
@@ -242,14 +260,28 @@ function buildAiContext(design: RehearsalDesign, draftId: string, category: stri
     .filter((e) => /^[\w-]{1,40}$/.test(e.id))
     .slice(0, 40)
     .map((e) => {
-      const text = typeof e.content?.text === "string" ? e.content.text.slice(0, 80) : undefined;
-      const bound = typeof e.content?._bind === "string" ? e.content._bind.slice(0, 40) : undefined;
-      return { id: e.id, type: String(e.type).slice(0, 40), ...(text ? { text } : {}), ...(bound ? { bound } : {}) };
+      const text =
+        typeof e.content?.text === "string"
+          ? e.content.text.slice(0, 80)
+          : undefined;
+      const bound =
+        typeof e.content?._bind === "string"
+          ? e.content._bind.slice(0, 40)
+          : undefined;
+      return {
+        id: e.id,
+        type: String(e.type).slice(0, 40),
+        ...(text ? { text } : {}),
+        ...(bound ? { bound } : {}),
+      };
     });
 
   return {
     ...base,
-    page_background: String(design.pageSettings?.backgroundColor ?? "").slice(0, 40),
+    page_background: String(design.pageSettings?.backgroundColor ?? "").slice(
+      0,
+      40,
+    ),
     elements,
     details: {
       bride: design.coreNames.bride.slice(0, 60),
@@ -267,11 +299,22 @@ function normalizeSuggestions(raw: unknown): AiSuggestion[] {
   const out: AiSuggestion[] = [];
   for (const item of raw) {
     const s = item as Rec | null;
-    if (!s || typeof s.target !== "string" || !s.styles || typeof s.styles !== "object") continue;
+    if (
+      !s ||
+      typeof s.target !== "string" ||
+      !s.styles ||
+      typeof s.styles !== "object"
+    )
+      continue;
     const styles: Record<string, string> = {};
-    for (const [k, v] of Object.entries(s.styles as Rec)) if (typeof v === "string") styles[k] = v;
+    for (const [k, v] of Object.entries(s.styles as Rec))
+      if (typeof v === "string") styles[k] = v;
     if (Object.keys(styles).length === 0) continue;
-    out.push({ target: s.target, styles, reason: typeof s.reason === "string" ? s.reason : undefined });
+    out.push({
+      target: s.target,
+      styles,
+      reason: typeof s.reason === "string" ? s.reason : undefined,
+    });
   }
   return out;
 }
@@ -281,32 +324,52 @@ function normalizeActions(raw: unknown): AiActions {
   const out: AiActions = {};
   if (r.details && typeof r.details === "object") {
     const d: AiDetails = {};
-    for (const k of ["bride", "groom", "date", "time", "venue", "address"] as const) {
-      if (typeof r.details[k] === "string" && r.details[k].trim()) d[k] = r.details[k];
+    for (const k of [
+      "bride",
+      "groom",
+      "date",
+      "time",
+      "venue",
+      "address",
+    ] as const) {
+      if (typeof r.details[k] === "string" && r.details[k].trim())
+        d[k] = r.details[k];
     }
     if (Object.keys(d).length) out.details = d;
   }
-  if (r.page && typeof r.page.backgroundColor === "string") out.page = { backgroundColor: r.page.backgroundColor };
+  if (r.page && typeof r.page.backgroundColor === "string")
+    out.page = { backgroundColor: r.page.backgroundColor };
   if (Array.isArray(r.edits)) {
     const edits = r.edits
       .filter((e: Rec) => e && typeof e.id === "string")
       .map((e: Rec) => {
         const styles: Record<string, string> = {};
         if (e.styles && typeof e.styles === "object") {
-          for (const [k, v] of Object.entries(e.styles as Rec)) if (typeof v === "string") styles[k] = v;
+          for (const [k, v] of Object.entries(e.styles as Rec))
+            if (typeof v === "string") styles[k] = v;
         }
-        return { id: e.id as string, text: typeof e.text === "string" ? e.text : undefined, styles };
+        return {
+          id: e.id as string,
+          text: typeof e.text === "string" ? e.text : undefined,
+          styles,
+        };
       });
     if (edits.length) out.edits = edits;
   }
   if (Array.isArray(r.adds)) {
     const adds = r.adds
-      .filter((e: Rec) => e && (e.type === "heading" || e.type === "text") && typeof e.text === "string")
+      .filter(
+        (e: Rec) =>
+          e &&
+          (e.type === "heading" || e.type === "text") &&
+          typeof e.text === "string",
+      )
       .slice(0, 8)
       .map((e: Rec) => {
         const styles: Record<string, string> = {};
         if (e.styles && typeof e.styles === "object") {
-          for (const [k, v] of Object.entries(e.styles as Rec)) if (typeof v === "string") styles[k] = v;
+          for (const [k, v] of Object.entries(e.styles as Rec))
+            if (typeof v === "string") styles[k] = v;
         }
         return {
           type: e.type as "heading" | "text",
@@ -318,7 +381,9 @@ function normalizeActions(raw: unknown): AiActions {
     if (adds.length) out.adds = adds;
   }
   if (Array.isArray(r.removes)) {
-    const removes = r.removes.filter((x: unknown): x is string => typeof x === "string").slice(0, 10);
+    const removes = r.removes
+      .filter((x: unknown): x is string => typeof x === "string")
+      .slice(0, 10);
     if (removes.length) out.removes = removes;
   }
   return out;
@@ -355,7 +420,10 @@ const DETAIL_LABELS: Record<string, string> = {
 
 function elLabel(e: { type: string; content?: Rec }): string {
   const raw = e.content?.text ?? e.content?.title ?? e.content?.name ?? "";
-  const t = String(raw).replace(/\{\{[^}]*\}\}/g, "…").trim().slice(0, 28);
+  const t = String(raw)
+    .replace(/\{\{[^}]*\}\}/g, "…")
+    .trim()
+    .slice(0, 28);
   return t ? `“${t}”` : `the ${e.type} block`;
 }
 
@@ -368,7 +436,10 @@ function describeActions(a: AiActions, design: RehearsalDesign): ProposalRow[] {
     rows.push({ kind: "details", text: `Fill in ${keys.join(", ")}` });
   }
   if (a.page?.backgroundColor) {
-    rows.push({ kind: "page", text: `Change the page background to ${a.page.backgroundColor}` });
+    rows.push({
+      kind: "page",
+      text: `Change the page background to ${a.page.backgroundColor}`,
+    });
   }
   for (const ed of a.edits ?? []) {
     const el = byId.get(ed.id);
@@ -378,14 +449,24 @@ function describeActions(a: AiActions, design: RehearsalDesign): ProposalRow[] {
     if (Object.keys(ed.styles ?? {}).length) parts.push("restyle");
     rows.push({
       kind: "edit",
-      text: `${parts.length ? parts.join(" and ") : "change"} ${elLabel(el)}`.replace(/^./, (c) => c.toUpperCase()),
+      text: `${parts.length ? parts.join(" and ") : "change"} ${elLabel(el)}`.replace(
+        /^./,
+        (c) => c.toUpperCase(),
+      ),
       targetId: el.id,
     });
   }
   for (const add of a.adds ?? []) {
-    const anchor = add.after && add.after !== "end" ? byId.get(add.after) : undefined;
-    const noun = add.type === "heading" ? "heading" : Object.keys(add.styles ?? {}).includes("background-color") ? "card" : "text";
-    const snippet = add.text.length > 34 ? `${add.text.slice(0, 34)}…` : add.text;
+    const anchor =
+      add.after && add.after !== "end" ? byId.get(add.after) : undefined;
+    const noun =
+      add.type === "heading"
+        ? "heading"
+        : Object.keys(add.styles ?? {}).includes("background-color")
+          ? "card"
+          : "text";
+    const snippet =
+      add.text.length > 34 ? `${add.text.slice(0, 34)}…` : add.text;
     rows.push({
       kind: "add",
       text: `Add ${noun} “${snippet}”${anchor ? ` after ${elLabel(anchor)}` : " at the end"}`,
@@ -395,12 +476,19 @@ function describeActions(a: AiActions, design: RehearsalDesign): ProposalRow[] {
   for (const id of a.removes ?? []) {
     const el = byId.get(id);
     if (!el) continue;
-    rows.push({ kind: "remove", text: `Remove ${elLabel(el)}`, targetId: el.id });
+    rows.push({
+      kind: "remove",
+      text: `Remove ${elLabel(el)}`,
+      targetId: el.id,
+    });
   }
   return rows;
 }
 
-const ROW_STYLE: Record<ProposalRow["kind"], { icon: React.ComponentType<{ className?: string }>; tone: string }> = {
+const ROW_STYLE: Record<
+  ProposalRow["kind"],
+  { icon: React.ComponentType<{ className?: string }>; tone: string }
+> = {
   add: { icon: Plus, tone: "bg-emerald-100 text-emerald-700" },
   edit: { icon: Pencil, tone: "bg-orange-100 text-orange-700" },
   remove: { icon: Minus, tone: "bg-red-100 text-red-700" },
@@ -408,36 +496,102 @@ const ROW_STYLE: Record<ProposalRow["kind"], { icon: React.ComponentType<{ class
   page: { icon: Pencil, tone: "bg-violet-100 text-violet-700" },
 };
 
-function ProposalCard({ proposal, onShow, onApprove, onReject }: { proposal: Proposal; onShow: (id: string) => void; onApprove: () => void; onReject: () => void; }) {
+function ProposalCard({
+  proposal,
+  onShow,
+  onApprove,
+  onReject,
+}: {
+  proposal: Proposal;
+  onShow: (id: string) => void;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
   const count = proposal.rows.length;
   const removing = proposal.rows.filter((r) => r.kind === "remove").length;
   return (
-    <div role="dialog" aria-label="Review the assistant’s changes" className={cn("fixed inset-x-3 bottom-[4.75rem] z-[80] mx-auto flex max-h-[46dvh] max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/10", "lg:inset-x-auto lg:bottom-6 lg:left-6 lg:mx-0 lg:max-h-[60dvh] lg:w-[24rem]")}>
+    <div
+      role="dialog"
+      aria-label="Review the assistant’s changes"
+      className={cn(
+        "fixed inset-x-3 bottom-[4.75rem] z-[80] mx-auto flex max-h-[46dvh] max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/10",
+        "lg:inset-x-auto lg:bottom-6 lg:left-6 lg:mx-0 lg:max-h-[60dvh] lg:w-[24rem]",
+      )}
+    >
       <div className="flex items-start gap-2.5 border-b border-black/[0.06] bg-orange-50/70 px-3.5 py-3">
-        <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-orange-500 text-white"><Sparkles className="size-4" /></span>
+        <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-orange-500 text-white">
+          <Sparkles className="size-4" />
+        </span>
         <div className="min-w-0">
-          <p className="text-sm font-bold text-[#2a1002]">Review {count} change{count === 1 ? "" : "s"}</p>
-          <p className="mt-0.5 text-xs leading-snug text-stone-600">Nothing is changed until you approve. Tap a row to see where it goes.</p>
+          <p className="text-sm font-bold text-[#2a1002]">
+            Review {count} change{count === 1 ? "" : "s"}
+          </p>
+          <p className="mt-0.5 text-xs leading-snug text-stone-600">
+            Nothing is changed until you approve. Tap a row to see where it
+            goes.
+          </p>
         </div>
       </div>
-      <ul data-lenis-prevent className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-2.5">
+      <ul
+        data-lenis-prevent
+        className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-2.5"
+      >
         {proposal.rows.map((r, i) => {
           const S = ROW_STYLE[r.kind];
           const canShow = !!r.targetId;
           return (
             <li key={`${r.kind}-${i}`}>
-              <button type="button" disabled={!canShow} onClick={() => r.targetId && onShow(r.targetId)} className={cn("flex min-h-11 w-full items-center gap-2.5 rounded-xl border border-black/[0.07] bg-white px-2.5 py-2 text-left text-[13px] leading-snug text-stone-700 transition", canShow && "hover:border-orange-300 active:scale-[0.99]", "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/40")}>
-                <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-md", S.tone)}><S.icon className="size-3.5" /></span>
+              <button
+                type="button"
+                disabled={!canShow}
+                onClick={() => r.targetId && onShow(r.targetId)}
+                className={cn(
+                  "flex min-h-11 w-full items-center gap-2.5 rounded-xl border border-black/[0.07] bg-white px-2.5 py-2 text-left text-[13px] leading-snug text-stone-700 transition",
+                  canShow && "hover:border-orange-300 active:scale-[0.99]",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/40",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex size-6 shrink-0 items-center justify-center rounded-md",
+                    S.tone,
+                  )}
+                >
+                  <S.icon className="size-3.5" />
+                </span>
                 <span className="min-w-0 flex-1 break-words">{r.text}</span>
-                {canShow && <Eye className="size-3.5 shrink-0 text-stone-400" aria-hidden />}
+                {canShow && (
+                  <Eye
+                    className="size-3.5 shrink-0 text-stone-400"
+                    aria-hidden
+                  />
+                )}
               </button>
             </li>
           );
         })}
       </ul>
       <div className="grid grid-cols-2 gap-2 border-t border-black/[0.06] bg-stone-50/70 p-2.5">
-        <button type="button" onClick={onReject} className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-black/10 bg-white text-sm font-semibold text-stone-700 hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/40"><X className="size-4" /> Discard</button>
-        <button type="button" onClick={onApprove} className={cn("flex h-11 items-center justify-center gap-1.5 rounded-xl text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/40", removing > 0 ? "bg-red-600 hover:bg-red-700" : "bg-orange-500 hover:bg-orange-600")}><Check className="size-4" /> {removing > 0 ? "Approve & delete" : "Approve"}</button>
+        <button
+          type="button"
+          onClick={onReject}
+          className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-black/10 bg-white text-sm font-semibold text-stone-700 hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/40"
+        >
+          <X className="size-4" /> Discard
+        </button>
+        <button
+          type="button"
+          onClick={onApprove}
+          className={cn(
+            "flex h-11 items-center justify-center gap-1.5 rounded-xl text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/40",
+            removing > 0
+              ? "bg-red-600 hover:bg-red-700"
+              : "bg-orange-500 hover:bg-orange-600",
+          )}
+        >
+          <Check className="size-4" />{" "}
+          {removing > 0 ? "Approve & delete" : "Approve"}
+        </button>
       </div>
     </div>
   );
@@ -447,21 +601,59 @@ function ProposalCard({ proposal, onShow, onApprove, onReject }: { proposal: Pro
 /*  On-device backup (survives reload, tab close and browser crashes)         */
 /* ========================================================================== */
 
-type Backup = { v: 1; templateId: string; name: string; thumb: string; design: RehearsalDesign; assets: string[]; draftId: string | null; dirty: boolean; at: number; };
-const bkKey = (userId: string, templateId: string) => `${LS_PREFIX}${userId}:${templateId}`;
+type Backup = {
+  v: 1;
+  templateId: string;
+  name: string;
+  thumb: string;
+  design: RehearsalDesign;
+  assets: string[];
+  draftId: string | null;
+  dirty: boolean;
+  at: number;
+};
+const bkKey = (userId: string, templateId: string) =>
+  `${LS_PREFIX}${userId}:${templateId}`;
 
 function parseBackup(raw: string | null): Backup | null {
   if (!raw) return null;
   try {
     const b = JSON.parse(raw) as Rec;
     const design = normalizeDesign(b?.design);
-    if (!b || b.v !== 1 || typeof b.templateId !== "string" || !design) return null;
-    return { v: 1, templateId: b.templateId, name: str(b.name, "Rehearsal"), thumb: str(b.thumb), design, assets: strArr(b.assets), draftId: typeof b.draftId === "string" ? b.draftId : null, dirty: Boolean(b.dirty), at: Number(b.at) || Date.now() };
-  } catch { return null; }
+    if (!b || b.v !== 1 || typeof b.templateId !== "string" || !design)
+      return null;
+    return {
+      v: 1,
+      templateId: b.templateId,
+      name: str(b.name, "Rehearsal"),
+      thumb: str(b.thumb),
+      design,
+      assets: strArr(b.assets),
+      draftId: typeof b.draftId === "string" ? b.draftId : null,
+      dirty: Boolean(b.dirty),
+      at: Number(b.at) || Date.now(),
+    };
+  } catch {
+    return null;
+  }
 }
-function readBackup(userId: string, templateId: string): Backup | null { try { return parseBackup(localStorage.getItem(bkKey(userId, templateId))); } catch { return null; } }
-function writeBackup(userId: string, b: Backup) { try { localStorage.setItem(bkKey(userId, b.templateId), JSON.stringify(b)); } catch {} }
-function clearBackup(userId: string, templateId: string) { try { localStorage.removeItem(bkKey(userId, templateId)); } catch {} }
+function readBackup(userId: string, templateId: string): Backup | null {
+  try {
+    return parseBackup(localStorage.getItem(bkKey(userId, templateId)));
+  } catch {
+    return null;
+  }
+}
+function writeBackup(userId: string, b: Backup) {
+  try {
+    localStorage.setItem(bkKey(userId, b.templateId), JSON.stringify(b));
+  } catch {}
+}
+function clearBackup(userId: string, templateId: string) {
+  try {
+    localStorage.removeItem(bkKey(userId, templateId));
+  } catch {}
+}
 function listBackups(userId: string): Backup[] {
   const out: Backup[] = [];
   try {
@@ -476,21 +668,37 @@ function listBackups(userId: string): Backup[] {
   return out;
 }
 
-async function purgeRehearsal(opts: { userId: string; templateId: string; design: RehearsalDesign | null; assets: string[]; knownDraftId?: string | null; knownServerAssets?: string[]; }): Promise<void> {
+async function purgeRehearsal(opts: {
+  userId: string;
+  templateId: string;
+  design: RehearsalDesign | null;
+  assets: string[];
+  knownDraftId?: string | null;
+  knownServerAssets?: string[];
+}): Promise<void> {
   const { userId, templateId, design, assets } = opts;
   let id: string | null | undefined = opts.knownDraftId;
   let serverAssets = opts.knownServerAssets ?? [];
   if (id === undefined) {
     try {
-      const res = await apiClient.get(`${API.draft}?template_id=${encodeURIComponent(templateId)}`);
+      const res = await apiClient.get(
+        `${API.draft}?template_id=${encodeURIComponent(templateId)}`,
+      );
       const d = (res.data?.data ?? null) as Rec | null;
       id = typeof d?.id === "string" ? d.id : null;
       serverAssets = strArr(d?.cloudinary_assets);
-    } catch (err) { if (statusOf(err) !== 404) throw err; id = null; }
+    } catch (err) {
+      if (statusOf(err) !== 404) throw err;
+      id = null;
+    }
   }
   const unknownToServer = assets.filter((u) => !serverAssets.includes(u));
   if (unknownToServer.length > 0 && design) {
-    const res = await apiClient.post(API.draft, { template_id: templateId, design_schema: design, cloudinary_assets: Array.from(new Set([...serverAssets, ...assets])) });
+    const res = await apiClient.post(API.draft, {
+      template_id: templateId,
+      design_schema: design,
+      cloudinary_assets: Array.from(new Set([...serverAssets, ...assets])),
+    });
     const newId = res.data?.data?.id;
     if (typeof newId === "string") id = newId;
   }
@@ -501,15 +709,27 @@ async function purgeRehearsal(opts: { userId: string; templateId: string; design
 function useGuide() {
   const [open, setOpen] = React.useState(false);
   const [seen, setSeen] = React.useState(true);
-  React.useEffect(() => { try { setSeen(localStorage.getItem(GUIDE_KEY) === "1"); } catch {} }, []);
-  const close = React.useCallback(() => { setOpen(false); setSeen(true); try { localStorage.setItem(GUIDE_KEY, "1"); } catch {} }, []);
+  React.useEffect(() => {
+    try {
+      setSeen(localStorage.getItem(GUIDE_KEY) === "1");
+    } catch {}
+  }, []);
+  const close = React.useCallback(() => {
+    setOpen(false);
+    setSeen(true);
+    try {
+      localStorage.setItem(GUIDE_KEY, "1");
+    } catch {}
+  }, []);
   const show = React.useCallback(() => setOpen(true), []);
   return { open, seen, show, close };
 }
 
 function usePurchased() {
   const [items, setItems] = React.useState<PublicTemplate[]>([]);
-  const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
+  const [status, setStatus] = React.useState<"loading" | "ready" | "error">(
+    "loading",
+  );
   const [attempt, setAttempt] = React.useState(0);
 
   React.useEffect(() => {
@@ -521,12 +741,28 @@ function usePurchased() {
         let page = 1;
         let totalPages = 1;
         do {
-          const res = await apiClient.get(API.library, { params: { page, limit: LIBRARY_PAGE } });
+          const res = await apiClient.get(API.library, {
+            params: { page, limit: LIBRARY_PAGE },
+          });
           const payload = (res.data?.data ?? res.data) as Rec | null;
-          const rows = Array.isArray(payload?.items) ? (payload!.items as Rec[]) : [];
+          const rows = Array.isArray(payload?.items)
+            ? (payload!.items as Rec[])
+            : [];
           for (const t of rows) {
             if (!t || typeof t.id !== "string") continue;
-            all.push({ id: t.id, name: str(t.name, "Untitled"), description: str(t.description), category_name: str(pick(t, "category_name", "categoryName")), thumbnail_url: str(pick(t, "thumbnail_url", "thumbnailUrl")), is_premium: Boolean(pick(t, "is_premium", "isPremium")), price: Number(t.price_paid) || 0, owned: true, has_custom_slug: Boolean(pick(t, "has_custom_slug", "hasCustomSlug")) });
+            all.push({
+              id: t.id,
+              name: str(t.name, "Untitled"),
+              description: str(t.description),
+              category_name: str(pick(t, "category_name", "categoryName")),
+              thumbnail_url: str(pick(t, "thumbnail_url", "thumbnailUrl")),
+              is_premium: Boolean(pick(t, "is_premium", "isPremium")),
+              price: Number(t.price_paid) || 0,
+              owned: true,
+              has_custom_slug: Boolean(
+                pick(t, "has_custom_slug", "hasCustomSlug"),
+              ),
+            });
           }
           totalPages = Number(payload?.meta?.total_pages) || 1;
           page += 1;
@@ -534,13 +770,55 @@ function usePurchased() {
         if (cancelled) return;
         setItems(all);
         setStatus("ready");
-      } catch { if (!cancelled) setStatus("error"); }
+      } catch {
+        if (!cancelled) setStatus("error");
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [attempt]);
 
   const ids = React.useMemo(() => new Set(items.map((t) => t.id)), [items]);
   return { items, ids, status, retry: () => setAttempt((n) => n + 1) };
+}
+
+/** Which templates already have an invitation: template id -> invitation id. */
+function useInvitationMap() {
+  const [map, setMap] = React.useState<Map<string, string>>(new Map());
+  const [attempt, setAttempt] = React.useState(0);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiClient.get(API.invitations);
+        const payload = (res.data?.data ?? res.data) as Rec | Rec[] | null;
+        const rows: Rec[] = Array.isArray(payload)
+          ? payload
+          : Array.isArray((payload as Rec | null)?.items)
+            ? (payload as Rec).items
+            : [];
+        const m = new Map<string, string>();
+        for (const r of rows) {
+          if (
+            r &&
+            typeof r.id === "string" &&
+            typeof r.template_id === "string"
+          )
+            m.set(r.template_id, r.id);
+        }
+        if (!cancelled) setMap(m);
+      } catch {
+        /* labels fall back to "Create invitation" */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
+
+  return { map, refresh: () => setAttempt((n) => n + 1) };
 }
 
 /* ========================================================================== */
@@ -564,11 +842,18 @@ function Router({ user }: Props) {
   const rawTemplate = params.get("template");
   const rawInvitation = params.get("invitation");
 
-  const templateId = rawTemplate && TEMPLATE_ID_RE.test(rawTemplate) ? rawTemplate : null;
-  const invitationId = rawInvitation && TEMPLATE_ID_RE.test(rawInvitation) ? rawInvitation : null;
+  const templateId =
+    rawTemplate && TEMPLATE_ID_RE.test(rawTemplate) ? rawTemplate : null;
+  const invitationId =
+    rawInvitation && TEMPLATE_ID_RE.test(rawInvitation) ? rawInvitation : null;
 
   return templateId || invitationId ? (
-    <Studio key={templateId || invitationId} templateId={templateId || ""} invitationId={invitationId || ""} user={user} />
+    <Studio
+      key={templateId || invitationId}
+      templateId={templateId || ""}
+      invitationId={invitationId || ""}
+      user={user}
+    />
   ) : (
     <PickerView user={user} />
   );
@@ -591,8 +876,14 @@ function PickerView({ user }: Props) {
   const router = useRouter();
   const guide = useGuide();
   const purchased = usePurchased();
+  const allowance = usePlanAllowance();
+  const unlockPlan = allowance.unlock;
+  const invites = useInvitationMap();
+  const [unlockingId, setUnlockingId] = React.useState<string | null>(null);
 
-  const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
+  const [status, setStatus] = React.useState<"loading" | "ready" | "error">(
+    "loading",
+  );
   const [items, setItems] = React.useState<PublicTemplate[]>([]);
   const [total, setTotal] = React.useState<number | null>(null);
   const [hasMore, setHasMore] = React.useState(false);
@@ -611,16 +902,35 @@ function PickerView({ user }: Props) {
   const [deleting, setDeleting] = React.useState(false);
 
   const refreshDrafts = React.useCallback(() => {
-    setDrafts(listBackups(user.id).filter((b) => b.dirty || b.draftId).sort((a, b) => b.at - a.at).map((b) => ({ templateId: b.templateId, name: b.name, thumb: b.design.thumbnailUrl || b.thumb, updatedAt: b.at, unsynced: b.dirty })));
+    setDrafts(
+      listBackups(user.id)
+        .filter((b) => b.dirty || b.draftId)
+        .sort((a, b) => b.at - a.at)
+        .map((b) => ({
+          templateId: b.templateId,
+          name: b.name,
+          thumb: b.design.thumbnailUrl || b.thumb,
+          updatedAt: b.at,
+          unsynced: b.dirty,
+        })),
+    );
   }, [user.id]);
 
-  React.useEffect(() => { refreshDrafts(); }, [refreshDrafts]);
+  React.useEffect(() => {
+    refreshDrafts();
+  }, [refreshDrafts]);
 
   const fetchPage = React.useCallback(async (p: number, search: string) => {
-    const res = await apiClient.get(API.list, { params: { page: p, limit: PAGE_SIZE, ...(search ? { search } : {}) } });
+    const res = await apiClient.get(API.list, {
+      params: { page: p, limit: PAGE_SIZE, ...(search ? { search } : {}) },
+    });
     const payload = (res.data?.data ?? res.data) as Rec | null;
     const metaTotal = Number(payload?.meta?.total);
-    return { items: normalizeTemplates(payload), hasNext: Boolean(payload?.meta?.hasNextPage), total: Number.isFinite(metaTotal) && metaTotal > 0 ? metaTotal : null };
+    return {
+      items: normalizeTemplates(payload),
+      hasNext: Boolean(payload?.meta?.hasNextPage),
+      total: Number.isFinite(metaTotal) && metaTotal > 0 ? metaTotal : null,
+    };
   }, []);
 
   React.useEffect(() => {
@@ -635,7 +945,9 @@ function PickerView({ user }: Props) {
         setHasMore(r.hasNext);
         if (!q) setTotal(r.total ?? (r.hasNext ? null : r.items.length));
         setStatus("ready");
-      } catch { if (id === reqId.current) setStatus("error"); }
+      } catch {
+        if (id === reqId.current) setStatus("error");
+      }
     })();
   }, [q, attempt, fetchPage]);
 
@@ -647,82 +959,318 @@ function PickerView({ user }: Props) {
       const r = await fetchPage(page.current + 1, q);
       if (id !== reqId.current) return;
       page.current += 1;
-      setItems((prev) => { const seen = new Set(prev.map((t) => t.id)); return [...prev, ...r.items.filter((t) => !seen.has(t.id))]; });
+      setItems((prev) => {
+        const seen = new Set(prev.map((t) => t.id));
+        return [...prev, ...r.items.filter((t) => !seen.has(t.id))];
+      });
       setHasMore(r.hasNext);
-    } catch { toast.add({ title: "Couldn’t load more", description: "Please try again.", type: "error" }); } finally { setLoadingMore(false); }
+    } catch {
+      toast.add({
+        title: "Couldn’t load more",
+        description: "Please try again.",
+        type: "error",
+      });
+    } finally {
+      setLoadingMore(false);
+    }
   }, [fetchPage, loadingMore, q]);
 
-  const ownedIds = purchased.ids;
+  /* ---- ownership: bought + unlocked with the plan ---- */
+  const planItems = React.useMemo<PublicTemplate[]>(
+    () =>
+      (allowance.data?.unlocked ?? []).map((u) => ({
+        id: u.id,
+        name: u.name,
+        description: u.description,
+        category_name: u.category_name,
+        thumbnail_url: u.thumbnail_url,
+        is_premium: u.is_premium,
+        price: u.price,
+        owned: true,
+        via_plan: true,
+      })),
+    [allowance.data],
+  );
+
+  const ownedItems = React.useMemo(() => {
+    const bought = new Set(purchased.items.map((t) => t.id));
+    return [...purchased.items, ...planItems.filter((t) => !bought.has(t.id))];
+  }, [purchased.items, planItems]);
+
+  const ownedIds = React.useMemo(
+    () => new Set(ownedItems.map((t) => t.id)),
+    [ownedItems],
+  );
+  const planOnlyIds = React.useMemo(
+    () =>
+      new Set(
+        planItems.map((t) => t.id).filter((id) => !purchased.ids.has(id)),
+      ),
+    [planItems, purchased.ids],
+  );
+
+  const unlockWithPlan = React.useCallback(
+    async (id: string) => {
+      if (unlockingId) return;
+      setUnlockingId(id);
+      try {
+        const r = await unlockPlan(id);
+        toast.add({
+          title: r.alreadyUnlocked ? "Already unlocked" : "Template unlocked",
+          description: `“${r.template.name}” is yours to use until your plan ends.`,
+          type: "success",
+        });
+      } catch (err) {
+        toast.add({
+          title: "Couldn’t unlock",
+          description: err instanceof Error ? err.message : "Please try again.",
+          type: "error",
+        });
+      } finally {
+        setUnlockingId(null);
+      }
+    },
+    [unlockPlan, unlockingId],
+  );
+
   const qLower = q.toLowerCase();
 
   const shown = React.useMemo(() => {
     let list: PublicTemplate[];
     if (tab === "owned") {
-      list = purchased.items.filter((t) => !qLower || t.name.toLowerCase().includes(qLower) || t.category_name.toLowerCase().includes(qLower) || t.description.toLowerCase().includes(qLower));
+      list = ownedItems.filter(
+        (t) =>
+          !qLower ||
+          t.name.toLowerCase().includes(qLower) ||
+          t.category_name.toLowerCase().includes(qLower) ||
+          t.description.toLowerCase().includes(qLower),
+      );
     } else {
-      list = items.map((t) => ({ ...t, owned: ownedIds.has(t.id) }));
+      list = items.map((t) => ({
+        ...t,
+        owned: ownedIds.has(t.id),
+        via_plan: planOnlyIds.has(t.id),
+      }));
       if (tab === "unowned") list = list.filter((t) => !t.owned);
     }
     if (category) list = list.filter((t) => t.category_name === category);
     return list;
-  }, [tab, purchased.items, items, ownedIds, qLower, category]);
+  }, [tab, ownedItems, items, ownedIds, planOnlyIds, qLower, category]);
 
   const categories = React.useMemo(() => {
-    const base = tab === "owned" ? purchased.items : items;
-    return Array.from(new Set(base.map((t) => t.category_name).filter(Boolean))).sort();
-  }, [tab, purchased.items, items]);
+    const base = tab === "owned" ? ownedItems : items;
+    return Array.from(
+      new Set(base.map((t) => t.category_name).filter(Boolean)),
+    ).sort();
+  }, [tab, ownedItems, items]);
 
-  const guidePreviews = React.useMemo(() => Array.from(new Set([...purchased.items, ...items].map((t) => t.thumbnail_url).filter((u) => u.trim() !== ""))).slice(0, 6), [purchased.items, items]);
+  const guidePreviews = React.useMemo(
+    () =>
+      Array.from(
+        new Set(
+          [...ownedItems, ...items]
+            .map((t) => t.thumbnail_url)
+            .filter((u) => u.trim() !== ""),
+        ),
+      ).slice(0, 6),
+    [ownedItems, items],
+  );
 
   React.useEffect(() => {
-    if (tab !== "unowned" || status !== "ready" || purchased.status === "loading") return;
+    if (
+      tab !== "unowned" ||
+      status !== "ready" ||
+      purchased.status === "loading"
+    )
+      return;
     if (hasMore && !loadingMore && shown.length < 8) void loadMore();
-  }, [tab, status, purchased.status, hasMore, loadingMore, shown.length, loadMore]);
+  }, [
+    tab,
+    status,
+    purchased.status,
+    hasMore,
+    loadingMore,
+    shown.length,
+    loadMore,
+  ]);
 
-  const pickerStatus: "loading" | "ready" | "error" = tab === "owned" ? (purchased.status === "loading" ? "loading" : purchased.status === "error" ? "error" : "ready") : status;
-  const open = (templateId: string) => router.push(`${ROUTES.studio}?template=${encodeURIComponent(templateId)}`);
+  const pickerStatus: "loading" | "ready" | "error" =
+    tab === "owned"
+      ? purchased.status === "loading"
+        ? "loading"
+        : purchased.status === "error"
+          ? "error"
+          : "ready"
+      : status;
+  const open = (templateId: string) =>
+    router.push(`${ROUTES.studio}?template=${encodeURIComponent(templateId)}`);
 
   const confirmDelete = async () => {
     if (!target) return;
     setDeleting(true);
     try {
       const b = readBackup(user.id, target.templateId);
-      await purgeRehearsal({ userId: user.id, templateId: target.templateId, design: b?.design ?? null, assets: b?.assets ?? [] });
-      toast.add({ title: "Draft deleted", description: "Your rehearsal and its uploads were removed.", type: "success" });
+      await purgeRehearsal({
+        userId: user.id,
+        templateId: target.templateId,
+        design: b?.design ?? null,
+        assets: b?.assets ?? [],
+      });
+      toast.add({
+        title: "Draft deleted",
+        description: "Your rehearsal and its uploads were removed.",
+        type: "success",
+      });
       setTarget(null);
       refreshDrafts();
-    } catch { toast.add({ title: "Couldn’t delete the draft", description: "Nothing was changed. Please try again.", type: "error" }); } finally { setDeleting(false); }
+    } catch {
+      toast.add({
+        title: "Couldn’t delete the draft",
+        description: "Nothing was changed. Please try again.",
+        type: "error",
+      });
+    } finally {
+      setDeleting(false);
+    }
   };
 
-  const draftIds = React.useMemo(() => new Set(drafts.map((d) => d.templateId)), [drafts]);
-  const draftsWithOwnership = React.useMemo(() => drafts.map((d) => ({ ...d, owned: ownedIds.has(d.templateId) })), [drafts, ownedIds]);
+  const draftIds = React.useMemo(
+    () => new Set(drafts.map((d) => d.templateId)),
+    [drafts],
+  );
+  const draftsWithOwnership = React.useMemo(
+    () =>
+      drafts.map((d) => ({
+        ...d,
+        owned: ownedIds.has(d.templateId),
+        viaPlan: planOnlyIds.has(d.templateId),
+      })),
+    [drafts, ownedIds, planOnlyIds],
+  );
 
   return (
     <div className="w-full space-y-3 sm:space-y-6">
-      <header className={cn("relative overflow-hidden rounded-2xl p-4 sm:rounded-3xl sm:p-7", "ring-1 ring-black/[0.06] shadow-[0_1px_2px_rgba(28,20,16,0.04),0_12px_28px_-18px_rgba(28,20,16,0.22)]")} style={{ backgroundImage: `url(${BANNER})`, backgroundSize: "cover", backgroundPosition: "70% center" }}>
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#fff8f2]/95 via-[#fff8f2]/70 to-[#fff8f2]/30 sm:bg-gradient-to-r sm:from-[#fff8f2]/95 sm:via-[#fff8f2]/65 sm:to-[#fff8f2]/10" />
+      <header
+        className={cn(
+          "relative overflow-hidden rounded-2xl p-4 sm:rounded-3xl sm:p-7",
+          "ring-1 ring-black/[0.06] shadow-[0_1px_2px_rgba(28,20,16,0.04),0_12px_28px_-18px_rgba(28,20,16,0.22)]",
+        )}
+        style={{
+          backgroundImage: `url(${BANNER})`,
+          backgroundSize: "cover",
+          backgroundPosition: "70% center",
+        }}
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#fff8f2]/95 via-[#fff8f2]/70 to-[#fff8f2]/30 sm:bg-gradient-to-r sm:from-[#fff8f2]/95 sm:via-[#fff8f2]/65 sm:to-[#fff8f2]/10"
+        />
         <div className="relative z-10">
-          <h1 className={cn(HEADING, "text-[26px] leading-8 tracking-[-0.025em] text-[#2a1002] sm:text-4xl sm:leading-10")}>Rehearsal <span className="text-orange-600">Studio</span></h1>
-          <p className="mt-1 max-w-xl text-[13px] font-medium leading-5 text-stone-600 sm:text-sm">Pick any template, make it yours and see it live, before you buy. Your work saves automatically.</p>
-          {guide.seen && (<div className="mt-2 -ml-2"><GuideBanner seen onOpen={guide.show} /></div>)}
+          <h1
+            className={cn(
+              HEADING,
+              "text-[26px] leading-8 tracking-[-0.025em] text-[#2a1002] sm:text-4xl sm:leading-10",
+            )}
+          >
+            Rehearsal <span className="text-orange-600">Studio</span>
+          </h1>
+          <p className="mt-1 max-w-xl text-[13px] font-medium leading-5 text-stone-600 sm:text-sm">
+            Pick any template, make it yours and see it live, before you buy.
+            Your work saves automatically.
+          </p>
+          {guide.seen && (
+            <div className="mt-2 -ml-2">
+              <GuideBanner seen onOpen={guide.show} />
+            </div>
+          )}
         </div>
       </header>
       {!guide.seen && <GuideBanner seen={false} onOpen={guide.show} />}
-      <StatsRow total={total} owned={purchased.items.length} drafts={drafts.length} loadingOwned={purchased.status === "loading"} />
-      <DraftsStrip drafts={draftsWithOwnership} onOpen={open} onDelete={setTarget} />
+      <StatsRow
+        total={total}
+        owned={ownedItems.length}
+        drafts={drafts.length}
+        loadingOwned={purchased.status === "loading"}
+      />
+      <DraftsStrip
+        drafts={draftsWithOwnership}
+        onOpen={open}
+        onDelete={setTarget}
+      />
       <div className="space-y-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <OwnershipTabs value={tab} ownedCount={purchased.status === "ready" ? purchased.items.length : null} onChange={(v) => { setTab(v); setCategory(""); }} />
-          <div className="min-w-0 lg:w-[26rem]"><SearchField value={query} onChange={setQuery} placeholder="Search templates by name or description" /></div>
+          <OwnershipTabs
+            value={tab}
+            ownedCount={purchased.status === "ready" ? ownedItems.length : null}
+            onChange={(v) => {
+              setTab(v);
+              setCategory("");
+            }}
+          />
+          <div className="min-w-0 lg:w-[26rem]">
+            <SearchField
+              value={query}
+              onChange={setQuery}
+              placeholder="Search templates by name or description"
+            />
+          </div>
         </div>
-        <CategoryChips categories={categories} value={category} onChange={setCategory} />
+        <CategoryChips
+          categories={categories}
+          value={category}
+          onChange={setCategory}
+        />
         {purchased.status === "error" && tab !== "owned" && (
-          <p className="flex flex-wrap items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200">We couldn’t check which templates you own, so the Purchased badges may be missing.<button type="button" onClick={purchased.retry} className="font-bold underline underline-offset-2">Try again</button></p>
+          <p className="flex flex-wrap items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200">
+            We couldn’t check which templates you own, so the Purchased badges
+            may be missing.
+            <button
+              type="button"
+              onClick={purchased.retry}
+              className="font-bold underline underline-offset-2"
+            >
+              Try again
+            </button>
+          </p>
         )}
       </div>
-      <TemplatePicker items={shown} status={pickerStatus} query={q} tab={tab} draftIds={draftIds} hasMore={tab !== "owned" && hasMore} loadingMore={loadingMore} onLoadMore={() => void loadMore()} onRetry={() => (tab === "owned" ? purchased.retry() : setAttempt((n) => n + 1))} onPick={open} onCreate={(id) => router.push(ROUTES.newInvitation(id))} unlockHref={ROUTES.unlock} />
-      <DiscardConfirmModal open={target !== null} busy={deleting} name={target?.name} onCancel={() => setTarget(null)} onConfirm={() => void confirmDelete()} />
-      <GuideModal open={guide.open} onClose={guide.close} previews={guidePreviews} />
+      <TemplatePicker
+        items={shown}
+        status={pickerStatus}
+        query={q}
+        tab={tab}
+        draftIds={draftIds}
+        invitationByTemplate={invites.map}
+        hasMore={tab !== "owned" && hasMore}
+        loadingMore={loadingMore}
+        onLoadMore={() => void loadMore()}
+        onRetry={() =>
+          tab === "owned" ? purchased.retry() : setAttempt((n) => n + 1)
+        }
+        onPick={open}
+        onCreate={(templateId) => router.push(ROUTES.newInvitation(templateId))}
+        onUpdate={(invId) =>
+          router.push(
+            `${ROUTES.studio}?invitation=${encodeURIComponent(invId)}`,
+          )
+        }
+        unlockHref={ROUTES.unlock}
+        allowance={allowance.data}
+        unlockingId={unlockingId}
+        onUnlockWithPlan={(id) => void unlockWithPlan(id)}
+      />
+      <DiscardConfirmModal
+        open={target !== null}
+        busy={deleting}
+        name={target?.name}
+        onCancel={() => setTarget(null)}
+        onConfirm={() => void confirmDelete()}
+      />
+      <GuideModal
+        open={guide.open}
+        onClose={guide.close}
+        previews={guidePreviews}
+      />
     </div>
   );
 }
@@ -731,20 +1279,48 @@ function PickerView({ user }: Props) {
 /*  Studio                                                                    */
 /* ========================================================================== */
 
-function Studio({ templateId: initialTemplateId, invitationId, user }: { templateId: string; invitationId: string; user: RehearsalUser }) {
+function Studio({
+  templateId: initialTemplateId,
+  invitationId,
+  user,
+}: {
+  templateId: string;
+  invitationId: string;
+  user: RehearsalUser;
+}) {
   const router = useRouter();
   const guide = useGuide();
   const purchased = usePurchased();
+  const allowance = usePlanAllowance();
+  const invites = useInvitationMap();
 
   const [templateId, setTemplateId] = React.useState(initialTemplateId);
 
   const mine = purchased.items.find((t) => t.id === templateId);
-  const owned: boolean | null = purchased.status === "ready" ? !!mine : purchased.status === "loading" ? null : null;
+  const viaPlan = !!allowance.data?.unlocked.some((u) => u.id === templateId);
+  const owned: boolean | null =
+    mine || viaPlan
+      ? true
+      : purchased.status === "ready" && allowance.status !== "loading"
+        ? false
+        : null;
 
-  const [phase, setPhase] = React.useState<"loading" | "ready" | "error">("loading");
+  /** The invitation this editor is working on: from the URL, or already made from this template. */
+  const existingInvitationId =
+    invitationId || invites.map.get(templateId) || "";
+  const isUpdate = existingInvitationId !== "";
+
+  const [phase, setPhase] = React.useState<"loading" | "ready" | "error">(
+    "loading",
+  );
   const [boot, setBoot] = React.useState<RehearsalDesign | null>(null);
   const [attempt, setAttempt] = React.useState(0);
-  const [meta, setMeta] = React.useState({ name: "Rehearsal", category: "", thumb: "", price: 0 });
+  const [meta, setMeta] = React.useState({
+    name: "Rehearsal",
+    category: "",
+    thumb: "",
+    price: 0,
+  });
   const metaRef = React.useRef(meta);
 
   const draftId = React.useRef<string | null>(null);
@@ -758,14 +1334,19 @@ function Studio({ templateId: initialTemplateId, invitationId, user }: { templat
   const [saveState, setSaveStateRaw] = React.useState<SaveState>("idle");
   const [savedAt, setSavedAt] = React.useState<number | null>(null);
   const stateRef = React.useRef<SaveState>("idle");
-  const setSave = React.useCallback((s: SaveState) => { stateRef.current = s; setSaveStateRaw(s); }, []);
+  const setSave = React.useCallback((s: SaveState) => {
+    stateRef.current = s;
+    setSaveStateRaw(s);
+  }, []);
   const timer = React.useRef<number | null>(null);
   const localTimer = React.useRef<number | null>(null);
   const lastSaveAt = React.useRef(0);
   const inflight = React.useRef<Promise<boolean> | null>(null);
   const discarded = React.useRef(false);
   const failureToastShown = React.useRef(false);
-  const saveRef = React.useRef<(manual: boolean) => Promise<boolean>>(async () => false);
+  const saveRef = React.useRef<(manual: boolean) => Promise<boolean>>(
+    async () => false,
+  );
 
   const [aiOpen, setAiOpen] = React.useState(false);
   const [aiMode, setAiMode] = React.useState<AiMode>("ideas");
@@ -778,16 +1359,39 @@ function Studio({ templateId: initialTemplateId, invitationId, user }: { templat
   const flushLocal = React.useCallback(() => {
     const design = latest.current;
     if (!design || discarded.current) return;
-    if (!dirtyRef.current && !draftId.current && assets.urlsRef.current.length === 0) return;
-    if (localTimer.current) { window.clearTimeout(localTimer.current); localTimer.current = null; }
-    writeBackup(user.id, { v: 1, templateId, name: metaRef.current.name, thumb: metaRef.current.thumb, design, assets: assets.urlsRef.current, draftId: draftId.current, dirty: dirtyRef.current, at: Date.now() });
+    if (
+      !dirtyRef.current &&
+      !draftId.current &&
+      assets.urlsRef.current.length === 0
+    )
+      return;
+    if (localTimer.current) {
+      window.clearTimeout(localTimer.current);
+      localTimer.current = null;
+    }
+    writeBackup(user.id, {
+      v: 1,
+      templateId,
+      name: metaRef.current.name,
+      thumb: metaRef.current.thumb,
+      design,
+      assets: assets.urlsRef.current,
+      draftId: draftId.current,
+      dirty: dirtyRef.current,
+      at: Date.now(),
+    });
   }, [assets.urlsRef, templateId, user.id]);
 
   const scheduleAutosave = React.useCallback(() => {
     if (discarded.current) return;
     if (timer.current) window.clearTimeout(timer.current);
-    const wait = Math.max(MIN_IDLE_MS, AUTOSAVE_EVERY_MS - (Date.now() - lastSaveAt.current));
-    timer.current = window.setTimeout(() => { void saveRef.current(false); }, wait);
+    const wait = Math.max(
+      MIN_IDLE_MS,
+      AUTOSAVE_EVERY_MS - (Date.now() - lastSaveAt.current),
+    );
+    timer.current = window.setTimeout(() => {
+      void saveRef.current(false);
+    }, wait);
   }, []);
 
   React.useEffect(() => {
@@ -828,22 +1432,31 @@ function Studio({ templateId: initialTemplateId, invitationId, user }: { templat
       ]);
       if (cancelled) return;
 
-      if (tplR.status === "rejected") { setPhase("error"); return; }
-      
+      if (tplR.status === "rejected") {
+        setPhase("error");
+        return;
+      }
+
       let draftData: Rec | null = null;
       if (draftR.status === "rejected") {
-        if (statusOf(draftR.reason) !== 404) { setPhase("error"); return; }
-      } else { draftData = (draftR.value.data?.data ?? null) as Rec | null; }
+        if (statusOf(draftR.reason) !== 404) {
+          setPhase("error");
+          return;
+        }
+      } else {
+        draftData = (draftR.value.data?.data ?? null) as Rec | null;
+      }
 
       const tpl = readTemplate(tplR.value.data?.data ?? tplR.value.data);
-      const serverId = typeof draftData?.id === "string" ? (draftData.id as string) : null;
+      const serverId =
+        typeof draftData?.id === "string" ? (draftData.id as string) : null;
       const serverDesign = normalizeDesign(draftData?.design_schema);
       const local = readBackup(user.id, tId);
 
       // 3. Determine which design to load (Invitation > Local Draft > Server Draft > Base Template)
       let design: RehearsalDesign;
       let recovered = false;
-      
+
       if (invDesignSchema) {
         design = normalizeDesign(invDesignSchema) || tpl.design;
       } else if (local?.dirty) {
@@ -863,72 +1476,143 @@ function Studio({ templateId: initialTemplateId, invitationId, user }: { templat
       savedRef.current = !recovered && serverDesign && serverId ? design : null;
       dirtyRef.current = recovered;
 
-      const m = { name: tpl.name, category: tpl.category, thumb: tpl.thumb, price: tpl.price };
+      const m = {
+        name: tpl.name,
+        category: tpl.category,
+        thumb: tpl.thumb,
+        price: tpl.price,
+      };
       metaRef.current = m;
       setMeta(m);
       setSave(recovered ? "dirty" : serverId ? "saved" : "idle");
       setBoot(design);
       setPhase("ready");
 
-      if (recovered) { toast.add({ title: "Welcome back", description: "We restored the changes you hadn’t saved yet.", type: "success" }); scheduleAutosave(); }
-    })();
-
-    return () => { cancelled = true; };
-  }, [initialTemplateId, invitationId, attempt]);
-
-  const handleChange = React.useCallback((d: RehearsalDesign) => {
-    latest.current = d;
-    if (discarded.current) return;
-    dirtyRef.current = true;
-    if (localTimer.current) window.clearTimeout(localTimer.current);
-    localTimer.current = window.setTimeout(flushLocal, 250);
-    if (stateRef.current !== "saving") setSave("dirty");
-    scheduleAutosave();
-  }, [flushLocal, scheduleAutosave, setSave]);
-
-  const trackAsset = assets.track;
-  const handleAsset = React.useCallback((url: string) => { trackAsset(url); flushLocal(); }, [trackAsset, flushLocal]);
-
-  const saveNow = React.useCallback(async (manual: boolean): Promise<boolean> => {
-    if (discarded.current) return false;
-    if (inflight.current) return inflight.current;
-
-    const run = (async (): Promise<boolean> => {
-      const snap = latest.current;
-      if (!snap) return false;
-      if (draftId.current && savedRef.current === snap) { dirtyRef.current = false; flushLocal(); setSave("saved"); return true; }
-      if (JSON.stringify(snap).length > MAX_SCHEMA_CHARS) { setSave("error"); toast.add({ title: "Design too large", description: "Try removing some large media, then save again.", type: "error" }); return false; }
-
-      lastSaveAt.current = Date.now();
-      setSave("saving");
-      try {
-        const res = await apiClient.post(API.draft, { template_id: templateId, design_schema: snap, cloudinary_assets: assets.urlsRef.current });
-        const id = res.data?.data?.id;
-        if (typeof id === "string") draftId.current = id;
-        savedRef.current = snap;
-        serverAssets.current = [...assets.urlsRef.current];
-        failureToastShown.current = false;
-        setSavedAt(Date.now());
-        if (manual) toast.add({ title: "Draft saved", description: "Your changes are safe.", type: "success" });
-        if (latest.current === snap) { dirtyRef.current = false; setSave("saved"); } else { setSave("dirty"); scheduleAutosave(); }
-        flushLocal();
-        return true;
-      } catch (err) {
-        setSave("error");
-        if (manual || !failureToastShown.current) { failureToastShown.current = true; toast.add({ title: "Couldn’t save to your account", description: saveErrorMessage(err), type: "error" }); }
-        if (!manual) scheduleAutosave();
-        return false;
+      if (recovered) {
+        toast.add({
+          title: "Welcome back",
+          description: "We restored the changes you hadn’t saved yet.",
+          type: "success",
+        });
+        scheduleAutosave();
       }
     })();
 
-    inflight.current = run;
-    try { return await run; } finally { inflight.current = null; }
-  }, [assets.urlsRef, flushLocal, scheduleAutosave, setSave, templateId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [initialTemplateId, invitationId, attempt]);
 
-  React.useEffect(() => { saveRef.current = saveNow; }, [saveNow]);
+  const handleChange = React.useCallback(
+    (d: RehearsalDesign) => {
+      latest.current = d;
+      if (discarded.current) return;
+      dirtyRef.current = true;
+      if (localTimer.current) window.clearTimeout(localTimer.current);
+      localTimer.current = window.setTimeout(flushLocal, 250);
+      if (stateRef.current !== "saving") setSave("dirty");
+      scheduleAutosave();
+    },
+    [flushLocal, scheduleAutosave, setSave],
+  );
+
+  const trackAsset = assets.track;
+  const handleAsset = React.useCallback(
+    (url: string) => {
+      trackAsset(url);
+      flushLocal();
+    },
+    [trackAsset, flushLocal],
+  );
+
+  const saveNow = React.useCallback(
+    async (manual: boolean): Promise<boolean> => {
+      if (discarded.current) return false;
+      if (inflight.current) return inflight.current;
+
+      const run = (async (): Promise<boolean> => {
+        const snap = latest.current;
+        if (!snap) return false;
+        if (draftId.current && savedRef.current === snap) {
+          dirtyRef.current = false;
+          flushLocal();
+          setSave("saved");
+          return true;
+        }
+        if (JSON.stringify(snap).length > MAX_SCHEMA_CHARS) {
+          setSave("error");
+          toast.add({
+            title: "Design too large",
+            description: "Try removing some large media, then save again.",
+            type: "error",
+          });
+          return false;
+        }
+
+        lastSaveAt.current = Date.now();
+        setSave("saving");
+        try {
+          const res = await apiClient.post(API.draft, {
+            template_id: templateId,
+            design_schema: snap,
+            cloudinary_assets: assets.urlsRef.current,
+          });
+          const id = res.data?.data?.id;
+          if (typeof id === "string") draftId.current = id;
+          savedRef.current = snap;
+          serverAssets.current = [...assets.urlsRef.current];
+          failureToastShown.current = false;
+          setSavedAt(Date.now());
+          if (manual)
+            toast.add({
+              title: "Draft saved",
+              description: "Your changes are safe.",
+              type: "success",
+            });
+          if (latest.current === snap) {
+            dirtyRef.current = false;
+            setSave("saved");
+          } else {
+            setSave("dirty");
+            scheduleAutosave();
+          }
+          flushLocal();
+          return true;
+        } catch (err) {
+          setSave("error");
+          if (manual || !failureToastShown.current) {
+            failureToastShown.current = true;
+            toast.add({
+              title: "Couldn’t save to your account",
+              description: saveErrorMessage(err),
+              type: "error",
+            });
+          }
+          if (!manual) scheduleAutosave();
+          return false;
+        }
+      })();
+
+      inflight.current = run;
+      try {
+        return await run;
+      } finally {
+        inflight.current = null;
+      }
+    },
+    [assets.urlsRef, flushLocal, scheduleAutosave, setSave, templateId],
+  );
 
   React.useEffect(() => {
-    const onHide = () => { flushLocal(); if (document.visibilityState === "hidden" && dirtyRef.current) void saveRef.current(false); };
+    saveRef.current = saveNow;
+  }, [saveNow]);
+
+  React.useEffect(() => {
+    const onHide = () => {
+      flushLocal();
+      if (document.visibilityState === "hidden" && dirtyRef.current)
+        void saveRef.current(false);
+    };
     window.addEventListener("pagehide", flushLocal);
     window.addEventListener("beforeunload", flushLocal);
     document.addEventListener("visibilitychange", onHide);
@@ -944,14 +1628,23 @@ function Studio({ templateId: initialTemplateId, invitationId, user }: { templat
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); void saveNow(true); }
-      else if (e.key === "Escape" && !discardOpen && !guide.open) { if (pending) setPending(null); else if (aiOpen) setAiOpen(false); }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void saveNow(true);
+      } else if (e.key === "Escape" && !discardOpen && !guide.open) {
+        if (pending) setPending(null);
+        else if (aiOpen) setAiOpen(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [saveNow, aiOpen, pending, discardOpen, guide.open]);
 
-  const goBack = React.useCallback(async () => { flushLocal(); if (dirtyRef.current) await saveNow(false); router.push(ROUTES.studio); }, [flushLocal, router, saveNow]);
+  const goBack = React.useCallback(async () => {
+    flushLocal();
+    if (dirtyRef.current) await saveNow(false);
+    router.push(ROUTES.studio);
+  }, [flushLocal, router, saveNow]);
 
   const confirmDiscard = async () => {
     setDiscarding(true);
@@ -960,55 +1653,139 @@ function Studio({ templateId: initialTemplateId, invitationId, user }: { templat
     if (localTimer.current) window.clearTimeout(localTimer.current);
     try {
       if (inflight.current) await inflight.current;
-      await purgeRehearsal({ userId: user.id, templateId, design: latest.current, assets: assets.urlsRef.current, knownDraftId: draftId.current, knownServerAssets: serverAssets.current });
-      toast.add({ title: "Draft deleted", description: "Your rehearsal and its uploads were removed.", type: "success" });
+      await purgeRehearsal({
+        userId: user.id,
+        templateId,
+        design: latest.current,
+        assets: assets.urlsRef.current,
+        knownDraftId: draftId.current,
+        knownServerAssets: serverAssets.current,
+      });
+      toast.add({
+        title: "Draft deleted",
+        description: "Your rehearsal and its uploads were removed.",
+        type: "success",
+      });
       router.push(ROUTES.studio);
     } catch {
       discarded.current = false;
       setDiscarding(false);
-      toast.add({ title: "Couldn’t delete the draft", description: "Nothing was changed. Please try again.", type: "error" });
+      toast.add({
+        title: "Couldn’t delete the draft",
+        description: "Nothing was changed. Please try again.",
+        type: "error",
+      });
     }
   };
 
   const ensureDraft = React.useCallback(async (): Promise<string | null> => {
     if (discarded.current) return null;
     if (inflight.current) await inflight.current;
-    if (dirtyRef.current || !draftId.current) { const ok = await saveNow(false); if (!ok) return null; }
-    if (dirtyRef.current) { const ok = await saveNow(false); if (!ok) return null; }
+    if (dirtyRef.current || !draftId.current) {
+      const ok = await saveNow(false);
+      if (!ok) return null;
+    }
+    if (dirtyRef.current) {
+      const ok = await saveNow(false);
+      if (!ok) return null;
+    }
     return draftId.current;
   }, [saveNow]);
 
   const handleCreate = React.useCallback(async () => {
     const id = await ensureDraft();
-    if (!id) { toast.add({ title: "Couldn’t save your draft", description: "Check your connection and try again.", type: "error" }); return; }
-    router.push(ROUTES.newInvitation(templateId));
-  }, [ensureDraft, router, templateId]);
-
-  const pushMessage = React.useCallback((m: ChatMessage) => { setMessages((prev) => [...prev, m].slice(-MAX_CHAT_MESSAGES)); }, []);
-  const openAi = React.useCallback((mode: AiMode) => { setAiMode(mode); setAiOpen(true); }, []);
-  const setBuilderMode = React.useCallback((on: boolean) => { setAiMode(on ? "builder" : "ideas"); if (on) setAiOpen(true); }, []);
+    if (!id) {
+      toast.add({
+        title: "Couldn’t save your draft",
+        description: "Check your connection and try again.",
+        type: "error",
+      });
+      return;
+    }
+    try {
+      // POST copies the saved draft into the existing invitation, or creates a new one.
+      await apiClient.post(API.invitations, { template_id: templateId });
+    } catch {
+      toast.add({
+        title: isUpdate
+          ? "Couldn’t update the invitation"
+          : "Couldn’t create the invitation",
+        description: "Your draft is saved. Please try again.",
+        type: "error",
+      });
+      return;
+    }
+    // The server deleted the draft, so stop the editor from re-saving a local copy.
+    discarded.current = true;
+    if (timer.current) window.clearTimeout(timer.current);
+    if (localTimer.current) window.clearTimeout(localTimer.current);
+    clearBackup(user.id, templateId);
+    toast.add({
+      title: isUpdate ? "Invitation updated" : "Invitation created",
+      description: isUpdate ? "Your changes are live." : "It’s ready to share.",
+      type: "success",
+    });
+    router.push("/dashboard/invitations");
+  }, [ensureDraft, isUpdate, router, templateId, user.id]);
+  const pushMessage = React.useCallback((m: ChatMessage) => {
+    setMessages((prev) => [...prev, m].slice(-MAX_CHAT_MESSAGES));
+  }, []);
+  const openAi = React.useCallback((mode: AiMode) => {
+    setAiMode(mode);
+    setAiOpen(true);
+  }, []);
+  const setBuilderMode = React.useCallback((on: boolean) => {
+    setAiMode(on ? "builder" : "ideas");
+    if (on) setAiOpen(true);
+  }, []);
 
   const getValues = React.useCallback((): BuilderValues => {
     const d = controller.current?.getDesign() ?? latest.current;
-    return { bride: d?.coreNames.bride ?? "", groom: d?.coreNames.groom ?? "", date: d?.details.date ?? "", time: d?.details.time ?? "", venue: d?.details.venue ?? "", address: d?.details.address ?? "" };
+    return {
+      bride: d?.coreNames.bride ?? "",
+      groom: d?.coreNames.groom ?? "",
+      date: d?.details.date ?? "",
+      time: d?.details.time ?? "",
+      venue: d?.details.venue ?? "",
+      address: d?.details.address ?? "",
+    };
   }, []);
 
   const applyValues = React.useCallback((v: BuilderValues): number => {
     const d = valuesToDetails(v);
     if (Object.keys(d).length === 0) return 0;
     const n = controller.current?.applyActions({ details: d }) ?? 0;
-    if (n > 0) toast.add({ title: "Details added", description: "Your page now shows your values.", type: "success" });
+    if (n > 0)
+      toast.add({
+        title: "Details added",
+        description: "Your page now shows your values.",
+        type: "success",
+      });
     return n;
   }, []);
 
   const applySuggestion = React.useCallback((s: AiSuggestion): number => {
     const n = controller.current?.applySuggestion(s) ?? 0;
-    if (n === 0) toast.add({ title: "Nothing to change", description: "No matching item on your page.", type: "error" });
+    if (n === 0)
+      toast.add({
+        title: "Nothing to change",
+        description: "No matching item on your page.",
+        type: "error",
+      });
     return n;
   }, []);
 
-  const showTarget = React.useCallback((id: string) => { controller.current?.focus(id); }, []);
-  const rejectProposal = React.useCallback(() => { setPending(null); pushMessage({ id: uid(), role: "assistant", text: "No problem, I left your page as it was." }); }, [pushMessage]);
+  const showTarget = React.useCallback((id: string) => {
+    controller.current?.focus(id);
+  }, []);
+  const rejectProposal = React.useCallback(() => {
+    setPending(null);
+    pushMessage({
+      id: uid(),
+      role: "assistant",
+      text: "No problem, I left your page as it was.",
+    });
+  }, [pushMessage]);
 
   const approveProposal = React.useCallback(() => {
     const p = pending;
@@ -1016,51 +1793,147 @@ function Studio({ templateId: initialTemplateId, invitationId, user }: { templat
     setPending(null);
     const ctl = controller.current;
     const n = ctl?.applyActions(p.actions) ?? 0;
-    if (n === 0) { pushMessage({ id: uid(), role: "assistant", error: true, text: "I couldn’t apply those changes. The items may have been moved or deleted since I looked." }); return; }
-    pushMessage({ id: uid(), role: "assistant", text: `Done. I made ${n} change${n === 1 ? "" : "s"}. You can undo them all in one tap.`, applied: n });
-    toast.add({ title: "Applied changes", description: "Tap Undo in the chat to take them back.", type: "success" });
+    if (n === 0) {
+      pushMessage({
+        id: uid(),
+        role: "assistant",
+        error: true,
+        text: "I couldn’t apply those changes. The items may have been moved or deleted since I looked.",
+      });
+      return;
+    }
+    pushMessage({
+      id: uid(),
+      role: "assistant",
+      text: `Done. I made ${n} change${n === 1 ? "" : "s"}. You can undo them all in one tap.`,
+      applied: n,
+    });
+    toast.add({
+      title: "Applied changes",
+      description: "Tap Undo in the chat to take them back.",
+      type: "success",
+    });
     const first = ctl?.lastTouched()[0];
     if (first) ctl?.focus(first);
   }, [pending, pushMessage]);
 
-  const sendAi = async (text: string, opts: { mode: AiMode; values?: BuilderValues }) => {
+  const sendAi = async (
+    text: string,
+    opts: { mode: AiMode; values?: BuilderValues },
+  ) => {
     const mode = opts.mode;
     pushMessage({ id: uid(), role: "user", text });
     setPending(null);
     setAiBusy(true);
     try {
       const ctl = controller.current;
-      if (!ctl) { pushMessage({ id: uid(), role: "assistant", error: true, text: "The editor isn’t ready yet. Please try again." }); return; }
-      if (mode === "builder" && opts.values) { const d = valuesToDetails(opts.values); if (Object.keys(d).length) ctl.applyActions({ details: d }); }
+      if (!ctl) {
+        pushMessage({
+          id: uid(),
+          role: "assistant",
+          error: true,
+          text: "The editor isn’t ready yet. Please try again.",
+        });
+        return;
+      }
+      if (mode === "builder" && opts.values) {
+        const d = valuesToDetails(opts.values);
+        if (Object.keys(d).length) ctl.applyActions({ details: d });
+      }
       if (!draftId.current) {
         const ok = await saveNow(false);
-        if (!ok || !draftId.current) { pushMessage({ id: uid(), role: "assistant", error: true, text: "I need your draft saved first, and saving didn’t work. Please try again in a moment." }); return; }
+        if (!ok || !draftId.current) {
+          pushMessage({
+            id: uid(),
+            role: "assistant",
+            error: true,
+            text: "I need your draft saved first, and saving didn’t work. Please try again in a moment.",
+          });
+          return;
+        }
       }
       const snap = ctl.getDesign();
-      const res = await apiClient.post(API.ai, { message: text, mode, context: buildAiContext(snap, draftId.current, metaRef.current.category, mode) });
-      const d = res.data?.data as { suggestion?: unknown; suggestions?: unknown; actions?: unknown } | undefined;
+      const res = await apiClient.post(API.ai, {
+        message: text,
+        mode,
+        context: buildAiContext(
+          snap,
+          draftId.current,
+          metaRef.current.category,
+          mode,
+        ),
+      });
+      const d = res.data?.data as
+        | { suggestion?: unknown; suggestions?: unknown; actions?: unknown }
+        | undefined;
       const summary = str(d?.suggestion).trim() || "Here’s what I’d try.";
       if (mode === "builder") {
         const actions = normalizeActions(d?.actions);
         const rows = describeActions(actions, ctl.getDesign());
-        if (rows.length === 0) { pushMessage({ id: uid(), role: "assistant", error: true, text: "I couldn’t change that. I can edit, add or delete text and headings, and change colours and the page background. Photos have to be added by hand from the Add tab." }); return; }
+        if (rows.length === 0) {
+          pushMessage({
+            id: uid(),
+            role: "assistant",
+            error: true,
+            text: "I couldn’t change that. I can edit, add or delete text and headings, and change colours and the page background. Photos have to be added by hand from the Add tab.",
+          });
+          return;
+        }
         setPending({ summary, actions, rows });
-        pushMessage({ id: uid(), role: "assistant", text: `${summary} Check the ${rows.length} change${rows.length === 1 ? "" : "s"} below and approve when you’re happy.` });
+        pushMessage({
+          id: uid(),
+          role: "assistant",
+          text: `${summary} Check the ${rows.length} change${rows.length === 1 ? "" : "s"} below and approve when you’re happy.`,
+        });
         const firstTarget = rows.find((r) => r.targetId)?.targetId;
         if (firstTarget) ctl.focus(firstTarget);
       } else {
-        pushMessage({ id: uid(), role: "assistant", text: summary, suggestions: normalizeSuggestions(d?.suggestions) });
+        pushMessage({
+          id: uid(),
+          role: "assistant",
+          text: summary,
+          suggestions: normalizeSuggestions(d?.suggestions),
+        });
       }
     } catch (err) {
-      pushMessage({ id: uid(), role: "assistant", error: true, text: aiErrorMessage(err) });
-    } finally { setAiBusy(false); }
+      pushMessage({
+        id: uid(),
+        role: "assistant",
+        error: true,
+        text: aiErrorMessage(err),
+      });
+    } finally {
+      setAiBusy(false);
+    }
   };
 
-  const copyCss = (css: string) => { void navigator.clipboard?.writeText(css); toast.add({ title: "Copied", description: "Copied to your clipboard.", type: "success" }); };
-  const guidePreviews = React.useMemo(() => Array.from(new Set([meta.thumb, ...purchased.items.map((t) => t.thumbnail_url)].filter((u) => u.trim() !== ""))).slice(0, 6), [meta.thumb, purchased.items]);
+  const copyCss = (css: string) => {
+    void navigator.clipboard?.writeText(css);
+    toast.add({
+      title: "Copied",
+      description: "Copied to your clipboard.",
+      type: "success",
+    });
+  };
+  const guidePreviews = React.useMemo(
+    () =>
+      Array.from(
+        new Set(
+          [meta.thumb, ...purchased.items.map((t) => t.thumbnail_url)].filter(
+            (u) => u.trim() !== "",
+          ),
+        ),
+      ).slice(0, 6),
+    [meta.thumb, purchased.items],
+  );
 
   if (phase === "loading") return <StudioLoading />;
-  if (phase === "error" || !boot) return (<div className={cn("rounded-2xl", SURFACE)}><ErrorCard onRetry={() => setAttempt((n) => n + 1)} /></div>);
+  if (phase === "error" || !boot)
+    return (
+      <div className={cn("rounded-2xl", SURFACE)}>
+        <ErrorCard onRetry={() => setAttempt((n) => n + 1)} />
+      </div>
+    );
 
   return (
     <>
@@ -1082,7 +1955,13 @@ function Studio({ templateId: initialTemplateId, invitationId, user }: { templat
             builderMode={aiOpen && aiMode === "builder"}
             guideUnread={!guide.seen}
             builder={builder}
-            create={{ templateId, owned, price: meta.price, unlockHref: ROUTES.unlock(templateId), onCreate: handleCreate }}
+            create={{
+              templateId,
+              owned,
+              price: meta.price,
+              unlockHref: ROUTES.unlock(templateId),
+              onCreate: handleCreate,
+            }}
             onBack={() => void goBack()}
             onSave={() => void saveNow(true)}
             onDiscard={() => setDiscardOpen(true)}
@@ -1108,9 +1987,26 @@ function Studio({ templateId: initialTemplateId, invitationId, user }: { templat
         onClose={() => setAiOpen(false)}
         onCopyCss={copyCss}
       />
-      {pending && (<ProposalCard proposal={pending} onShow={showTarget} onApprove={approveProposal} onReject={rejectProposal} />)}
-      <DiscardConfirmModal open={discardOpen} busy={discarding} name={meta.name} onCancel={() => setDiscardOpen(false)} onConfirm={() => void confirmDiscard()} />
-      <GuideModal open={guide.open} onClose={guide.close} previews={guidePreviews} />
+      {pending && (
+        <ProposalCard
+          proposal={pending}
+          onShow={showTarget}
+          onApprove={approveProposal}
+          onReject={rejectProposal}
+        />
+      )}
+      <DiscardConfirmModal
+        open={discardOpen}
+        busy={discarding}
+        name={meta.name}
+        onCancel={() => setDiscardOpen(false)}
+        onConfirm={() => void confirmDiscard()}
+      />
+      <GuideModal
+        open={guide.open}
+        onClose={guide.close}
+        previews={guidePreviews}
+      />
     </>
   );
 }

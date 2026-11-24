@@ -5,7 +5,7 @@ export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZES)[number];
 export type LibraryUsageFilter = "all" | "used" | "unused";
 export type LibrarySort = "recent" | "name";
 
-export type LibraryAcquisition = "purchase" | "subscription";
+export type LibraryAcquisition = "purchase" | "plan";
 export type LibraryTemplateStatus = "draft" | "published" | "archived";
 
 export type LibraryItem = {

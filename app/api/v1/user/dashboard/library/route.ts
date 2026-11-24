@@ -24,11 +24,40 @@ type ItemRow = LibraryItem & { total_count: number };
 
 const EMPTY_SUMMARY: LibrarySummary = { total: 0, premium: 0, used: 0, custom_slugs: 0 };
 
+/**
+ * Everything the user can use: templates they bought, plus templates unlocked
+ * by a LIVE plan (a bought template always wins over a plan unlock).
+ */
+const ownedSource = (userId: string) => sql`
+  SELECT tp.template_id,
+         tp.price_paid,
+         tp.has_custom_slug,
+         tp.purchased_at,
+         'purchase'::text AS acquisition
+  FROM template_purchases tp
+  WHERE tp.user_id = ${userId}
+  UNION ALL
+  SELECT u.template_id,
+         0::numeric AS price_paid,
+         FALSE AS has_custom_slug,
+         u.created_at AS purchased_at,
+         'plan'::text AS acquisition
+  FROM subscription_template_unlocks u
+  JOIN user_subscriptions us ON us.id = u.subscription_id
+  WHERE u.user_id = ${userId}
+    AND us.status = 'active'
+    AND us.expires_at > NOW()
+    AND NOT EXISTS (
+      SELECT 1 FROM template_purchases p
+      WHERE p.user_id = u.user_id AND p.template_id = u.template_id
+    )
+`;
+
 // Summary ignores filters, so it is cached per user and shared by every request
 // (including search requests, which skip the payload cache).
-// "v2" in the key retires the old shape that had a `free` field.
+// "v3" retires shapes cached before plan unlocks were included.
 async function getSummary(userId: string, redis: Redis | null): Promise<LibrarySummary> {
-  const key = `library_summary:v2:${userId}`;
+  const key = `library_summary:v3:${userId}`;
 
   if (redis) {
     try {
@@ -44,15 +73,14 @@ async function getSummary(userId: string, redis: Redis | null): Promise<LibraryS
       COUNT(*)::int AS total,
       COUNT(*) FILTER (WHERE t.is_premium)::int AS premium,
       COUNT(*) FILTER (WHERE inv.template_id IS NOT NULL)::int AS used,
-      COUNT(*) FILTER (WHERE tp.has_custom_slug)::int AS custom_slugs
-    FROM template_purchases tp
-    JOIN templates t ON t.id = tp.template_id
+      COUNT(*) FILTER (WHERE o.has_custom_slug)::int AS custom_slugs
+    FROM (${ownedSource(userId)}) o
+    JOIN templates t ON t.id = o.template_id
     LEFT JOIN (
       SELECT DISTINCT template_id
       FROM invitations
       WHERE user_id = ${userId} AND template_id IS NOT NULL
     ) inv ON inv.template_id = t.id
-    WHERE tp.user_id = ${userId}
   `;
   const summary = rows[0] ?? EMPTY_SUMMARY;
 
@@ -66,7 +94,7 @@ async function getSummary(userId: string, redis: Redis | null): Promise<LibraryS
   return summary;
 }
 
-// GET: My Library — owned templates, paginated, searchable, cached.
+// GET: My Library — owned + plan-unlocked templates, paginated, searchable, cached.
 export async function GET(req: NextRequest) {
   // Identity is injected by proxy.ts after session verification — never from the client.
   const userId = req.headers.get("x-user-id");
@@ -101,7 +129,7 @@ export async function GET(req: NextRequest) {
 
   // Search-keyed requests never read or write the payload cache.
   const useCache = search === "";
-  const cacheKey = `library:v2:${userId}:p=${page}:l=${limit}:usage=${usage}:sort=${sort}`;
+  const cacheKey = `library:v3:${userId}:p=${page}:l=${limit}:usage=${usage}:sort=${sort}`;
 
   // One Redis connection per request, shared by the payload and summary caches.
   let redis: Redis | null = null;
@@ -126,7 +154,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const conditions = [sql`tp.user_id = ${userId}`];
+    const conditions = [sql`TRUE`];
     // `inv` is a single pre-aggregated join, so usage filters don't re-scan invitations per row.
     if (usage === "used") conditions.push(sql`inv.cnt IS NOT NULL`);
     if (usage === "unused") conditions.push(sql`inv.cnt IS NULL`);
@@ -138,11 +166,11 @@ export async function GET(req: NextRequest) {
 
     // Tie-breaker keeps pagination deterministic across pages.
     const orderBy =
-      sort === "name" ? sql`t.name ASC, t.id ASC` : sql`tp.purchased_at DESC, t.id DESC`;
+      sort === "name" ? sql`t.name ASC, t.id ASC` : sql`o.purchased_at DESC, t.id DESC`;
 
     const fromClause = sql`
-      FROM template_purchases tp
-      JOIN templates t ON t.id = tp.template_id
+      FROM (${ownedSource(userId)}) o
+      JOIN templates t ON t.id = o.template_id
       JOIN template_categories c ON c.id = t.category_id
       LEFT JOIN (
         SELECT template_id, COUNT(*)::int AS cnt
@@ -165,10 +193,10 @@ export async function GET(req: NextRequest) {
           t.allows_custom_slug,
           t.custom_slug_price::float AS custom_slug_price,
           c.name AS category_name,
-          tp.price_paid::float AS price_paid,
-          tp.has_custom_slug,
-          'purchase' AS acquisition, -- becomes tp.acquisition when subscription claims ship
-          tp.purchased_at,
+          o.price_paid::float AS price_paid,
+          o.has_custom_slug,
+          o.acquisition,
+          o.purchased_at,
           COALESCE(inv.cnt, 0) AS invitation_count,
           COUNT(*) OVER()::int AS total_count
         ${fromClause}

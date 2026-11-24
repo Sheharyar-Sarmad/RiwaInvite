@@ -3,7 +3,7 @@ import { sql } from "@/db/connections/postgres_connection";
 import { STATUS_CODE } from "@/lib/status_codes";
 import settings from "@/config/settings_config";
 import crypto from "crypto";
-import { safeInvalidateCache } from "@/lib/api/helpers"; // <-- ADDED
+import { safeInvalidateCache } from "@/lib/api/helpers";
 
 const config = settings();
 
@@ -44,14 +44,17 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. IDEMPOTENCY: Save to payment_logs first to prevent double-processing
+    // CHANGED: no-op DO UPDATE so a conflict RETURNS the existing row (id + status).
     const [log] = await sql`
       INSERT INTO payment_logs (provider, event_id, payload, status)
       VALUES ('jazzcash', ${txnRefNo}, ${JSON.stringify(payload)}::jsonb, 'received')
-      ON CONFLICT (event_id) DO NOTHING
-      RETURNING id
+      ON CONFLICT (event_id) DO UPDATE SET event_id = EXCLUDED.event_id
+      RETURNING id, status
     `;
 
-    if (!log) {
+    // CHANGED: only a PROCESSED log is a true duplicate. A 'received'/'failed' row from a
+    // crashed attempt retries safely — the tx's completed-order guard keeps it idempotent.
+    if (log.status === "processed") {
       return NextResponse.json({ status: "success", message: "Already processed" }, { status: STATUS_CODE.OK });
     }
 
@@ -63,18 +66,38 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. ACID TRANSACTION: Unlock the item
-    // ADDED: We capture the return value (completedOrder) to get the userId for cache invalidation
     const completedOrder = await sql.begin(async (tx) => {
       const [order] = await tx`SELECT * FROM orders WHERE provider_order_id = ${txnRefNo} FOR UPDATE`;
 
       if (!order) throw new Error("Order not found");
-      
-      // ADDED: return null so we know it was already processed
+
       if (order.status === "completed") return null;
 
       await tx`UPDATE orders SET status = 'completed', updated_at = NOW() WHERE id = ${order.id}`;
 
       if (order.order_type === "plan") {
+        // ADDED: one live subscription at a time — re-check inside the tx (DB trigger also enforces).
+        // Without this, the trigger would abort the tx and JazzCash would retry forever.
+        const [live] = await tx`
+          SELECT id FROM user_subscriptions
+          WHERE user_id = ${order.user_id} AND status = 'active' AND expires_at > NOW()
+          LIMIT 1 FOR UPDATE
+        `;
+        if (live) {
+          await tx`UPDATE orders SET status = 'failed', updated_at = NOW() WHERE id = ${order.id}`;
+          await tx`
+            INSERT INTO notifications (user_id, title, message)
+            VALUES (${order.user_id}, 'Subscription not applied',
+                    'You already had an active plan when this payment completed, so it was not applied. Contact support for a refund.')
+          `;
+          await tx`
+            INSERT INTO admin_notifications (type, title, message)
+            VALUES ('alert', 'Duplicate plan payment',
+                    ${`Order ${txnRefNo} paid while user ${order.user_id} already had a live plan. Refund required.`})
+          `;
+          return { userId: String(order.user_id) };
+        }
+
         const [plan] = await tx`SELECT duration_days FROM plans WHERE id = ${order.reference_id}`;
         const duration = plan?.duration_days || 30;
         const expiresAt = new Date(Date.now() + duration * 24 * 60 * 60 * 1000).toISOString();
@@ -104,7 +127,6 @@ export async function POST(req: NextRequest) {
         VALUES ('order', 'Payment Received', ${`Order ${txnRefNo} paid successfully. Amount: Rs ${order.amount}`})
       `;
 
-      // ADDED: Return the userId so we can clear their cache outside the transaction
       return { userId: String(order.user_id) };
     });
 
@@ -112,9 +134,11 @@ export async function POST(req: NextRequest) {
     await sql`UPDATE payment_logs SET status = 'processed' WHERE id = ${log.id}`;
 
     // 6. INVALIDATE CACHES
-    // If the transaction completed successfully (and wasn't already processed), clear their dashboard caches
     if (completedOrder?.userId) {
-      await safeInvalidateCache(`user_dashboard_billing:${completedOrder.userId}`);
+      // CHANGED/ADDED: match the keys the routes actually write.
+      await safeInvalidateCache(`billing:${completedOrder.userId}:*`);
+      await safeInvalidateCache(`library:${completedOrder.userId}:*`);
+      // Kept: overview/activity keys (their routes own these prefixes).
       await safeInvalidateCache(`user_dashboard_overview:${completedOrder.userId}`);
       await safeInvalidateCache(`user_dashboard_activity:${completedOrder.userId}`);
     }
