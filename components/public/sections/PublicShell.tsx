@@ -4,27 +4,22 @@ import { usePathname } from "next/navigation";
 import { Navbar } from "@/components/public/navigation/Navbar";
 import { Footer } from "@/components/public/navigation/Footer";
 
+// Pages that render their own full-screen layout (no public Navbar/Footer)
+const BARE_ROUTES = ["/admin", "/dashboard", "/login", "/register", "/invite"];
+
 export function PublicShell({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
 
-  // Define the routes that should NOT have the public Navbar/Footer
-  const protectedRoutes = ["/admin", "/dashboard", "/login", "/register"];
-  
-  const isProtected = protectedRoutes.some((route) => pathname.startsWith(route));
+  const isBare = BARE_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
 
-  // If it's a dashboard or auth page, just return the children as-is
-  if (isProtected) {
-    return <>{children}</>;
-  }
+  if (isBare) return <>{children}</>;
 
-  // For all public pages (Landing, Templates, Plans, etc.)
   return (
     <div className="flex min-h-screen flex-col">
       <Navbar />
-      {/* pt-20 pushes the content down so it's not hidden behind the fixed Navbar */}
-      <main className="flex-1 pt-20">
-        {children}
-      </main>
+      <main className="flex-1 pt-20">{children}</main>
       <Footer />
     </div>
   );
