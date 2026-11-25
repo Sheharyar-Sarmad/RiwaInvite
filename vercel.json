@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/v1/health/db",
-      "schedule": "*/4 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
