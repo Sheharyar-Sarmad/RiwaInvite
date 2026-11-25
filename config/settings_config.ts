@@ -22,6 +22,7 @@ class Settings {
   readonly cloudinaryApiSecret: string;
 
   // LLM / AI (each user brings their own Groq key; there is no platform-wide key)
+  readonly groqApiKey: string
   readonly aiEncryptionKey: string; // 32 bytes: 64 hex chars or base64. Encrypts user API keys at rest.
   readonly apiBase: string;
   readonly llmModel: string; // default model for new users
@@ -58,6 +59,7 @@ class Settings {
       "development",
     );
     this.appUrl = this.getRequired("APP_URL");
+    this.groqApiKey = this.getRequired("GROQ_API_KEY")
 
     // Databases
     this.postgresUrl = this.getRequired("POSTGRES_URL");
