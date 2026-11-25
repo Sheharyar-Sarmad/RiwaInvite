@@ -33,6 +33,10 @@ import {
 } from "@/components/user/sections/dashboard/ui/DashboardUI";
 import { FOCUS } from "@/components/user/navigation/UserSidebar";
 import { DatePickerField } from "@/components/user/sections/rehearsal/ui/DateTimePicker";
+import {
+  CustomSlugField,
+  useSlugAvailability,
+} from "@/components/user/sections/rehearsal/ui/CustomSlugDialog"; // SLUG
 
 /* ========================================================================== */
 /*  Types & routes                                                            */
@@ -84,6 +88,8 @@ export const INVITATION_ROUTES = {
 
 const DAY = 86_400_000;
 const GRACE_DAYS = 5;
+const BLACK_BTN =
+  "inline-flex items-center justify-center gap-2 bg-gradient-to-b from-neutral-800 to-neutral-950 text-white shadow-sm ring-1 ring-black/20 transition hover:from-neutral-700 hover:to-neutral-900 active:scale-[0.98]";
 
 function expiryOf(inv: Invitation): { end: Date; days: number } | null {
   let end: Date | null = null;
@@ -714,6 +720,7 @@ function errorText(err: unknown): string {
     e?.response?.data?.error?.message ?? e?.response?.data?.message;
   if (status === 401) return "Your session expired. Please sign in again.";
   if (status === 403) return "This template isn’t available on your account.";
+  if (status === 409) return "That link was just taken. Try another."; // SLUG
   if (status === 429)
     return "You’re going too fast. Wait a moment and try again.";
   if (
@@ -734,6 +741,7 @@ export function CreateInvitationModal({
   failed,
   onRetry,
   initialTemplateId,
+  askSlugFor, // SLUG
   onCreate,
 }: {
   open: boolean;
@@ -744,12 +752,17 @@ export function CreateInvitationModal({
   failed: boolean;
   onRetry: () => void;
   initialTemplateId?: string | null;
-  onCreate: (templateId: string) => Promise<void>;
+  askSlugFor?: (templateId: string) => boolean; // SLUG
+  onCreate: (templateId: string, slug?: string | null) => Promise<void>; // SLUG
 }) {
   const [mounted, setMounted] = React.useState(false);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
+
+  // SLUG: custom link input + live availability check
+  const [slugRaw, setSlugRaw] = React.useState("");
+  const slugCheck = useSlugAvailability(slugRaw);
 
   React.useEffect(() => setMounted(true), []);
 
@@ -759,6 +772,8 @@ export function CreateInvitationModal({
     setError("");
     setBusy(false);
   }, [open, initialTemplateId]);
+
+  React.useEffect(() => setSlugRaw(""), [open, selectedId]); // SLUG
 
   React.useEffect(() => {
     if (!open) return;
@@ -779,6 +794,11 @@ export function CreateInvitationModal({
   const archived = selected?.status === "archived";
   const alreadyCreated = selected ? usedTemplateIds.has(selected.id) : false;
 
+  // SLUG: ask only for plan-unlocked templates on a plan that allows a custom link
+  const wantsSlug = !!selected && !!askSlugFor?.(selected.id);
+  const slugBlocked =
+    wantsSlug && slugRaw.trim() !== "" && slugCheck.state !== "available";
+
   const sortedTemplates = React.useMemo(
     () =>
       [...templates].sort(
@@ -792,11 +812,14 @@ export function CreateInvitationModal({
   ).length;
 
   const submit = async () => {
-    if (!selected || archived || alreadyCreated || busy) return;
+    if (!selected || archived || alreadyCreated || busy || slugBlocked) return;
     setError("");
     setBusy(true);
     try {
-      await onCreate(selected.id);
+      await onCreate(
+        selected.id,
+        wantsSlug && slugCheck.state === "available" ? slugCheck.slug : null, // SLUG
+      );
     } catch (err) {
       setError(errorText(err));
       setBusy(false);
@@ -1015,6 +1038,11 @@ export function CreateInvitationModal({
                     </span>{" "}
                     will be used.
                   </span>
+                ) : wantsSlug ? (
+                  <span>
+                    Pick a custom link below, or leave it empty for an
+                    automatic one.
+                  </span>
                 ) : (
                   <span>A unique link will be generated.</span>
                 )}
@@ -1028,6 +1056,25 @@ export function CreateInvitationModal({
               </li>
             </ul>
 
+            {/* SLUG: only for plan-unlocked templates on a plan with custom links */}
+            {wantsSlug && (
+              <div className="space-y-1.5 rounded-xl bg-stone-50 p-3 ring-1 ring-black/[0.05]">
+                <p className="text-xs font-bold uppercase tracking-wide text-stone-500">
+                  Custom link{" "}
+                  <span className="font-medium normal-case">
+                    (included in your plan, optional)
+                  </span>
+                </p>
+                <CustomSlugField
+                  value={slugRaw}
+                  onChange={setSlugRaw}
+                  state={slugCheck.state}
+                  slug={slugCheck.slug}
+                  disabled={busy}
+                />
+              </div>
+            )}
+
             {error && (
               <p
                 role="alert"
@@ -1040,7 +1087,7 @@ export function CreateInvitationModal({
             <button
               type="button"
               onClick={() => void submit()}
-              disabled={busy}
+              disabled={busy || slugBlocked} // SLUG
               className={cn(
                 BTN,
                 "h-11 w-full rounded-xl text-sm disabled:cursor-not-allowed disabled:opacity-60",

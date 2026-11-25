@@ -21,7 +21,13 @@ export type UnlockedTemplate = {
 };
 
 export type PlanAllowance = {
-  subscription: { id: string; planName: string; expiresAt: string; daysRemaining: number } | null;
+  subscription: {
+    id: string;
+    planName: string;
+    expiresAt: string;
+    daysRemaining: number;
+    allowsCustomSlug: boolean; // add this
+  } | null;
   simple: Bucket;
   premium: Bucket;
   unlocked: UnlockedTemplate[];

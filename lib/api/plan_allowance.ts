@@ -17,7 +17,13 @@ export type UnlockedTemplate = {
 };
 
 export type PlanAllowance = {
-  subscription: { id: string; planName: string; expiresAt: string; daysRemaining: number } | null;
+  subscription: {
+    id: string;
+    planName: string;
+    expiresAt: string;
+    daysRemaining: number;
+    allowsCustomSlug: boolean; // ADD (1/3)
+  } | null;
   simple: Bucket;
   premium: Bucket;
   unlocked: UnlockedTemplate[];
@@ -41,12 +47,14 @@ type SubRow = {
   max_premium: number;
   simple_used: number;
   premium_used: number;
+  allows_custom_slug: boolean | null; // ADD (2/3)
 };
 
 /** Live subscription + how many unlocks of each kind are used. Always fresh, never cached. */
 export async function loadAllowance(q: Q, userId: string): Promise<PlanAllowance> {
   const [s] = await q<SubRow[]>`
     SELECT us.id, p.name AS plan_name, us.expires_at,
+           p.allows_custom_slug,
            GREATEST(0, CEIL(EXTRACT(EPOCH FROM (us.expires_at - NOW())) / 86400))::int AS days_remaining,
            COALESCE(p.max_simple_templates, 0)  AS max_simple,
            COALESCE(p.max_premium_templates, 0) AS max_premium,
@@ -78,6 +86,7 @@ export async function loadAllowance(q: Q, userId: string): Promise<PlanAllowance
       planName: s.plan_name,
       expiresAt: iso(s.expires_at),
       daysRemaining: s.days_remaining,
+      allowsCustomSlug: Boolean(s.allows_custom_slug), // ADD (3/3)
     },
     simple: bucket(s.max_simple, s.simple_used),
     premium: bucket(s.max_premium, s.premium_used),

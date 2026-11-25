@@ -3,55 +3,38 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
-import {
-  motion,
-  useMotionValue,
-  useMotionTemplate,
-  useReducedMotion,
-  useSpring,
-  useTransform,
-  useVelocity,
-} from "framer-motion";
+import { motion, useMotionValue, useReducedMotion, useSpring } from "framer-motion";
 
-/* -------------------------------------------------------------------------- */
-/*  Config                                                                    */
-/* -------------------------------------------------------------------------- */
+/* Lite cursor: dot + ring + soft glow + I-beam + click ripple + tiny on-demand sparkles.
+   No blend modes, no backdrop blur, no always-on animation loop. */
 
 const HIDDEN_ROUTES: string[] = ["/preview"];
 
 const CLICKABLE =
   "a, button, [role='button'], [role='tab'], input, select, textarea, label, summary, [data-cursor='pointer']";
-
+const TEXTY =
+  "input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='button']):not([type='submit']):not([type='color']):not([type='file']), textarea, [contenteditable=''], [contenteditable='true']";
 const LABELLED = "[data-cursor-label]";
 
 const DOT_SPRING = { damping: 28, stiffness: 700, mass: 0.3 };
 const RING_SPRING = { damping: 22, stiffness: 180, mass: 0.8 };
-// 🪄 Torch spring: Slower and heavier so the light feels like it's illuminating the room
-const TORCH_SPRING = { damping: 30, stiffness: 60, mass: 1.2 }; 
+const GLOW_SPRING = { damping: 30, stiffness: 60, mass: 1.2 };
 
-const RING_SIZE = 36;
-const DOT_SIZE = 8;
-const MAX_PARTICLES = 80;
-
+const RING = 36;
+const DOT = 8;
+const GLOW = 320;
+const MAX_PARTICLES = 40;
 const ORANGE = "249,115,22";
 
-type Ripple = { id: number; x: number; y: number };
+const CSS = `
+html.has-fairy-cursor:root,
+html.has-fairy-cursor:root *:not(#fc-x),
+html.has-fairy-cursor:root *:not(#fc-x)::before,
+html.has-fairy-cursor:root *:not(#fc-x)::after { cursor: none !important; }
+`;
 
-type Particle = {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  max: number;
-  size: number;
-  hue: number;
-  star: boolean;
-  rot: number;
-  vr: number;
-  tw: number;
-  grav: number;
-};
+type P = { x: number; y: number; vx: number; vy: number; life: number; max: number; r: number };
+type Ripple = { id: number; x: number; y: number };
 
 function useFinePointer(): boolean {
   const [fine, setFine] = useState(false);
@@ -65,54 +48,25 @@ function useFinePointer(): boolean {
   return fine;
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Component                                                                 */
-/* -------------------------------------------------------------------------- */
-
 export function CustomCursor() {
   const pathname = usePathname();
   const reduce = !!useReducedMotion();
   const finePointer = useFinePointer();
-  const hiddenRoute = HIDDEN_ROUTES.some((r) => pathname?.startsWith(r));
-  const enabled = finePointer && !hiddenRoute;
+  const enabled = finePointer && !HIDDEN_ROUTES.some((r) => pathname?.startsWith(r));
 
-  const mouseX = useMotionValue(-1000);
-  const mouseY = useMotionValue(-1000);
-  
-  const ringTX = useMotionValue(-1000);
-  const ringTY = useMotionValue(-1000);
-
-  const dotX = useSpring(mouseX, DOT_SPRING);
-  const dotY = useSpring(mouseY, DOT_SPRING);
-  const ringX = useSpring(ringTX, RING_SPRING);
-  const ringY = useSpring(ringTY, RING_SPRING);
-
-  // 🪄 Torch Position (lags slightly behind the mouse for a "heavy" light feel)
-  const torchX = useSpring(mouseX, TORCH_SPRING);
-  const torchY = useSpring(mouseY, TORCH_SPRING);
-
-  // 🪄 Torch Gradients
-  // The outer glow is huge (600px) and very faint
-  const outerTorch = useMotionTemplate`radial-gradient(600px circle at ${torchX}px ${torchY}px, rgba(${ORANGE},0.08), transparent 60%)`;
-  // The inner core is smaller (200px) and brighter
-  const innerTorch = useMotionTemplate`radial-gradient(200px circle at ${torchX}px ${torchY}px, rgba(255,255,255,0.08), transparent 70%)`;
-
-  // Squash & stretch
-  const rvx = useVelocity(ringX);
-  const rvy = useVelocity(ringY);
-  const lastAngle = useRef(0);
-  const stretch = useTransform([rvx, rvy], (v: number[]) =>
-    1 + Math.min(Math.hypot(v[0], v[1]) / 5200, 0.35),
-  );
-  const squash = useTransform(stretch, (s) => 1 - (s - 1) * 0.55);
-  const angle = useTransform([rvx, rvy], (v: number[]) => {
-    if (Math.hypot(v[0], v[1]) > 80) lastAngle.current = (Math.atan2(v[1], v[0]) * 180) / Math.PI;
-    return lastAngle.current;
-  });
+  const mx = useMotionValue(-1000);
+  const my = useMotionValue(-1000);
+  const dotX = useSpring(mx, DOT_SPRING);
+  const dotY = useSpring(my, DOT_SPRING);
+  const ringX = useSpring(mx, RING_SPRING);
+  const ringY = useSpring(my, RING_SPRING);
+  const glowX = useSpring(mx, GLOW_SPRING);
+  const glowY = useSpring(my, GLOW_SPRING);
 
   const [visible, setVisible] = useState(false);
   const [hovering, setHovering] = useState(false);
   const [pressed, setPressed] = useState(false);
+  const [textMode, setTextMode] = useState(false);
   const [label, setLabel] = useState("");
   const [ripples, setRipples] = useState<Ripple[]>([]);
 
@@ -131,87 +85,40 @@ export function CustomCursor() {
       setVisible(false);
       setHovering(false);
       setPressed(false);
+      setTextMode(false);
       setLabel("");
       setRipples([]);
       return;
     }
 
     root.classList.add("has-fairy-cursor");
+    const styleEl = document.createElement("style");
+    styleEl.textContent = CSS;
+    document.head.appendChild(styleEl);
 
-    /* ---------------- sparkle trail ---------------- */
-    const particles: Particle[] = [];
+    /* ---- sparkles: the loop only runs while particles exist ---- */
     const canvas = canvasRef.current;
     const ctx = !reduce && canvas ? canvas.getContext("2d") : null;
+    const particles: P[] = [];
+    const timers: number[] = [];
     let raf = 0;
-    let lastT = performance.now();
+    let lastT = 0;
     const last = { x: -1000, y: -1000 };
-    let magnet: HTMLElement | null = null;
 
     const resize = () => {
-      if (!canvas || !ctx) return;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = window.innerWidth * dpr;
-      canvas.height = window.innerHeight * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (!canvas) return;
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
     };
     resize();
     window.addEventListener("resize", resize);
 
-    const spawn = (x: number, y: number, o: Partial<Particle> = {}) => {
-      if (!ctx) return;
-      if (particles.length >= MAX_PARTICLES) particles.shift();
-      const a = Math.random() * Math.PI * 2;
-      const s = Math.random() * 0.5;
-      particles.push({
-        x, y,
-        vx: Math.cos(a) * s,
-        vy: Math.sin(a) * s - 0.1,
-        life: 0,
-        max: 32 + Math.random() * 28,
-        size: 1.2 + Math.random() * 1.8,
-        hue: 18 + Math.random() * 26,
-        star: Math.random() < 0.6,
-        rot: Math.random() * Math.PI,
-        vr: (Math.random() - 0.5) * 0.1,
-        tw: Math.random() * 6,
-        grav: 0.02,
-        ...o,
-      });
-    };
-
-    const burst = (x: number, y: number) => {
-      const n = 16;
-      for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2 + Math.random() * 0.3;
-        const s = 1.5 + Math.random() * 3.5;
-        spawn(x, y, {
-          vx: Math.cos(a) * s,
-          vy: Math.sin(a) * s - 0.6,
-          size: 1.6 + Math.random() * 2,
-          max: 38 + Math.random() * 22,
-          grav: 0.05,
-        });
-      }
-    };
-
-    const drawStar = (r: number) => {
-      if (!ctx) return;
-      ctx.beginPath();
-      ctx.moveTo(0, -r);
-      ctx.quadraticCurveTo(0, 0, r, 0);
-      ctx.quadraticCurveTo(0, 0, 0, r);
-      ctx.quadraticCurveTo(0, 0, -r, 0);
-      ctx.quadraticCurveTo(0, 0, 0, -r);
-      ctx.fill();
-    };
-
-    const tick = (now: number) => {
-      raf = requestAnimationFrame(tick);
+    const loop = (now: number) => {
+      raf = 0;
       if (!ctx) return;
       const dt = Math.min(40, now - lastT) / 16.67;
       lastT = now;
-
-      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      ctx.clearRect(0, 0, canvas!.width, canvas!.height);
 
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
@@ -220,49 +127,36 @@ export function CustomCursor() {
           particles.splice(i, 1);
           continue;
         }
-        p.vx *= 0.98;
-        p.vy = p.vy * 0.98 + p.grav * dt;
+        p.vx *= 0.97;
+        p.vy = p.vy * 0.97 + 0.04 * dt;
         p.x += p.vx * dt;
         p.y += p.vy * dt;
-        p.rot += p.vr * dt;
-
         const k = 1 - p.life / p.max;
-        const twinkle = 0.7 + 0.3 * Math.sin(p.life * 0.3 + p.tw);
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.globalAlpha = Math.min(1, k * 1.5) * twinkle;
-        ctx.fillStyle = `hsl(${p.hue} 95% 60%)`;
-        ctx.shadowColor = `hsl(${p.hue} 95% 60% / 0.8)`;
-        ctx.shadowBlur = 8;
-        if (p.star) {
-          ctx.rotate(p.rot);
-          drawStar(p.size * (1 + k) * 1.8);
-          ctx.shadowBlur = 0;
-          ctx.fillStyle = "#fff7ed";
-          drawStar(p.size * 0.7);
-        } else {
-          ctx.beginPath();
-          ctx.arc(0, 0, p.size * (0.5 + k * 0.5), 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.restore();
+        ctx.globalAlpha = k;
+        ctx.fillStyle = `rgb(${ORANGE})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * (0.5 + k), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#fff7ed";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * 0.4, 0, Math.PI * 2);
+        ctx.fill();
       }
+      ctx.globalAlpha = 1;
+      if (particles.length) raf = requestAnimationFrame(loop);
     };
-    raf = requestAnimationFrame(tick);
 
-    /* ---------------- ring magnetism ---------------- */
-    const aimRing = (x: number, y: number) => {
-      if (magnet && magnet.isConnected) {
-        const r = magnet.getBoundingClientRect();
-        ringTX.set(x + (r.left + r.width / 2 - x) * 0.35);
-        ringTY.set(y + (r.top + r.height / 2 - y) * 0.35);
-      } else {
-        ringTX.set(x);
-        ringTY.set(y);
+    const spawn = (x: number, y: number, vx: number, vy: number) => {
+      if (!ctx) return;
+      if (particles.length >= MAX_PARTICLES) particles.shift();
+      particles.push({ x, y, vx, vy, life: 0, max: 28 + Math.random() * 20, r: 1.4 + Math.random() * 1.6 });
+      if (!raf) {
+        lastT = performance.now();
+        raf = requestAnimationFrame(loop);
       }
     };
 
-    /* ---------------- listeners ---------------- */
+    /* ---- listeners ---- */
     const onMove = (e: PointerEvent) => {
       if (e.pointerType !== "mouse") {
         shown.current = false;
@@ -270,9 +164,8 @@ export function CustomCursor() {
         return;
       }
       const { clientX: x, clientY: y } = e;
-      mouseX.set(x);
-      mouseY.set(y);
-      aimRing(x, y);
+      mx.set(x);
+      my.set(y);
 
       if (!shown.current) {
         shown.current = true;
@@ -280,23 +173,16 @@ export function CustomCursor() {
         last.y = y;
         dotX.jump(x);
         dotY.jump(y);
-        ringX.jump(ringTX.get());
-        ringY.jump(ringTY.get());
-        // 🪄 Jump the torch to the mouse so it doesn't fly across the screen on first load
-        torchX.jump(x);
-        torchY.jump(y);
+        ringX.jump(x);
+        ringY.jump(y);
+        glowX.jump(x);
+        glowY.jump(y);
         setVisible(true);
         return;
       }
 
-      const dx = x - last.x;
-      const dy = y - last.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist >= 14) {
-        spawn(x - dx * 0.2, y - dy * 0.2, {
-          vx: -dx * 0.015 + (Math.random() - 0.5) * 0.6,
-          vy: -dy * 0.015 + (Math.random() - 0.5) * 0.6,
-        });
+      if (Math.hypot(x - last.x, y - last.y) >= 22) {
+        spawn(x, y, (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8);
         last.x = x;
         last.y = y;
       }
@@ -305,148 +191,150 @@ export function CustomCursor() {
     const onOver = (e: MouseEvent) => {
       const t = e.target;
       if (!(t instanceof Element)) return;
-      const clickable = t.closest<HTMLElement>(CLICKABLE);
-      setHovering(!!clickable);
+      setTextMode(!!t.closest(TEXTY));
+      setHovering(!!t.closest(CLICKABLE));
       setLabel(t.closest<HTMLElement>(LABELLED)?.dataset.cursorLabel ?? "");
-
-      magnet = null;
-      if (clickable) {
-        const r = clickable.getBoundingClientRect();
-        if (r.width < 360 && r.height < 120) magnet = clickable;
-      }
-      aimRing(mouseX.get(), mouseY.get());
     };
 
     const onDown = (e: PointerEvent) => {
       if (e.pointerType !== "mouse") return;
       setPressed(true);
       if (reduce) return;
-      burst(e.clientX, e.clientY);
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        spawn(e.clientX, e.clientY, Math.cos(a) * 2.6, Math.sin(a) * 2.6 - 0.5);
+      }
       const id = ++rippleId.current;
-      setRipples((r) => [...r.slice(-3), { id, x: e.clientX, y: e.clientY }]);
+      setRipples((r) => [...r.slice(-2), { id, x: e.clientX, y: e.clientY }]);
+      timers.push(window.setTimeout(() => setRipples((l) => l.filter((x) => x.id !== id)), 700));
     };
 
     const onUp = () => setPressed(false);
 
-    const onLeaveWindow = () => {
+    const onLeave = () => {
       shown.current = false;
       setVisible(false);
       setPressed(false);
     };
 
-    const capture = { capture: true } as const;
-    const passiveCapture = { passive: true, capture: true } as const;
-
-    window.addEventListener("pointermove", onMove, passiveCapture);
-    window.addEventListener("pointerdown", onDown, passiveCapture);
-    window.addEventListener("pointerup", onUp, passiveCapture);
-    window.addEventListener("pointercancel", onUp, passiveCapture);
+    const passive = { passive: true, capture: true } as const;
+    window.addEventListener("pointermove", onMove, passive);
+    window.addEventListener("pointerdown", onDown, passive);
+    window.addEventListener("pointerup", onUp, passive);
+    window.addEventListener("pointercancel", onUp, passive);
     window.addEventListener("blur", onUp);
-    document.addEventListener("mouseover", onOver, capture);
-    document.documentElement.addEventListener("mouseleave", onLeaveWindow);
+    document.addEventListener("mouseover", onOver, { capture: true });
+    document.documentElement.addEventListener("mouseleave", onLeave);
 
     return () => {
-      cancelAnimationFrame(raf);
+      if (raf) cancelAnimationFrame(raf);
+      timers.forEach((t) => window.clearTimeout(t));
       root.classList.remove("has-fairy-cursor");
+      styleEl.remove();
       window.removeEventListener("resize", resize);
-      window.removeEventListener("pointermove", onMove, passiveCapture);
-      window.removeEventListener("pointerdown", onDown, passiveCapture);
-      window.removeEventListener("pointerup", onUp, passiveCapture);
-      window.removeEventListener("pointercancel", onUp, passiveCapture);
+      window.removeEventListener("pointermove", onMove, passive);
+      window.removeEventListener("pointerdown", onDown, passive);
+      window.removeEventListener("pointerup", onUp, passive);
+      window.removeEventListener("pointercancel", onUp, passive);
       window.removeEventListener("blur", onUp);
-      document.removeEventListener("mouseover", onOver, capture);
-      document.documentElement.removeEventListener("mouseleave", onLeaveWindow);
+      document.removeEventListener("mouseover", onOver, { capture: true });
+      document.documentElement.removeEventListener("mouseleave", onLeave);
     };
-  }, [enabled, reduce, mouseX, mouseY, ringTX, ringTY, dotX, dotY, ringX, ringY, torchX, torchY]);
+  }, [enabled, reduce, mx, my, dotX, dotY, ringX, ringY, glowX, glowY]);
 
   if (!enabled) return null;
 
-  const dx = reduce ? mouseX : dotX;
-  const dy = reduce ? mouseY : dotY;
-  const rx = reduce ? ringTX : ringX;
-  const ry = reduce ? ringTY : ringY;
+  const dx = reduce ? mx : dotX;
+  const dy = reduce ? my : dotY;
+  const rx = reduce ? mx : ringX;
+  const ry = reduce ? my : ringY;
 
   const hasLabel = label !== "";
-  const springy = reduce ? { duration: 0 } : { type: "spring" as const, stiffness: 280, damping: 22 };
+  const spring = reduce ? { duration: 0 } : { type: "spring" as const, stiffness: 280, damping: 22 };
 
-  const ringAnimate = pressed
+  const ringAnim = pressed
     ? { scale: 0.78, backgroundColor: `rgba(${ORANGE},0.22)`, borderColor: `rgba(${ORANGE},0.95)` }
-    : hasLabel
-    ? { scale: 1.3, backgroundColor: `rgba(${ORANGE},0.1)`, borderColor: `rgba(${ORANGE},0.55)` }
-    : hovering
-    ? { scale: 1.6, backgroundColor: `rgba(${ORANGE},0.14)`, borderColor: `rgba(${ORANGE},0.85)` }
+    : hovering || hasLabel
+    ? { scale: hasLabel ? 1.3 : 1.6, backgroundColor: `rgba(${ORANGE},0.14)`, borderColor: `rgba(${ORANGE},0.85)` }
     : { scale: 1, backgroundColor: `rgba(${ORANGE},0)`, borderColor: `rgba(${ORANGE},0.55)` };
 
   return createPortal(
     <div aria-hidden className="pointer-events-none fixed inset-0 z-[2147483647]">
-      
-      {/* 🪄 TORCH / SPOTLIGHT EFFECT */}
-      {/* We use mix-blend-soft-light so it feels like actual light hitting the page, not just a colored circle */}
+      {/* Soft glow: a small element moved by transform only, so it never repaints */}
       <motion.div
-        className="absolute inset-0 z-0 mix-blend-soft-light"
-        style={{ background: outerTorch }}
-      />
-      <motion.div
-        className="absolute inset-0 z-0 mix-blend-overlay"
-        style={{ background: innerTorch }}
+        className="absolute left-0 top-0 rounded-full will-change-transform"
+        style={{
+          x: glowX,
+          y: glowY,
+          width: GLOW,
+          height: GLOW,
+          marginLeft: -GLOW / 2,
+          marginTop: -GLOW / 2,
+          opacity: visible ? 1 : 0,
+          background: `radial-gradient(circle, rgba(${ORANGE},0.16), transparent 65%)`,
+        }}
       />
 
-      {/* Sparkle trail */}
-      {!reduce && <canvas ref={canvasRef} className="absolute inset-0 z-10 h-full w-full" />}
+      {!reduce && <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />}
 
-      {/* Click ripples: one soft orange ring */}
       {ripples.map((r) => (
         <motion.span
           key={r.id}
-          className="absolute left-0 top-0 z-20 rounded-full border-2 border-orange-500/70"
+          className="absolute left-0 top-0 rounded-full border-2 border-orange-500/70"
           style={{ x: r.x, y: r.y, width: 40, height: 40, marginLeft: -20, marginTop: -20 }}
           initial={{ scale: 0.3, opacity: 0.8 }}
-          animate={{ scale: 2.8, opacity: 0 }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-          onAnimationComplete={() => setRipples((list) => list.filter((x) => x.id !== r.id))}
+          animate={{ scale: 2.6, opacity: 0 }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         />
       ))}
 
-      {/* Ring (and label) */}
+      {/* Ring + label */}
       <motion.div
-        className="absolute left-0 top-0 z-20"
-        style={{ x: rx, y: ry, width: RING_SIZE, height: RING_SIZE, marginLeft: -RING_SIZE / 2, marginTop: -RING_SIZE / 2 }}
+        className="absolute left-0 top-0"
+        style={{ x: rx, y: ry, width: RING, height: RING, marginLeft: -RING / 2, marginTop: -RING / 2 }}
       >
         <motion.div
-          className="h-full w-full"
-          style={reduce ? undefined : { rotate: angle, scaleX: stretch, scaleY: squash }}
-        >
-          <motion.div
-            initial={false}
-            animate={{ ...ringAnimate, opacity: visible ? 1 : 0 }}
-            transition={springy}
-            className="h-full w-full rounded-full border-[1.5px] shadow-[0_0_24px_rgba(249,115,22,0.4),inset_0_0_0_1px_rgba(255,255,255,0.6)] backdrop-blur-[2px]"
-          />
-        </motion.div>
-
+          initial={false}
+          animate={{ ...ringAnim, opacity: visible && !textMode ? 1 : 0 }}
+          transition={spring}
+          className="h-full w-full rounded-full border-[1.5px] shadow-[0_0_16px_rgba(249,115,22,0.35)]"
+        />
         <motion.span
           initial={false}
           animate={{ opacity: visible && hasLabel ? 1 : 0, scale: hasLabel ? 1 : 0.85, x: hasLabel ? 0 : -6 }}
-          transition={springy}
+          transition={spring}
           className="absolute left-[34px] top-[22px] whitespace-nowrap rounded-full bg-gradient-to-b from-orange-400 to-orange-600 px-3 py-1 font-[family-name:var(--font-body)] text-xs font-semibold text-white shadow-[0_6px_16px_rgba(249,115,22,0.35)]"
         >
           {label || lastLabel.current}
         </motion.span>
       </motion.div>
 
-      {/* Dot: sits on the pointer */}
+      {/* I-beam over text fields */}
       <motion.div
-        className="absolute left-0 top-0 z-20"
-        style={{ x: dx, y: dy, width: DOT_SIZE, height: DOT_SIZE, marginLeft: -DOT_SIZE / 2, marginTop: -DOT_SIZE / 2 }}
+        className="absolute left-0 top-0"
+        style={{ x: dx, y: dy, width: 2, height: 24, marginLeft: -1, marginTop: -12 }}
+      >
+        <motion.div
+          initial={false}
+          animate={{ opacity: visible && textMode ? 1 : 0 }}
+          transition={spring}
+          className="h-full w-full rounded-full bg-orange-500 shadow-[0_0_10px_2px_rgba(249,115,22,0.6)]"
+        />
+      </motion.div>
+
+      {/* Dot */}
+      <motion.div
+        className="absolute left-0 top-0"
+        style={{ x: dx, y: dy, width: DOT, height: DOT, marginLeft: -DOT / 2, marginTop: -DOT / 2 }}
       >
         <motion.div
           initial={false}
           animate={{
-            opacity: visible && !hovering && !hasLabel ? 1 : 0,
-            scale: pressed ? 0.5 : 1,
+            opacity: visible && !textMode ? 1 : 0,
+            scale: pressed ? 0.5 : hovering || hasLabel ? 0.65 : 1,
           }}
-          transition={springy}
-          className="h-full w-full rounded-full bg-orange-500 shadow-[0_0_14px_3px_rgba(249,115,22,0.7)] ring-1 ring-white/90"
+          transition={spring}
+          className="h-full w-full rounded-full bg-orange-500 shadow-[0_0_12px_2px_rgba(249,115,22,0.7)] ring-1 ring-white/90"
         />
       </motion.div>
     </div>,

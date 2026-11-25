@@ -992,9 +992,10 @@ function PickerView({ user }: Props) {
     [allowance.data],
   );
 
+  // SLUG: plan version wins, so plan-unlocked templates show "In your plan"
   const ownedItems = React.useMemo(() => {
-    const bought = new Set(purchased.items.map((t) => t.id));
-    return [...purchased.items, ...planItems.filter((t) => !bought.has(t.id))];
+    const planIds = new Set(planItems.map((t) => t.id));
+    return [...planItems, ...purchased.items.filter((t) => !planIds.has(t.id))];
   }, [purchased.items, planItems]);
 
   const ownedIds = React.useMemo(
@@ -1002,11 +1003,8 @@ function PickerView({ user }: Props) {
     [ownedItems],
   );
   const planOnlyIds = React.useMemo(
-    () =>
-      new Set(
-        planItems.map((t) => t.id).filter((id) => !purchased.ids.has(id)),
-      ),
-    [planItems, purchased.ids],
+    () => new Set(planItems.map((t) => t.id)),
+    [planItems],
   );
 
   const unlockWithPlan = React.useCallback(
@@ -1309,6 +1307,9 @@ function Studio({
   const existingInvitationId =
     invitationId || invites.map.get(templateId) || "";
   const isUpdate = existingInvitationId !== "";
+
+  // SLUG: plan-unlocked + plan allows custom links + no invitation yet
+  const planAllowsSlug = !!allowance.data?.subscription?.allowsCustomSlug;
 
   const [phase, setPhase] = React.useState<"loading" | "ready" | "error">(
     "loading",
@@ -1702,6 +1703,15 @@ function Studio({
       });
       return;
     }
+
+    // SLUG: plan-unlocked template whose plan includes a custom link and no
+    // invitation yet -> the invitations page asks for the slug. The draft is
+    // already saved, and the server copies it when the invitation is created.
+    if (viaPlan && !mine && !isUpdate && planAllowsSlug) {
+      router.push(ROUTES.newInvitation(templateId));
+      return;
+    }
+
     try {
       // POST copies the saved draft into the existing invitation, or creates a new one.
       await apiClient.post(API.invitations, { template_id: templateId });
@@ -1726,7 +1736,16 @@ function Studio({
       type: "success",
     });
     router.push("/dashboard/invitations");
-  }, [ensureDraft, isUpdate, router, templateId, user.id]);
+  }, [
+    ensureDraft,
+    isUpdate,
+    mine,
+    planAllowsSlug,
+    router,
+    templateId,
+    user.id,
+    viaPlan,
+  ]);
   const pushMessage = React.useCallback((m: ChatMessage) => {
     setMessages((prev) => [...prev, m].slice(-MAX_CHAT_MESSAGES));
   }, []);
@@ -1961,6 +1980,8 @@ function Studio({
               price: meta.price,
               unlockHref: ROUTES.unlock(templateId),
               onCreate: handleCreate,
+              isUpdate, // SLUG
+              viaPlan, // SLUG
             }}
             onBack={() => void goBack()}
             onSave={() => void saveNow(true)}
