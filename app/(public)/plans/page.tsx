@@ -1,8 +1,12 @@
-import type { Metadata } from "next";
-import { PricingPreview } from "@/components/public/sections/plans/PlansClient";
+import type { Metadata, Viewport } from "next";
+import { PlansClient } from "@/components/public/sections/plans/PlansClient";
 import settings from "@/config/settings_config";
 
 const config = settings();
+
+export const viewport: Viewport = {
+  themeColor: "#fdeadb",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(config.appUrl),
@@ -65,7 +69,6 @@ export const metadata: Metadata = {
     images: ["/og-plans-image.png"],
     creator: "@riwainvite",
   },
-  themeColor: "#fdeadb",
   category: "technology",
   applicationName: "Riwainvite",
   appleWebApp: {
@@ -81,7 +84,7 @@ export const metadata: Metadata = {
 export default function PlansPage() {
   return (
     <main className="min-h-screen w-full bg-[#fdeadb]">
-      <PricingPreview />
+      <PlansClient />
     </main>
   );
 }

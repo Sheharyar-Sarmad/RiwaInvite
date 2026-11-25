@@ -30,13 +30,13 @@ import { WhatsAppNavButton } from "./WhatsappButton";
 import { NavbarScene } from "./NavbarScene";
 import {
   NAV_LINKS,
-  PRIVACY_LINKS,
   type NavCategory,
   type NavUser,
 } from "./NavData";
 
 const USER_ENDPOINT = "/user/dashboard/account_settings";
 const CATEGORIES_ENDPOINT = "/public/templates/categories";
+const LEGAL_HREF = "/legal";
 
 const display = "font-[family-name:var(--font-display)]";
 const body = "font-[family-name:var(--font-body)]";
@@ -46,7 +46,7 @@ const panelClass =
 
 // Neutralise the default shadcn trigger backgrounds so our sliding pill shows.
 const triggerReset =
-  "relative z-10 rounded-full bg-transparent px-4 text-sm font-semibold text-stone-700 hover:bg-transparent hover:text-orange-600 focus:bg-transparent focus:text-orange-600 data-[state=open]:bg-transparent data-[state=open]:text-orange-600 data-[state=open]:hover:bg-transparent data-[active=true]:bg-transparent";
+  "relative z-10 rounded-full bg-transparent px-4 text-sm font-semibold text-stone-700 hover:bg-transparent hover:text-orange-600 focus:bg-transparent focus:text-orange-600 focus-visible:ring-2 focus-visible:ring-orange-400/60 data-[state=open]:bg-transparent data-[state=open]:text-orange-600 data-[state=open]:hover:bg-transparent data-[active=true]:bg-transparent";
 
 /* Any modal, lightbox, video player or dialog marks itself with one of these */
 const OVERLAY_SELECTOR = '[aria-modal="true"], [data-scroll-lock], dialog[open]';
@@ -80,6 +80,48 @@ function HoverPill({ show }: { show: boolean }) {
       transition={{ type: "spring", stiffness: 420, damping: 34 }}
       className="absolute inset-0 rounded-full bg-orange-100/80"
     />
+  );
+}
+
+/* One primary-style link: hover pill + active dot. Used for NAV_LINKS and Privacy. */
+function PrimaryNavLink({
+  href,
+  label,
+  hovered,
+  active,
+  onHover,
+}: {
+  href: string;
+  label: string;
+  hovered: string | null;
+  active: boolean;
+  onHover: (href: string) => void;
+}) {
+  return (
+    <NavigationMenuItem className="relative" onMouseEnter={() => onHover(href)}>
+      <HoverPill show={hovered === href} />
+      <NavigationMenuLink asChild>
+        <Link
+          href={href}
+          aria-current={active ? "page" : undefined}
+          className={cn(
+            navigationMenuTriggerStyle(),
+            triggerReset,
+            body,
+            active && "text-orange-600",
+          )}
+        >
+          {label}
+        </Link>
+      </NavigationMenuLink>
+      {active && (
+        <motion.span
+          layoutId="nav-active-dot"
+          aria-hidden
+          className="absolute -bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-orange-500"
+        />
+      )}
+    </NavigationMenuItem>
   );
 }
 
@@ -309,7 +351,7 @@ export function Navbar() {
                             <NavigationMenuLink asChild>
                               <Link
                                 href={`/templates?category=${cat.slug}`}
-                                className="group flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-orange-50"
+                                className="group flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60"
                               >
                                 <CategoryThumb cat={cat} size="h-14 w-14" />
                                 <span className="flex min-w-0 flex-col gap-0.5">
@@ -346,7 +388,7 @@ export function Navbar() {
                         <Link
                           href="/templates"
                           className={cn(
-                            "rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-orange-600",
+                            "rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60",
                             display,
                           )}
                         >
@@ -360,71 +402,24 @@ export function Navbar() {
 
               {/* Primary links */}
               {NAV_LINKS.map((link) => (
-                <NavigationMenuItem
+                <PrimaryNavLink
                   key={link.href}
-                  className="relative"
-                  onMouseEnter={() => setHovered(link.href)}
-                >
-                  <HoverPill show={hovered === link.href} />
-                  <NavigationMenuLink asChild>
-                    <Link
-                      href={link.href}
-                      className={cn(
-                        navigationMenuTriggerStyle(),
-                        triggerReset,
-                        body,
-                        isActive(link.href) && "text-orange-600",
-                      )}
-                    >
-                      {link.label}
-                    </Link>
-                  </NavigationMenuLink>
-                  {isActive(link.href) && (
-                    <motion.span
-                      layoutId="nav-active-dot"
-                      aria-hidden
-                      className="absolute -bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-orange-500"
-                    />
-                  )}
-                </NavigationMenuItem>
+                  href={link.href}
+                  label={link.label}
+                  hovered={hovered}
+                  active={!!isActive(link.href)}
+                  onHover={setHovered}
+                />
               ))}
 
-              {/* Privacy */}
-              <NavigationMenuItem
-                className="relative"
-                onMouseEnter={() => setHovered("privacy")}
-              >
-                <HoverPill show={hovered === "privacy"} />
-                <NavigationMenuTrigger className={cn(triggerReset, body)}>
-                  Privacy
-                </NavigationMenuTrigger>
-                <NavigationMenuContent className={panelClass}>
-                  <ul className="flex w-[300px] flex-col gap-1">
-                    {PRIVACY_LINKS.map(({ href, label, description }) => (
-                      <li key={href}>
-                        <NavigationMenuLink asChild>
-                          <Link
-                            href={href}
-                            className="group flex flex-col gap-0.5 rounded-xl px-3 py-2.5 transition-colors hover:bg-orange-50"
-                          >
-                            <span
-                              className={cn(
-                                "text-sm font-semibold text-stone-900 transition-colors group-hover:text-orange-600",
-                                display,
-                              )}
-                            >
-                              {label}
-                            </span>
-                            <span className={cn("text-xs text-stone-500", body)}>
-                              {description}
-                            </span>
-                          </Link>
-                        </NavigationMenuLink>
-                      </li>
-                    ))}
-                  </ul>
-                </NavigationMenuContent>
-              </NavigationMenuItem>
+              {/* Privacy → the single consolidated legal page */}
+              <PrimaryNavLink
+                href={LEGAL_HREF}
+                label="Privacy"
+                hovered={hovered}
+                active={!!isActive(LEGAL_HREF)}
+                onHover={setHovered}
+              />
             </NavigationMenuList>
           </NavigationMenu>
 
@@ -439,7 +434,7 @@ export function Navbar() {
               <Link
                 href="/dashboard"
                 className={cn(
-                  "rounded-xl bg-gradient-to-b from-orange-500 to-orange-600 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_6px_18px_-6px_rgba(249,115,22,0.6)] transition-all hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-6px_rgba(249,115,22,0.7)]",
+                  "rounded-xl bg-gradient-to-b from-orange-500 to-orange-600 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_6px_18px_-6px_rgba(249,115,22,0.6)] transition-all hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-6px_rgba(249,115,22,0.7)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400",
                   display,
                 )}
               >
@@ -450,7 +445,7 @@ export function Navbar() {
                 <Link
                   href="/login"
                   className={cn(
-                    "rounded-xl px-3 py-2.5 text-sm font-semibold text-stone-600 transition-colors hover:text-orange-600",
+                    "rounded-xl px-3 py-2.5 text-sm font-semibold text-stone-600 transition-colors hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60",
                     display,
                   )}
                 >
@@ -482,7 +477,7 @@ export function Navbar() {
               onClick={() => setIsMobileOpen(true)}
               aria-label="Open menu"
               aria-expanded={isMobileOpen}
-              className="rounded-xl border border-orange-100 bg-white/70 p-2 text-stone-700 transition-colors hover:bg-orange-50 hover:text-orange-600"
+              className="rounded-xl border border-orange-100 bg-white/70 p-2 text-stone-700 transition-colors hover:bg-orange-50 hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60"
             >
               <Menu className="h-5 w-5" />
             </button>

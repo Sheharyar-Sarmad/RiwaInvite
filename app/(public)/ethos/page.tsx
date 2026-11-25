@@ -6,6 +6,7 @@ import TheDigitalCanvas from "@/components/public/sections/ethos/TheDigitalCanva
 import { TheGuestConnection } from "@/components/public/sections/ethos/TheGuestConnection";
 import { EthosCta } from "@/components/public/sections/ethos/EthosCta";
 import { settings } from "@/config/settings_config";
+import { TheDesigners } from "@/components/public/sections/ethos/TheDesigners";
 
 const appUrl = settings().appUrl;
 
@@ -109,6 +110,7 @@ export default function EthosPage() {
       <TheGuestConnection />
       
       {/* <SectionSeparator /> */}
+            {/* <TheDesigners /> */}
       
       <EthosCta />
     </main>

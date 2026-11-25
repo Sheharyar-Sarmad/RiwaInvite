@@ -165,16 +165,23 @@ export function UserFooter() {
     ],
     Company: [
       { label: "Our Ethos", href: "/ethos" },
-      { label: "The Concierge", href: "/concierge" },
+      { label: "The Craft", href: "/craft" },
       { label: "Designers", href: "/ethos#designers" },
     ],
     "Legal & Trust": [
-      { label: "Privacy Promise", href: "/privacy" },
-      { label: "Terms of Service", href: "/terms" },
-      { label: "Cookie Policy", href: "/cookies" },
-      { label: "Trust Center", href: "/trust" },
+      { label: "Trust center", href: "/legal#trust" },
+      { label: "Privacy promise", href: "/legal#privacy" },
+      { label: "Terms of engagement", href: "/legal#terms" },
+      { label: "No-refund policy", href: "/legal#refunds" },
     ],
   };
+
+    //   legal: [
+    //   { label: "Trust center", href: "/legal#trust", icon: Globe },
+    //   { label: "Privacy promise", href: "/legal#privacy", icon: ShieldCheck },
+    //   { label: "Terms of engagement", href: "/legal#terms", icon: Scale },
+    //   { label: "No-refund policy", href: "/legal#refunds", icon: Lock },
+    // ],
 
   const socials = [
     { icon: FacebookIcon, href: "https://facebook.com", label: "Facebook" },

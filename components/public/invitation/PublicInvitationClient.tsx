@@ -12,6 +12,8 @@
  *     with per-item scroll animations that start once the intro closes.
  *  4. A floating ActionBar (Details · Memories · Wishes · RSVP · Music) opens each panel as a
  *     sheet on top of the page. Memories open the lightbox, RSVP leads into Wishes.
+ *  5. The page never falls back to plain white: if the design has no usable background colour,
+ *     the first coloured block's background is used, then a warm cream.
  */
 
 import * as React from "react";
@@ -34,7 +36,6 @@ import {
   IntroGate,
   Lightbox,
   MemoriesSheet,
-  Particles,
   Reveal,
   RsvpModal,
   ScrollProgress,
@@ -53,6 +54,7 @@ const BAND = "w-full px-[max(1rem,calc((100%-44rem)/2))]";
 const PRELOAD_TIMEOUT_MS = 10_000;
 const MAX_PRELOAD = 40;
 const MUSIC_VOLUME = 0.85;
+const FALLBACK_BG = "#fff4e8";
 
 /* ========================================================================== */
 /*  Design helpers                                                            */
@@ -157,14 +159,46 @@ function collectMedia(d: PublicDesign, assets: string[]): MediaItem[] {
   return out;
 }
 
-function isDark(color: string): boolean {
+/* ---- colour helpers ------------------------------------------------------ */
+
+function toRgb(color: string): [number, number, number] | null {
   let h = color.trim();
   const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(h);
   if (short) h = `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`;
   const m = /^#([0-9a-f]{6})$/i.exec(h);
-  if (!m) return false;
+  if (!m) return null;
   const n = parseInt(m[1], 16);
-  return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) < 140;
+  return [n >> 16, (n >> 8) & 255, n & 255];
+}
+
+function isDark(color: string): boolean {
+  const c = toRgb(color);
+  if (!c) return false;
+  return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2] < 140;
+}
+
+const isNearWhite = (color: string) => {
+  const c = toRgb(color);
+  return !!c && c.every((x) => x >= 240);
+};
+
+/**
+ * The page background. Uses the design's own colour unless it is (near) white / empty, then the
+ * first block that paints a real colour, then a warm cream, so the page is never a flat white.
+ */
+function pickBackground(d: PublicDesign): string {
+  const own = d.backgroundColor.trim();
+  if (own && own.toLowerCase() !== "transparent" && !isNearWhite(own)) return own;
+
+  for (const el of d.elements) {
+    if (el.content?._hidden) continue;
+    const st = (el.styles ?? {}) as Rec;
+    for (const k of ["backgroundColor", "background"]) {
+      const v = st[k];
+      if (typeof v === "string" && toRgb(v) && !isNearWhite(v)) return v.trim();
+    }
+  }
+  return FALLBACK_BG;
 }
 
 /* ========================================================================== */
@@ -321,6 +355,8 @@ export function PublicInvitationClient({ invitation }: { invitation: PublicInvit
   const pre = usePreload(assets);
   const media = React.useMemo(() => collectMedia(design, assets), [design, assets]);
 
+  const pageBg = React.useMemo(() => pickBackground(design), [design]);
+
   const date = design.details.date || invitation.eventDate || "";
   const time = design.details.time || invitation.eventTime || "";
   const venue = design.details.venue || s(invitation.venue?.name);
@@ -381,7 +417,7 @@ export function PublicInvitationClient({ invitation }: { invitation: PublicInvit
   const closePanel = React.useCallback(() => setPanel(null), []);
   const bumpWishes = React.useCallback(() => setWishKey((n) => n + 1), []);
 
-  const dark = isDark(design.backgroundColor);
+  const dark = isDark(pageBg);
   const visible = design.elements.filter((e) => !e.content?._hidden);
   const hasDetails = !!(date || venue || address);
   const viewerOpen = lb !== null;
@@ -395,7 +431,7 @@ export function PublicInvitationClient({ invitation }: { invitation: PublicInvit
   const showCode = design.customCode.trim() !== "" && design.customCodeLang !== "css";
 
   return (
-    <div className="min-h-dvh" style={{ background: design.backgroundColor }}>
+    <div className="min-h-dvh" style={{ background: pageBg }}>
       {music.element}
 
       <AnimatePresence>
@@ -410,7 +446,7 @@ export function PublicInvitationClient({ invitation }: { invitation: PublicInvit
             ready={pre.ready}
             hasMusic={music.has}
             dark={dark}
-            bg={design.backgroundColor}
+            bg={pageBg}
             onOpen={open}
           />
         )}
@@ -443,7 +479,7 @@ export function PublicInvitationClient({ invitation }: { invitation: PublicInvit
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
             className="space-y-6"
           >
-            <p className={dark ? "text-[11px] font-semibold uppercase tracking-[0.3em] text-white/60" : "text-[11px] font-semibold uppercase tracking-[0.3em] text-stone-500"}>
+            <p className={dark ? "text-[11px] font-semibold uppercase tracking-[0.3em] text-white/60" : "text-[11px] font-semibold uppercase tracking-[0.3em] text-stone-600"}>
               Save the date
             </p>
             <Countdown date={date} time={time} dark={dark} />
@@ -451,19 +487,17 @@ export function PublicInvitationClient({ invitation }: { invitation: PublicInvit
             <button
               type="button"
               onClick={() => setPanel("rsvp")}
-              className="relative mx-auto flex h-14 w-full items-center justify-center gap-2 overflow-hidden rounded-full bg-orange-500 text-base font-semibold text-white shadow-[0_14px_34px_-10px_rgba(249,115,22,0.85)] transition hover:bg-orange-600 active:scale-[0.98]"
+              className="mx-auto flex h-14 w-full items-center justify-center gap-2 rounded-full bg-orange-500 text-base font-semibold text-white shadow-md transition hover:bg-orange-600 active:scale-[0.98]"
             >
-              <span aria-hidden className="absolute inset-y-0 -left-1/3 w-1/3 -skew-x-12 bg-white/30 [animation:riwa-sheen_3s_ease-in-out_infinite] motion-reduce:hidden" />
               Will you join us? RSVP now
             </button>
-            <style>{`@keyframes riwa-sheen{0%{left:-40%}60%,100%{left:120%}}`}</style>
           </motion.div>
         </section>
 
         <Guestbook slug={invitation.slug} dark={dark} refreshKey={wishKey} onPosted={bumpWishes} />
 
         {/* extra bottom room so the floating bar never covers the footer */}
-        <p className={`${BAND} pb-32 pt-8 text-center text-xs ${dark ? "text-white/50" : "text-stone-500"}`}>
+        <p className={`${BAND} pb-32 pt-8 text-center text-xs ${dark ? "text-white/50" : "text-stone-600"}`}>
           Made with{" "}
           <a href="/" className="font-semibold underline underline-offset-2">
             RiwaInvite
@@ -474,7 +508,6 @@ export function PublicInvitationClient({ invitation }: { invitation: PublicInvit
       {opened && (
         <>
           <ScrollProgress />
-          <Particles />
           <ActionBar
             visible={panel === null && !viewerOpen}
             active={panel}

@@ -4,13 +4,13 @@
  * components/public/invitation/PublicInvitationUI.tsx
  * Presentational pieces for the guest-facing invitation page.
  *
- * What's new in this version
- *  - ActionBar: a floating shortcut bar (Details · Memories · Wishes · RSVP · Music) that replaces
- *    the lone RSVP button, so nothing covers the page content any more.
+ *  - ActionBar: floating shortcut bar (Details · Memories · Wishes · RSVP · Music).
  *  - Sheet: one accessible modal/bottom-sheet primitive (focus trap, Esc, drag-to-dismiss, scroll lock).
  *  - MemoriesSheet: every photo and video in a filterable grid that opens the lightbox.
  *  - WishesSheet: read all wishes and leave one, without leaving the page.
  *  - DetailsSheet: date, time, venue, countdown, calendar, directions, share.
+ *
+ * Surfaces sit on the invitation's own background (no pure white panels).
  */
 
 import * as React from "react";
@@ -42,6 +42,10 @@ export const cn = (...c: (string | false | null | undefined)[]) => c.filter(Bool
 type Rec = Record<string, any>;
 
 const EASE = [0.22, 1, 0.36, 1] as const;
+
+/** Soft tinted surface used instead of white cards (light pages). */
+const TILE_LIGHT = "bg-[#2a1002]/[0.05] ring-1 ring-[#2a1002]/10";
+const TILE_DARK = "bg-white/10 ring-1 ring-white/10";
 
 /* ========================================================================== */
 /*  Scroll animations (same ids as the editor)                                */
@@ -130,6 +134,11 @@ export function IntroGate({
   const soft = dark ? "text-white/60" : "text-stone-600";
   const pct = Math.round(progress * 100);
 
+  // The cover is server-rendered and usually already cached (it is preloaded), so it can finish
+  // loading before React attaches onLoad. We therefore also trust the preload list and the
+  // element's own `complete` flag, otherwise the image stays at opacity-0 forever.
+  const coverShown = coverOk || (!!coverUrl && loaded.includes(coverUrl));
+
   return (
     <motion.div
       role="dialog"
@@ -141,56 +150,38 @@ export function IntroGate({
       exit={{ clipPath: "circle(0% at 50% 88%)" }}
       transition={{ duration: 0.95, ease: [0.76, 0, 0.24, 1] }}
     >
-      {coverUrl && (
-        <div
-          aria-hidden
-          className="absolute inset-0 scale-110 bg-cover bg-center opacity-25 blur-2xl"
-          style={{ backgroundImage: `url(${JSON.stringify(coverUrl)})` }}
-        />
-      )}
-
-      <motion.div aria-hidden className="absolute -left-24 top-10 size-72 rounded-full bg-orange-400/30 blur-3xl" animate={{ x: [0, 40, 0], y: [0, 30, 0] }} transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }} />
-      <motion.div aria-hidden className="absolute -right-24 bottom-10 size-80 rounded-full bg-amber-300/30 blur-3xl" animate={{ x: [0, -40, 0], y: [0, -30, 0] }} transition={{ duration: 11, repeat: Infinity, ease: "easeInOut" }} />
-
       <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="relative h-72 w-56 overflow-hidden rounded-t-full bg-stone-200/60 shadow-2xl ring-1 ring-black/10"
-        >
+        <div className="relative h-72 w-56 overflow-hidden rounded-t-full bg-[#2a1002]/[0.06] shadow-lg ring-1 ring-black/10">
           {coverUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
+              ref={(el) => {
+                if (el && el.complete && el.naturalWidth > 0) setCoverOk(true);
+              }}
               src={coverUrl}
               alt=""
               onLoad={() => setCoverOk(true)}
-              className={cn("size-full object-cover transition-opacity duration-700", coverOk ? "opacity-100" : "opacity-0")}
+              className={cn("size-full object-cover transition-opacity duration-500", coverShown ? "opacity-100" : "opacity-0")}
             />
           ) : (
             <div className="grid size-full place-items-center text-orange-500">
               <Heart className="size-10" />
             </div>
           )}
-        </motion.div>
+        </div>
 
         <div className="space-y-1">
           <p className={cn("text-[11px] font-semibold uppercase tracking-[0.3em]", soft)}>You are invited</p>
           {names && (
-            <h1 aria-label={names} className={cn("text-3xl font-semibold leading-tight", ink)} style={{ fontFamily: "Georgia, serif" }}>
-              {Array.from(names).map((ch, i) => (
-                <motion.span
-                  key={i}
-                  aria-hidden
-                  className="inline-block"
-                  initial={{ opacity: 0, y: 24, filter: "blur(8px)" }}
-                  animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                  transition={{ delay: 0.35 + i * 0.045, duration: 0.6, ease: EASE }}
-                >
-                  {ch === " " ? "\u00A0" : ch}
-                </motion.span>
-              ))}
-            </h1>
+            <motion.h1
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2, duration: 0.6 }}
+              className={cn("text-3xl font-semibold leading-tight", ink)}
+              style={{ fontFamily: "Georgia, serif" }}
+            >
+              {names}
+            </motion.h1>
           )}
         </div>
 
@@ -230,7 +221,7 @@ export function IntroGate({
             type="button"
             onClick={onOpen}
             disabled={!ready}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-orange-500 text-sm font-semibold text-white shadow-lg transition hover:bg-orange-600 active:scale-[0.98] disabled:bg-stone-400/70"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-orange-500 text-sm font-semibold text-white shadow-md transition hover:bg-orange-600 active:scale-[0.98] disabled:bg-stone-400/70"
           >
             {ready ? (
               <>
@@ -259,7 +250,7 @@ function Equalizer() {
       {[0, 1, 2, 3].map((i) => (
         <motion.span
           key={i}
-          className="w-[3px] rounded-full bg-orange-400"
+          className="w-[3px] rounded-full bg-orange-500"
           animate={{ height: ["30%", "100%", "45%", "85%", "30%"] }}
           transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }}
           style={{ height: "30%" }}
@@ -276,7 +267,7 @@ export function MusicButton({ on, onToggle }: { on: boolean; onToggle: () => voi
       onClick={onToggle}
       aria-pressed={on}
       aria-label={on ? "Pause music" : "Play music"}
-      className="fixed bottom-4 right-4 z-50 flex size-12 items-center justify-center rounded-full bg-neutral-900/85 text-white shadow-xl ring-1 ring-white/10 backdrop-blur transition hover:bg-neutral-900 active:scale-95"
+      className="fixed bottom-4 right-4 z-50 flex size-12 items-center justify-center rounded-full bg-neutral-900 text-white shadow-lg ring-1 ring-white/10 transition hover:bg-neutral-800 active:scale-95"
       style={{ marginBottom: "env(safe-area-inset-bottom)" }}
     >
       {on ? <Equalizer /> : <VolumeX className="size-5" />}
@@ -340,10 +331,7 @@ export function Countdown({ date, time, dark }: { date: string; time: string; da
       {parts.map(([n, l]) => (
         <div
           key={l}
-          className={cn(
-            "rounded-2xl px-2 py-3 text-center ring-1",
-            dark ? "bg-white/10 text-white ring-white/10" : "bg-white/80 text-[#2a1002] ring-black/[0.06] shadow-sm",
-          )}
+          className={cn("rounded-2xl px-2 py-3 text-center", dark ? cn(TILE_DARK, "text-white") : cn(TILE_LIGHT, "text-[#2a1002]"))}
         >
           <FlipNum value={String(n).padStart(2, "0")} />
           <div className={cn("text-[10px] font-semibold uppercase tracking-wider", dark ? "text-white/60" : "text-stone-500")}>{l}</div>
@@ -428,7 +416,7 @@ export function ActionDock({
 
   const btn = cn(
     "flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold transition active:scale-[0.98]",
-    dark ? "bg-white/10 text-white ring-1 ring-white/15 hover:bg-white/15" : "bg-white text-stone-800 shadow-sm ring-1 ring-black/[0.08] hover:ring-orange-300",
+    dark ? "bg-white/10 text-white ring-1 ring-white/15 hover:bg-white/15" : cn(TILE_LIGHT, "text-[#2a1002] hover:ring-orange-400/60"),
   );
 
   return (
@@ -483,7 +471,7 @@ export function Sheet({
   title?: string;
   subtitle?: string;
   icon?: React.ReactNode;
-  /** Replaces the default header (e.g. the RSVP gradient). The close button is always rendered. */
+  /** Replaces the default header (e.g. the RSVP header). The close button is always rendered. */
   hero?: React.ReactNode;
   /** Pinned below the scrolling body (composers, primary actions). */
   footer?: React.ReactNode;
@@ -549,7 +537,7 @@ export function Sheet({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
         >
-          <button type="button" tabIndex={-1} aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/55 backdrop-blur-md" />
+          <button type="button" tabIndex={-1} aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/50" />
 
           <motion.div
             ref={dialogRef}
@@ -558,13 +546,13 @@ export function Sheet({
             aria-label={label}
             tabIndex={-1}
             className={cn(
-              "relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[28px] shadow-2xl outline-none sm:max-h-[86dvh] sm:max-w-md sm:rounded-[28px]",
-              dark ? "bg-neutral-900 text-white ring-1 ring-white/10" : "bg-[#fffaf5] text-[#2a1002]",
+              "relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[28px] shadow-xl outline-none sm:max-h-[86dvh] sm:max-w-md sm:rounded-[28px]",
+              dark ? "bg-neutral-900 text-white ring-1 ring-white/10" : "bg-[#fff4e8] text-[#2a1002]",
             )}
-            initial={reduce ? { opacity: 0 } : { y: "100%", scale: 0.97 }}
-            animate={reduce ? { opacity: 1 } : { y: 0, scale: 1 }}
-            exit={reduce ? { opacity: 0 } : { y: "100%", scale: 0.97 }}
-            transition={reduce ? { duration: 0.15 } : { type: "spring", damping: 30, stiffness: 300 }}
+            initial={reduce ? { opacity: 0 } : { y: "100%" }}
+            animate={reduce ? { opacity: 1 } : { y: 0 }}
+            exit={reduce ? { opacity: 0 } : { y: "100%" }}
+            transition={reduce ? { duration: 0.15 } : { type: "spring", damping: 32, stiffness: 320 }}
             drag={reduce ? false : "y"}
             dragControls={controls}
             dragListener={false}
@@ -596,7 +584,7 @@ export function Sheet({
             </button>
 
             {hero ?? (
-              <header className={cn("shrink-0 border-b px-5 pb-4 pt-7 pr-16", dark ? "border-white/10" : "border-black/[0.06]")}>
+              <header className={cn("shrink-0 border-b px-5 pb-4 pt-7 pr-16", dark ? "border-white/10" : "border-black/[0.08]")}>
                 <div className="flex items-center gap-3">
                   {icon && <span className={cn("grid size-11 shrink-0 place-items-center rounded-2xl", dark ? "bg-orange-500/20 text-orange-300" : "bg-orange-500/10 text-orange-600")}>{icon}</span>}
                   <div className="min-w-0">
@@ -615,7 +603,7 @@ export function Sheet({
 
             {footer && (
               <div
-                className={cn("shrink-0 border-t px-5 pt-3", dark ? "border-white/10 bg-neutral-900" : "border-black/[0.06] bg-[#fffaf5]")}
+                className={cn("shrink-0 border-t px-5 pt-3", dark ? "border-white/10 bg-neutral-900" : "border-black/[0.08] bg-[#fff4e8]")}
                 style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
               >
                 {footer}
@@ -718,13 +706,10 @@ export function RsvpForm({
 
   const card = flat
     ? cn(dark ? "text-white" : "text-[#2a1002]")
-    : cn(
-        "rounded-3xl p-5 ring-1 sm:p-6",
-        dark ? "bg-white/10 text-white ring-white/10" : "bg-white/85 text-[#2a1002] ring-black/[0.06] shadow-[0_12px_30px_-18px_rgba(28,20,16,0.3)]",
-      );
+    : cn("rounded-3xl p-5 sm:p-6", dark ? cn(TILE_DARK, "text-white") : cn(TILE_LIGHT, "text-[#2a1002]"));
   const field = cn(
     "w-full rounded-xl border px-3.5 text-sm outline-none transition focus:ring-2 focus:ring-orange-500/40",
-    dark ? "border-white/15 bg-white/5 text-white placeholder:text-white/40" : "border-black/10 bg-white text-[#2a1002] placeholder:text-stone-400",
+    dark ? "border-white/15 bg-white/5 text-white placeholder:text-white/40" : "border-[#2a1002]/15 bg-[#2a1002]/[0.03] text-[#2a1002] placeholder:text-[#2a1002]/40",
   );
 
   if (done) {
@@ -734,7 +719,7 @@ export function RsvpForm({
           initial={{ scale: 0.4, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", damping: 14, stiffness: 220 }}
-          className="mx-auto mb-3 grid size-14 place-items-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/30"
+          className="mx-auto mb-3 grid size-14 place-items-center rounded-full bg-emerald-500 text-white"
         >
           <Check className="size-7" />
         </motion.div>
@@ -761,7 +746,7 @@ export function RsvpForm({
             Close
           </button>
         )}
-        <button type="button" onClick={() => setDone(null)} className="mt-1 text-xs font-semibold text-orange-500 underline underline-offset-2">
+        <button type="button" onClick={() => setDone(null)} className="mt-1 text-xs font-semibold text-orange-600 underline underline-offset-2">
           Change my reply
         </button>
       </div>
@@ -788,7 +773,7 @@ export function RsvpForm({
         autoComplete="name"
       />
 
-      <div className={cn("grid grid-cols-3 gap-1 rounded-xl p-1", dark ? "bg-white/10" : "bg-stone-100")} role="radiogroup" aria-label="Your reply">
+      <div className={cn("grid grid-cols-3 gap-1 rounded-xl p-1", dark ? "bg-white/10" : "bg-[#2a1002]/[0.06]")} role="radiogroup" aria-label="Your reply">
         {REPLIES.map((r) => (
           <button
             key={r.v}
@@ -818,11 +803,11 @@ export function RsvpForm({
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm font-medium">How many of you?</span>
               <div className="flex items-center gap-2">
-                <button type="button" aria-label="Fewer guests" onClick={() => setCount((n) => Math.max(1, n - 1))} className={cn("grid size-10 place-items-center rounded-full ring-1", dark ? "ring-white/20" : "ring-black/10 bg-white")}>
+                <button type="button" aria-label="Fewer guests" onClick={() => setCount((n) => Math.max(1, n - 1))} className={cn("grid size-10 place-items-center rounded-full ring-1", dark ? "ring-white/20" : "ring-[#2a1002]/15")}>
                   <Minus className="size-4" />
                 </button>
                 <span className="w-6 text-center text-base font-semibold tabular-nums" aria-live="polite">{count}</span>
-                <button type="button" aria-label="More guests" onClick={() => setCount((n) => Math.min(10, n + 1))} className={cn("grid size-10 place-items-center rounded-full ring-1", dark ? "ring-white/20" : "ring-black/10 bg-white")}>
+                <button type="button" aria-label="More guests" onClick={() => setCount((n) => Math.min(10, n + 1))} className={cn("grid size-10 place-items-center rounded-full ring-1", dark ? "ring-white/20" : "ring-[#2a1002]/15")}>
                   <Plus className="size-4" />
                 </button>
               </div>
@@ -833,7 +818,7 @@ export function RsvpForm({
 
       <textarea className={cn(field, "py-3 leading-relaxed")} rows={3} maxLength={500} placeholder="A message for the hosts (optional)" aria-label="Message" value={comment} onChange={(e) => setComment(e.target.value)} />
 
-      {error && <p role="alert" className="text-sm font-medium text-red-500">{error}</p>}
+      {error && <p role="alert" className="text-sm font-medium text-red-600">{error}</p>}
 
       <button type="submit" disabled={busy} className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-orange-500 text-sm font-semibold text-white shadow-md transition hover:bg-orange-600 active:scale-[0.98] disabled:opacity-70">
         {busy && <Loader2 className="size-4 animate-spin" />} Send my reply
@@ -869,9 +854,7 @@ export function RsvpModal({
       dark={dark}
       inert={inert}
       hero={
-        <div className="relative shrink-0 overflow-hidden bg-gradient-to-br from-orange-500 via-orange-400 to-amber-300 px-6 pb-6 pt-9 text-white">
-          <motion.span aria-hidden className="absolute -right-10 -top-10 size-40 rounded-full bg-white/20 blur-2xl" animate={{ scale: [1, 1.25, 1] }} transition={{ duration: 6, repeat: Infinity }} />
-          <Heart className="mb-2 size-6 fill-white/90" />
+        <div className="shrink-0 bg-orange-500 px-6 pb-6 pt-9 text-white">
           <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-white/80">RSVP</p>
           <h2 className="mt-1 pr-10 text-2xl font-semibold" style={{ fontFamily: "Georgia, serif" }}>{names || "You’re invited"}</h2>
         </div>
@@ -888,7 +871,7 @@ export function RsvpModal({
 
 export function InvitationNotice({ kind }: { kind: "missing" | "expired" }) {
   return (
-    <main className="grid min-h-dvh place-items-center bg-[#fffafb] px-6 text-center text-[#2a1002]">
+    <main className="grid min-h-dvh place-items-center bg-[#fff4e8] px-6 text-center text-[#2a1002]">
       <div className="max-w-sm space-y-3">
         <div className="mx-auto grid size-14 place-items-center rounded-full bg-orange-100 text-orange-600">
           <Heart className="size-6" />
@@ -1034,7 +1017,7 @@ function WishComposer({
 
   const field = cn(
     "w-full rounded-xl border px-3.5 text-sm outline-none transition focus:ring-2 focus:ring-orange-500/40",
-    dark ? "border-white/15 bg-white/5 text-white placeholder:text-white/40" : "border-black/10 bg-white text-[#2a1002] placeholder:text-stone-400",
+    dark ? "border-white/15 bg-white/5 text-white placeholder:text-white/40" : "border-[#2a1002]/15 bg-[#2a1002]/[0.03] text-[#2a1002] placeholder:text-[#2a1002]/40",
   );
 
   const submit = async (e: React.FormEvent) => {
@@ -1066,9 +1049,9 @@ function WishComposer({
     <form onSubmit={submit} className="space-y-2" noValidate>
       <input className={cn(field, "h-11")} placeholder="Your name" aria-label="Your name" maxLength={100} value={name} autoComplete="name" onChange={(e) => { setName(e.target.value); if (error) setError(""); }} />
       <textarea className={cn(field, "resize-none py-3 leading-relaxed")} rows={rows} maxLength={500} placeholder="Write a message for the hosts…" aria-label="Message" value={text} onChange={(e) => { setText(e.target.value); if (error) setError(""); }} />
-      {error && <p role="alert" className="text-sm font-medium text-red-500">{error}</p>}
+      {error && <p role="alert" className="text-sm font-medium text-red-600">{error}</p>}
       <div className="flex items-center gap-3">
-        <span className={cn("text-xs tabular-nums", dark ? "text-white/40" : "text-stone-400")}>{text.length}/500</span>
+        <span className={cn("text-xs tabular-nums", dark ? "text-white/40" : "text-stone-500")}>{text.length}/500</span>
         <button
           type="submit"
           disabled={busy}
@@ -1104,11 +1087,11 @@ function WishList({
     return (
       <ul className="space-y-2.5" aria-busy="true" aria-label="Loading messages">
         {[0, 1, 2].map((i) => (
-          <li key={i} className={cn("flex animate-pulse gap-3 rounded-2xl p-3.5", dark ? "bg-white/5" : "bg-stone-100/70")}>
-            <span className={cn("size-10 shrink-0 rounded-full", dark ? "bg-white/10" : "bg-stone-200")} />
+          <li key={i} className={cn("flex animate-pulse gap-3 rounded-2xl p-3.5", dark ? "bg-white/5" : "bg-[#2a1002]/[0.04]")}>
+            <span className={cn("size-10 shrink-0 rounded-full", dark ? "bg-white/10" : "bg-[#2a1002]/10")} />
             <span className="flex-1 space-y-2 pt-1">
-              <span className={cn("block h-3 w-1/3 rounded", dark ? "bg-white/10" : "bg-stone-200")} />
-              <span className={cn("block h-3 w-5/6 rounded", dark ? "bg-white/10" : "bg-stone-200")} />
+              <span className={cn("block h-3 w-1/3 rounded", dark ? "bg-white/10" : "bg-[#2a1002]/10")} />
+              <span className={cn("block h-3 w-5/6 rounded", dark ? "bg-white/10" : "bg-[#2a1002]/10")} />
             </span>
           </li>
         ))}
@@ -1130,7 +1113,7 @@ function WishList({
   if (wishes.length === 0) {
     return (
       <div className="py-10 text-center">
-        <div className={cn("mx-auto mb-3 grid size-14 place-items-center rounded-full", dark ? "bg-orange-500/15 text-orange-300" : "bg-orange-100 text-orange-600")}>
+        <div className={cn("mx-auto mb-3 grid size-14 place-items-center rounded-full", dark ? "bg-orange-500/15 text-orange-300" : "bg-orange-500/10 text-orange-600")}>
           <Heart className="size-6" />
         </div>
         <p className="font-semibold" style={{ fontFamily: "Georgia, serif" }}>No messages yet</p>
@@ -1146,10 +1129,10 @@ function WishList({
           <motion.li
             key={w.id}
             layout="position"
-            initial={{ opacity: 0, y: -10, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: EASE }}
-            className={cn("flex gap-3 rounded-2xl p-3.5", dark ? "bg-white/5" : "bg-white ring-1 ring-black/[0.05]")}
+            className={cn("flex gap-3 rounded-2xl p-3.5", dark ? "bg-white/5" : TILE_LIGHT)}
           >
             <span aria-hidden className={cn("grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold", palette[hashStr(w.name) % palette.length])}>
               {initials(w.name)}
@@ -1157,11 +1140,11 @@ function WishList({
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline justify-between gap-2">
                 <p className="truncate text-sm font-semibold">{w.name}</p>
-                <time dateTime={w.created_at} className={cn("shrink-0 text-[11px]", dark ? "text-white/40" : "text-stone-400")}>
+                <time dateTime={w.created_at} className={cn("shrink-0 text-[11px]", dark ? "text-white/40" : "text-stone-500")}>
                   {timeAgo(w.created_at)}
                 </time>
               </div>
-              <p className={cn("mt-0.5 whitespace-pre-wrap break-words text-sm leading-relaxed", dark ? "text-white/75" : "text-stone-600")}>{w.comment}</p>
+              <p className={cn("mt-0.5 whitespace-pre-wrap break-words text-sm leading-relaxed", dark ? "text-white/75" : "text-stone-700")}>{w.comment}</p>
             </div>
           </motion.li>
         ))}
@@ -1170,18 +1153,18 @@ function WishList({
   );
 }
 
-/** Inline section at the bottom of the page. */
+/** Inline section at the bottom of the page. Sits on the page background, centred. */
 export function Guestbook({ slug, dark, refreshKey, onPosted }: { slug: string; dark: boolean; refreshKey: number; onPosted?: () => void }) {
   const { wishes, loading, failed, retry, post } = useWishes(slug, refreshKey, true, onPosted);
 
   return (
     <section
       aria-label="Guest messages"
-      className={cn("w-full space-y-5 px-[max(1rem,calc((100%-44rem)/2))] py-14", dark ? "bg-white/5 text-white" : "bg-white/60 text-[#2a1002]")}
+      className={cn("w-full space-y-5 px-[max(1rem,calc((100%-44rem)/2))] py-14", dark ? "text-white" : "text-[#2a1002]")}
     >
-      <div>
+      <div className="text-center">
         <h2 className="text-2xl font-semibold" style={{ fontFamily: "Georgia, serif" }}>Wishes &amp; messages</h2>
-        <p className={cn("text-sm", dark ? "text-white/60" : "text-stone-500")}>
+        <p className={cn("text-sm", dark ? "text-white/60" : "text-stone-600")}>
           {wishes.length > 0 ? `${wishes.length} ${wishes.length === 1 ? "message" : "messages"} from family and friends` : "Leave a few words for the hosts"}
         </p>
       </div>
@@ -1245,16 +1228,9 @@ export function SectionTitle({ eyebrow, title, dark }: { eyebrow: string; title:
       viewport={{ once: true, amount: 0.6 }}
       transition={{ duration: 0.7, ease: EASE }}
     >
-      <p className={cn("text-[11px] font-semibold uppercase tracking-[0.3em]", dark ? "text-white/60" : "text-stone-500")}>{eyebrow}</p>
+      <p className={cn("text-[11px] font-semibold uppercase tracking-[0.3em]", dark ? "text-white/60" : "text-stone-600")}>{eyebrow}</p>
       <h2 className={cn("mt-2 text-3xl font-semibold sm:text-4xl", dark ? "text-white" : "text-[#2a1002]")} style={{ fontFamily: "Georgia, serif" }}>{title}</h2>
-      <motion.span
-        aria-hidden
-        className="mx-auto mt-4 block h-px w-24 origin-center bg-gradient-to-r from-transparent via-orange-500 to-transparent"
-        initial={{ scaleX: 0 }}
-        whileInView={{ scaleX: 1 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.9, delay: 0.2 }}
-      />
+      <span aria-hidden className="mx-auto mt-4 block h-px w-16 bg-orange-500/70" />
     </motion.div>
   );
 }
@@ -1265,39 +1241,40 @@ const mediaSummary = (items: MediaItem[]) => {
   return [photos ? `${photos} photo${photos === 1 ? "" : "s"}` : "", videos ? `${videos} video${videos === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
 };
 
+/** Centred grid: a few items stay in the middle instead of leaving an empty column on the right. */
 export function Gallery({ items, dark, onOpen }: { items: MediaItem[]; dark: boolean; onOpen: (i: number) => void }) {
   const reduce = !!useReducedMotion();
   if (items.length === 0) return null;
+  const cols = Math.min(4, items.length);
 
   return (
     <section aria-label="Gallery" className="w-full py-14">
       <SectionTitle eyebrow={mediaSummary(items)} title="Our moments" dark={dark} />
-      <div className="grid w-full grid-cols-2 gap-1 md:grid-cols-4">
+      <div
+        style={{ "--cols": cols } as React.CSSProperties}
+        className="mx-auto flex max-w-5xl flex-wrap justify-center gap-2 px-4"
+      >
         {items.map((m, i) => (
           <motion.button
             key={m.url}
             type="button"
             onClick={() => onOpen(i)}
             aria-label={`Open ${m.type} ${i + 1} of ${items.length}`}
-            initial={reduce ? false : { opacity: 0, scale: 0.9, y: 36 }}
-            whileInView={{ opacity: 1, scale: 1, y: 0 }}
+            initial={reduce ? false : { opacity: 0, y: 28 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.15 }}
-            transition={{ duration: 0.7, delay: (i % 4) * 0.08, ease: EASE }}
-            className={cn(
-              "group relative aspect-square overflow-hidden bg-stone-300/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-500/60",
-              i === 0 && items.length > 4 && "md:col-span-2 md:row-span-2",
-            )}
+            transition={{ duration: 0.6, delay: (i % 4) * 0.06, ease: EASE }}
+            className="group relative aspect-square w-[calc(50%-0.25rem)] max-w-[28rem] overflow-hidden rounded-xl bg-[#2a1002]/10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-500/60 md:w-[calc(100%/var(--cols)-0.5rem)]"
           >
             {m.type === "image" ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={m.url} alt="" loading="lazy" decoding="async" className="size-full object-cover transition duration-700 ease-out group-hover:scale-110" />
+              <img src={m.url} alt="" loading="lazy" decoding="async" className="size-full object-cover transition duration-500 ease-out group-hover:scale-105" />
             ) : (
-              <video src={`${m.url}#t=0.5`} muted playsInline preload="metadata" className="size-full object-cover transition duration-700 ease-out group-hover:scale-110" />
+              <video src={`${m.url}#t=0.5`} muted playsInline preload="metadata" className="size-full object-cover transition duration-500 ease-out group-hover:scale-105" />
             )}
-            <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
             {m.type === "video" && (
               <span aria-hidden className="absolute inset-0 grid place-items-center">
-                <span className="grid size-14 place-items-center rounded-full bg-white/90 text-orange-600 shadow-xl transition duration-300 group-hover:scale-110">
+                <span className="grid size-14 place-items-center rounded-full bg-white/90 text-orange-600 shadow-lg">
                   <Play className="size-6 translate-x-0.5 fill-current" />
                 </span>
               </span>
@@ -1353,7 +1330,7 @@ export function MemoriesSheet({
       icon={<Images className="size-5" />}
     >
       {photos > 0 && videos > 0 && (
-        <div role="tablist" aria-label="Filter memories" className={cn("mb-4 grid grid-cols-3 gap-1 rounded-xl p-1", dark ? "bg-white/10" : "bg-stone-100")}>
+        <div role="tablist" aria-label="Filter memories" className={cn("mb-4 grid grid-cols-3 gap-1 rounded-xl p-1", dark ? "bg-white/10" : "bg-[#2a1002]/[0.06]")}>
           {tabs.map((t) => (
             <button
               key={t.v}
@@ -1385,18 +1362,18 @@ export function MemoriesSheet({
                 onClick={() => onPick(i)}
                 aria-label={`Open ${m.type} ${i + 1} of ${items.length}`}
                 className={cn(
-                  "group relative aspect-square overflow-hidden rounded-xl bg-stone-300/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-500/60",
+                  "group relative aspect-square overflow-hidden rounded-xl bg-[#2a1002]/10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-500/60",
                   feature && "col-span-2 row-span-2",
                 )}
               >
                 {m.type === "image" ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={m.url} alt="" loading="lazy" decoding="async" className="size-full object-cover transition duration-500 group-hover:scale-110" />
+                  <img src={m.url} alt="" loading="lazy" decoding="async" className="size-full object-cover transition duration-500 group-hover:scale-105" />
                 ) : (
                   <>
-                    <video src={`${m.url}#t=0.5`} muted playsInline preload="metadata" className="size-full object-cover transition duration-500 group-hover:scale-110" />
+                    <video src={`${m.url}#t=0.5`} muted playsInline preload="metadata" className="size-full object-cover transition duration-500 group-hover:scale-105" />
                     <span aria-hidden className="absolute inset-0 grid place-items-center bg-black/15">
-                      <span className="grid size-10 place-items-center rounded-full bg-white/90 text-orange-600 shadow-lg">
+                      <span className="grid size-10 place-items-center rounded-full bg-white/90 text-orange-600 shadow-md">
                         <Play className="size-4 translate-x-px fill-current" />
                       </span>
                     </span>
@@ -1468,7 +1445,7 @@ export function Lightbox({
           role="dialog"
           aria-modal="true"
           aria-label="Gallery viewer"
-          className="fixed inset-0 z-[120] flex flex-col bg-black/95 backdrop-blur-xl"
+          className="fixed inset-0 z-[120] flex flex-col bg-black/95"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -1502,7 +1479,7 @@ export function Lightbox({
               >
                 {item.type === "image" ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={item.url} alt="" draggable={false} className="max-h-full max-w-full select-none rounded-lg object-contain shadow-2xl" />
+                  <img src={item.url} alt="" draggable={false} className="max-h-full max-w-full select-none rounded-lg object-contain" />
                 ) : (
                   <video
                     src={item.url}
@@ -1512,7 +1489,7 @@ export function Lightbox({
                     onPlay={() => onVideo?.(true)}
                     onPause={() => onVideo?.(false)}
                     onEnded={() => onVideo?.(false)}
-                    className="max-h-full max-w-full rounded-lg bg-black shadow-2xl"
+                    className="max-h-full max-w-full rounded-lg bg-black"
                   />
                 )}
               </motion.div>
@@ -1520,10 +1497,10 @@ export function Lightbox({
 
             {n > 1 && (
               <>
-                <button type="button" onClick={() => go(-1)} aria-label="Previous" className="absolute left-2 top-1/2 z-10 grid size-12 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white backdrop-blur hover:bg-white/25">
+                <button type="button" onClick={() => go(-1)} aria-label="Previous" className="absolute left-2 top-1/2 z-10 grid size-12 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white hover:bg-white/25">
                   <ChevronLeft className="size-6" />
                 </button>
-                <button type="button" onClick={() => go(1)} aria-label="Next" className="absolute right-2 top-1/2 z-10 grid size-12 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white backdrop-blur hover:bg-white/25">
+                <button type="button" onClick={() => go(1)} aria-label="Next" className="absolute right-2 top-1/2 z-10 grid size-12 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white hover:bg-white/25">
                   <ChevronRight className="size-6" />
                 </button>
               </>
@@ -1593,9 +1570,9 @@ export function DetailsSheet({
   const dateText = when ? when.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "";
   const timeText = when && /^\d{2}:\d{2}$/.test(time) ? when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "";
   const place = [venue, address].filter(Boolean).join(", ");
-  const tile = cn("flex items-start gap-3 rounded-2xl p-4", dark ? "bg-white/5" : "bg-white ring-1 ring-black/[0.05]");
+  const tile = cn("flex items-start gap-3 rounded-2xl p-4", dark ? "bg-white/5" : TILE_LIGHT);
   const chip = cn("grid size-10 shrink-0 place-items-center rounded-xl", dark ? "bg-orange-500/20 text-orange-300" : "bg-orange-500/10 text-orange-600");
-  const soft = dark ? "text-white/60" : "text-stone-500";
+  const soft = dark ? "text-white/60" : "text-stone-600";
 
   return (
     <Sheet open={open} onClose={onClose} label="Event details" dark={dark} inert={inert} title="Event details" subtitle={title} icon={<CalendarDays className="size-5" />}>
@@ -1694,14 +1671,12 @@ export function ActionBar({
           initial={reduce ? { opacity: 0 } : { y: 90, opacity: 0 }}
           animate={reduce ? { opacity: 1 } : { y: 0, opacity: 1 }}
           exit={reduce ? { opacity: 0 } : { y: 90, opacity: 0 }}
-          transition={{ type: "spring", damping: 24, stiffness: 260, delay: 0.5 }}
+          transition={{ type: "spring", damping: 26, stiffness: 280, delay: 0.5 }}
         >
           <div
             className={cn(
-              "pointer-events-auto flex max-w-full items-center gap-0.5 rounded-full p-1.5 ring-1 backdrop-blur-xl",
-              dark
-                ? "bg-neutral-900/80 ring-white/10 shadow-[0_18px_40px_-14px_rgba(0,0,0,0.7)]"
-                : "bg-white/85 ring-black/[0.08] shadow-[0_18px_40px_-14px_rgba(42,16,2,0.4)]",
+              "pointer-events-auto flex max-w-full items-center gap-0.5 rounded-full p-1.5 shadow-lg ring-1",
+              dark ? "bg-neutral-900 ring-white/10" : "bg-[#fff4e8] ring-black/10",
             )}
           >
             {hasDetails && <BarItem label="Details" icon={<CalendarDays />} active={active === "details"} dark={dark} onClick={() => onOpen("details")} />}
@@ -1713,7 +1688,7 @@ export function ActionBar({
               onClick={() => onOpen("rsvp")}
               aria-haspopup="dialog"
               aria-expanded={active === "rsvp"}
-              className="ml-1 flex h-12 items-center gap-2 rounded-full bg-orange-500 px-5 text-sm font-semibold text-white shadow-[0_8px_22px_-8px_rgba(249,115,22,0.9)] transition hover:bg-orange-600 active:scale-95"
+              className="ml-1 flex h-12 items-center gap-2 rounded-full bg-orange-500 px-5 text-sm font-semibold text-white shadow-md transition hover:bg-orange-600 active:scale-95"
             >
               <Heart className="size-4 fill-white" /> RSVP
             </button>
@@ -1740,33 +1715,11 @@ export function ActionBar({
 }
 
 /* ========================================================================== */
-/*  Ambient effects                                                           */
+/*  Scroll progress                                                           */
 /* ========================================================================== */
 
 export function ScrollProgress() {
   const { scrollYProgress } = useScroll();
   const x = useSpring(scrollYProgress, { stiffness: 120, damping: 28, mass: 0.4 });
-  return <motion.div aria-hidden className="fixed inset-x-0 top-0 z-[60] h-1 origin-left bg-gradient-to-r from-orange-400 via-amber-300 to-orange-500" style={{ scaleX: x }} />;
-}
-
-/** Soft golden sparkles drifting upwards. Pure CSS, hidden for reduced motion. */
-export function Particles() {
-  const dots = Array.from({ length: 16 }, (_, i) => ({
-    left: (i * 37) % 100,
-    size: 4 + ((i * 5) % 7),
-    dur: 11 + ((i * 3) % 9),
-    delay: -((i * 2.3) % 14),
-  }));
-  return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 z-[40] overflow-hidden motion-reduce:hidden">
-      <style>{`@keyframes riwa-rise{0%{transform:translate3d(0,0,0) scale(.6);opacity:0}12%{opacity:.7}60%{transform:translate3d(18px,-60vh,0) scale(1)}100%{transform:translate3d(-14px,-115vh,0) scale(.8);opacity:0}}`}</style>
-      {dots.map((d, i) => (
-        <span
-          key={i}
-          className="absolute bottom-[-20px] rounded-full bg-gradient-to-br from-amber-200 to-orange-400 blur-[1px]"
-          style={{ left: `${d.left}%`, width: d.size, height: d.size, animation: `riwa-rise ${d.dur}s linear ${d.delay}s infinite`, boxShadow: "0 0 10px 2px rgba(251,191,36,.5)" }}
-        />
-      ))}
-    </div>
-  );
+  return <motion.div aria-hidden className="fixed inset-x-0 top-0 z-[60] h-1 origin-left bg-orange-500" style={{ scaleX: x }} />;
 }

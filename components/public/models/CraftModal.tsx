@@ -1,41 +1,35 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, MotionConfig } from "framer-motion";
 import {
-  X, ArrowRight, ArrowLeft, MessageCircle, Globe, LayoutTemplate, Clock, Check, Wand2,
+  X, ArrowRight, ArrowLeft, MessageCircle, Globe, LayoutTemplate, Clock, Check,
   User, Phone, CalendarDays, ChevronLeft, ChevronRight, Heart, Gem, Flower2, Cake,
-  PartyPopper, Baby, Building2, Pencil, Sparkles, Flame, Coffee, Zap, Rocket, Link2,
-  Crown, Feather, Landmark, MailCheck, Timer, CalendarClock, MapPin, Images, Music,
-  MessageSquare, Layers, Lock, Star, Moon, type LucideIcon,
+  PartyPopper, Baby, Building2, Pencil, Coffee, Zap, Rocket, Link2, Crown, Feather,
+  Landmark, MailCheck, Timer, CalendarClock, MapPin, Images, Music, MessageSquare,
+  Layers, Lock, Star, Moon, type LucideIcon,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { CARD_BG, EASE, focusRing } from "@/components/public/sections/plans/PlanUI";
 
 type Service = "website" | "template";
 
 /* ---------------- tokens ---------------- */
-const focusRing =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#ffe9d3]";
-const primaryBtn = "bg-gradient-to-b from-[#fb8a3c] to-[#f97316] shadow-[0_10px_30px_-10px_rgba(249,115,22,0.8)]";
-const inputCls = `w-full rounded-2xl border border-orange-900/15 bg-white/80 py-3.5 pl-12 pr-10 text-[15px] font-semibold text-slate-900 shadow-[inset_0_1px_2px_rgba(154,52,18,0.06)] outline-none backdrop-blur transition-all duration-300 placeholder:font-normal placeholder:text-slate-500 hover:border-orange-400/60 focus:-translate-y-0.5 focus:border-orange-500 focus:bg-white focus:shadow-[0_0_0_4px_rgba(249,115,22,0.16),0_14px_30px_-14px_rgba(249,115,22,0.55)] ${focusRing}`;
-const labelCls = "mb-1.5 block text-[13px] font-extrabold text-slate-800";
-const selectedTile = "border-orange-700 bg-gradient-to-b from-[#f97316] to-[#c2410c] text-white shadow-[0_14px_28px_-12px_rgba(249,115,22,0.9)]";
-const idleTile = "border-orange-900/15 bg-white/70 text-slate-800 hover:border-orange-400 hover:bg-white";
+const inputCls =
+  "h-11 w-full rounded-xl border border-black/[0.1] bg-white/80 pl-11 pr-10 text-sm text-[#1c1410] outline-none transition placeholder:text-stone-400 hover:border-[#1c1410]/30 focus:border-[#1c1410] focus-visible:ring-2 focus-visible:ring-[#1c1410]/20";
+const labelCls = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-500";
+const selectedTile = "border-[#1c1410] bg-[#1c1410] text-white";
+const idleTile = "border-black/[0.08] bg-white/70 text-[#1c1410] hover:border-[#1c1410]/30 hover:bg-white";
+const darkBtn = "bg-[#1c1410] text-white transition-colors hover:bg-[#2c211a]";
 
-const PAPER =
-  "radial-gradient(80% 60% at 0% 0%, rgba(255,255,255,0.55), transparent 60%), radial-gradient(70% 60% at 100% 100%, rgba(249,115,22,0.28), transparent 60%), linear-gradient(160deg, #ffe9d3 0%, #ffcfa4 100%)";
-const DARK =
-  "radial-gradient(90% 70% at 100% 0%, rgba(249,115,22,0.28), transparent 60%), radial-gradient(70% 60% at 0% 100%, rgba(99,102,241,0.25), transparent 60%), linear-gradient(160deg, #1b2249 0%, #0a0e1f 100%)";
-const SUN =
-  "radial-gradient(70% 60% at 100% 0%, rgba(255,255,255,0.38), transparent 60%), radial-gradient(60% 60% at 0% 100%, rgba(190,60,0,0.38), transparent 60%), linear-gradient(135deg, #f97316 0%, #fb923c 60%, #fbbf24 100%)";
-
-const SERVICE_INFO: Record<Service, { name: string; timeline: string; icon: LucideIcon; blurb: string; bg: string; tag: string }> = {
-  website: { name: "Crafted Website", timeline: "7–14 days", icon: Globe, blurb: "Fully coded from scratch around your story.", bg: DARK, tag: "100% custom" },
-  template: { name: "Crafted Template", timeline: "3–5 days", icon: LayoutTemplate, blurb: "Customize an existing premium design.", bg: SUN, tag: "Fastest" },
+const SERVICE_INFO: Record<Service, { name: string; timeline: string; icon: LucideIcon; blurb: string; tag: string }> = {
+  website: { name: "Crafted Website", timeline: "7–14 days", icon: Globe, blurb: "Fully coded from scratch around your story.", tag: "100% custom" },
+  template: { name: "Crafted Template", timeline: "3–5 days", icon: LayoutTemplate, blurb: "Customize an existing premium design.", tag: "Fastest" },
 };
 
 const EVENTS: { label: string; icon: LucideIcon }[] = [
   { label: "Wedding", icon: Heart }, { label: "Nikkah & Walima", icon: Moon }, { label: "Engagement", icon: Gem },
-  { label: "Mehndi", icon: Flower2 }, { label: "Birthday", icon: Cake }, { label: "Anniversary", icon: Sparkles },
+  { label: "Mehndi", icon: Flower2 }, { label: "Birthday", icon: Cake }, { label: "Anniversary", icon: Star },
   { label: "Baby Shower", icon: Baby }, { label: "Corporate Gala", icon: Building2 },
 ];
 
@@ -61,15 +55,6 @@ const FEATURES: { label: string; icon: LucideIcon }[] = [
   { label: "Photo gallery", icon: Images }, { label: "Background music", icon: Music },
   { label: "Guest wishes", icon: MessageSquare }, { label: "Multiple events", icon: Layers },
 ];
-const POPULAR: Record<string, string[]> = {
-  Wedding: ["RSVP form", "Countdown timer", "Event schedule", "Venue map", "Photo gallery"],
-  "Nikkah & Walima": ["RSVP form", "Event schedule", "Venue map", "Multiple events"],
-  Engagement: ["RSVP form", "Countdown timer", "Photo gallery", "Venue map"],
-  Mehndi: ["RSVP form", "Event schedule", "Background music", "Venue map"],
-  Birthday: ["RSVP form", "Countdown timer", "Photo gallery", "Guest wishes"],
-  "Baby Shower": ["RSVP form", "Guest wishes", "Photo gallery"],
-};
-const popularFor = (e: string) => POPULAR[e] ?? ["RSVP form", "Event schedule", "Venue map"];
 
 const TIMELINES: { value: string; label: string; sub: string; icon: LucideIcon }[] = [
   { value: "Standard timeline", label: "No rush", sub: "Standard timeline", icon: Coffee },
@@ -83,10 +68,8 @@ const BUDGETS: { label: string; icon: LucideIcon }[] = [
   { label: "Balanced", icon: Star }, { label: "Go all out", icon: Crown },
 ];
 
-const STARTERS = ["We first met at…", "Our families love…", "Guests should feel…", "Must-have moment:"];
 const TLDS = [".com", ".pk", ".love", ".wedding"];
-const TITLES = ["Choose your craft", "What are we celebrating?", "Set the date", "Pick the feel", "Make it yours"];
-const COLORS = ["#f97316", "#fbbf24", "#fb7185", "#6366f1"];
+const TITLES = ["Choose your craft", "Your event", "Set the date", "Pick the feel", "Final details"];
 
 const EMPTY = {
   name: "", phone: "", eventType: "", eventDate: "", timeline: "Standard timeline", budget: "",
@@ -100,12 +83,12 @@ const fromISO = (s: string) => { const [y, m, d] = s.split("-").map(Number); ret
 const startOfToday = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); };
 const daysUntil = (s: string) => Math.round((fromISO(s).getTime() - startOfToday().getTime()) / 86400000);
 const prettyDate = (s: string) => fromISO(s).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-const daysLabel = (n: number) => (n === 0 ? "That's today!" : n === 1 ? "That's tomorrow!" : n <= 60 ? `${n} days to go` : `About ${Math.round(n / 30)} months to go`);
+const daysLabel = (n: number) => (n === 0 ? "That's today" : n === 1 ? "That's tomorrow" : n <= 60 ? `${n} days to go` : `About ${Math.round(n / 30)} months to go`);
 
 const slide = {
-  enter: (d: number) => ({ opacity: 0, x: d * 28 }),
+  enter: (d: number) => ({ opacity: 0, x: d * 24 }),
   center: { opacity: 1, x: 0 },
-  exit: (d: number) => ({ opacity: 0, x: d * -28 }),
+  exit: (d: number) => ({ opacity: 0, x: d * -24 }),
 };
 
 /* ---------------- main ---------------- */
@@ -120,7 +103,6 @@ export function CraftModal({
   const [otherOpen, setOtherOpen] = useState(false);
   const [domainHelp, setDomainHelp] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const taRef = useRef<HTMLTextAreaElement>(null);
 
   const set = <K extends keyof typeof EMPTY>(k: K, v: (typeof EMPTY)[K]) => setData((d) => ({ ...d, [k]: v }));
   const go = (n: number) => { setDir(n > step ? 1 : -1); setStep(n); };
@@ -156,37 +138,14 @@ export function CraftModal({
   const toggleFeature = (f: string) =>
     set("features", data.features.includes(f) ? data.features.filter((x) => x !== f) : [...data.features, f]);
 
-  const canContinue = step !== 2 || (data.name.trim().length > 1 && data.phone.replace(/\D/g, "").length >= 10 && data.eventType.trim().length > 0);
-
-  const power = Math.round(
-    ([data.name, data.phone, data.eventType, data.eventDate, data.palette, data.style,
-      data.features.length ? "x" : "", data.domain || (domainHelp ? "x" : ""), data.requirements, data.budget]
-      .filter(Boolean).length / 10) * 100,
-  );
+  const canContinue =
+    step !== 2 || (data.name.trim().length > 1 && data.phone.replace(/\D/g, "").length >= 10 && data.eventType.trim().length > 0);
 
   const palette = PALETTES.find((p) => p.name === data.palette);
   const first = data.name.trim().split(/\s+/)[0] ?? "";
 
-  const coach = (() => {
-    switch (step) {
-      case 1: return "Pick your path. Both end in something your guests will screenshot and share.";
-      case 2: return data.eventType ? `${data.eventType}! Great choice. Now tell us who's hosting.` : "First up: what are we celebrating? Tap one.";
-      case 3: return data.eventDate && days !== null && days >= 0 ? `Locked in. ${daysLabel(days)}.` : "Tap a date on the calendar, or skip it for now.";
-      case 4: return palette ? `${palette.name}. Gorgeous. Now load up the power-ups.` : "The fun part: how should it feel? Pick a palette.";
-      default: return "Last lap. Claim a domain, then tap a prompt to start your story.";
-    }
-  })();
-
-  const suggestions = useMemo(() => {
-    const parts = data.name.trim().toLowerCase().split(/\s+/).map((p) => p.replace(/[^a-z0-9]/g, "")).filter(Boolean);
-    if (!parts.length) return [];
-    const f = parts[0], l = parts.length > 1 ? parts[parts.length - 1] : "";
-    const ev = data.eventType.toLowerCase().split(/[\s&]+/)[0].replace(/[^a-z0-9]/g, "");
-    return Array.from(new Set([`${f}${l}.com`, `${f}s${ev || "day"}.com`, `celebrate${f}.com`]));
-  }, [data.name, data.eventType]);
-
   const setTld = (tld: string) => {
-    const base = data.domain.split(".")[0] || suggestions[0]?.split(".")[0] || "yourname";
+    const base = data.domain.split(".")[0] || "yourname";
     setDomainHelp(false);
     set("domain", base + tld);
   };
@@ -197,22 +156,22 @@ export function CraftModal({
       const whatsappNumber = "923001234567";
       const line = (k: string, v?: string) => `*${k}:* ${v && v.trim() ? v.trim() : "Not specified"}\n`;
       const message =
-        `*🌟 NEW CRAFT REQUEST*\n\n` +
+        `*NEW CRAFT REQUEST*\n\n` +
         line("Service", `${info.name} (typical delivery ${info.timeline})`) +
-        `\n*— About the event —*\n` +
+        `\n*About the event*\n` +
         line("Name", data.name) +
         line("Contact number", data.phone) +
         line("Event", data.eventType) +
         line("Event date", data.eventDate ? `${prettyDate(data.eventDate)} (${daysLabel(daysUntil(data.eventDate))})` : "") +
-        `\n*— Project —*\n` +
-        line("Preferred domain", data.domain || (domainHelp ? "Please suggest one for me" : "")) +
+        `\n*Project*\n` +
+        line("Preferred domain", data.domain || (domainHelp ? "Team to choose" : "")) +
         line("Delivery needed", data.timeline) +
         line("Budget", data.budget) +
         line("Colour palette", data.palette) +
         line("Style", data.style) +
         line("Features wanted", data.features.join(", ")) +
         line("Reference links", data.references) +
-        `\n*Vision & Requirements:*\n${data.requirements.trim() || "Not specified"}`;
+        `\n*Requirements:*\n${data.requirements.trim() || "Not specified"}`;
       window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, "_blank");
       setIsSubmitting(false);
       onClose();
@@ -225,66 +184,57 @@ export function CraftModal({
     else if (canContinue) go(step + 1);
   };
 
-  const addStarter = (s: string) => {
-    set("requirements", (data.requirements ? data.requirements.trimEnd() + "\n" : "") + s + " ");
-    setTimeout(() => taRef.current?.focus(), 0);
-  };
-
   return (
     <MotionConfig reducedMotion="user">
       <AnimatePresence>
         {isOpen && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/60 px-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-6"
+            className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/55 px-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-6"
             onClick={onClose}
             role="dialog" aria-modal="true" aria-label="Start your project"
-            /* Lenis ignores wheel and touch events inside anything with this attribute */
             data-lenis-prevent
           >
             <motion.div
-              initial={{ opacity: 0, y: 60, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 30, scale: 0.97 }}
-              transition={{ type: "spring", damping: 26, stiffness: 220 }}
+              initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
+              transition={{ type: "spring", damping: 30, stiffness: 260 }}
               onClick={(e) => e.stopPropagation()}
-              style={{ backgroundImage: PAPER }}
-              className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[1.75rem] border border-orange-900/10 shadow-2xl sm:max-h-[92dvh] sm:rounded-[2rem]"
+              className={cn(
+                "relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-black/[0.07] text-[#1c1410] shadow-xl sm:max-h-[92dvh]",
+                CARD_BG,
+              )}
             >
               {/* Header */}
-              <div className="shrink-0 border-b border-orange-900/10 p-4 pb-3 sm:p-6 sm:pb-4">
+              <div className="shrink-0 border-b border-dashed border-[#1c1410]/25 p-4 pb-4 sm:p-6">
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="text-xs font-bold text-orange-800">Step {step} of {totalSteps}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">Step {step} of {totalSteps}</p>
                     <AnimatePresence mode="wait" initial={false}>
                       <motion.h2
-                        key={step} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}
-                        className="font-[family-name:var(--font-display)] text-lg font-extrabold text-slate-900 sm:text-2xl"
+                        key={step} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}
+                        className="mt-1 font-[family-name:var(--font-display)] text-xl font-bold sm:text-2xl"
                       >
                         {TITLES[step - 1]}
                       </motion.h2>
                     </AnimatePresence>
                   </div>
-                  <button onClick={onClose} aria-label="Close" className={`rounded-full bg-orange-500 p-2 text-white shadow-lg transition-transform hover:scale-105 hover:rotate-90 sm:p-2.5 ${focusRing}`}>
-                    <X className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <button
+                    onClick={onClose} aria-label="Close"
+                    className={cn("flex size-9 shrink-0 items-center justify-center rounded-full bg-[#1c1410]/[0.06] ring-1 ring-black/[0.06] transition-colors hover:bg-[#1c1410] hover:text-white", focusRing)}
+                  >
+                    <X className="size-4" />
                   </button>
                 </div>
-                <div className="mt-3 flex gap-1.5 sm:mt-4">
+                <div className="mt-4 flex gap-1.5" aria-hidden>
                   {Array.from({ length: totalSteps }).map((_, i) => (
-                    <div key={i} className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#ffbd85]">
-                      <motion.div className="h-full rounded-full bg-orange-700" initial={false} animate={{ width: i < step ? "100%" : "0%" }} transition={{ type: "spring", damping: 24, stiffness: 180 }} />
+                    <div key={i} className="h-1 flex-1 overflow-hidden rounded-full bg-[#1c1410]/10">
+                      <motion.div className="h-full rounded-full bg-[#1c1410]" initial={false} animate={{ width: i < step ? "100%" : "0%" }} transition={{ duration: 0.4, ease: EASE }} />
                     </div>
                   ))}
                 </div>
-                <div className="mt-2.5 flex items-center gap-2 text-xs font-bold text-slate-800">
-                  <motion.span animate={power > 0 ? { scale: [1, 1.25, 1] } : {}} key={power} transition={{ duration: 0.35 }} className="text-orange-700"><Flame className="h-4 w-4" /></motion.span>
-                  Vision clarity
-                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/60">
-                    <motion.div className="h-full rounded-full bg-gradient-to-r from-[#fbbf24] via-[#f97316] to-[#c2410c]" initial={false} animate={{ width: `${Math.max(power, 4)}%` }} transition={{ type: "spring", damping: 20, stiffness: 120 }} />
-                  </div>
-                  <span className="w-9 text-right tabular-nums">{power}%</span>
-                </div>
               </div>
 
-              {/* Scrollable body */}
+              {/* Body */}
               <div
                 ref={bodyRef} data-lenis-prevent
                 onWheel={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()}
@@ -293,41 +243,36 @@ export function CraftModal({
                 <form
                   onSubmit={onFormSubmit}
                   onKeyDown={(e) => { if (e.key === "Enter" && step === 5 && (e.target as HTMLElement).tagName === "INPUT") e.preventDefault(); }}
-                  className="space-y-4"
                 >
-                  <Coach text={coach} />
-
                   <AnimatePresence mode="wait" custom={dir} initial={false}>
                     {/* STEP 1 */}
                     {step === 1 && (
-                      <motion.div key="s1" custom={dir} variants={slide} initial="enter" animate="center" exit="exit" className="space-y-3 sm:space-y-4">
-                        {(Object.keys(SERVICE_INFO) as Service[]).map((k, idx) => {
+                      <motion.div key="s1" custom={dir} variants={slide} initial="enter" animate="center" exit="exit" className="space-y-3">
+                        {(Object.keys(SERVICE_INFO) as Service[]).map((k) => {
                           const s = SERVICE_INFO[k];
                           const Icon = s.icon;
                           return (
-                            <motion.button
+                            <button
                               key={k} type="button"
                               onClick={() => { setService(k); go(2); }}
-                              whileHover={{ y: -4, scale: 1.01 }} whileTap={{ scale: 0.98 }}
-                              style={{ backgroundImage: s.bg }}
-                              className={`group relative w-full overflow-hidden rounded-2xl border border-white/20 p-4 text-left text-white shadow-xl sm:p-6 ${focusRing}`}
+                              className={cn("group flex w-full items-center gap-4 rounded-2xl border border-black/[0.08] bg-white/70 p-4 text-left transition-colors hover:border-[#1c1410]/40 hover:bg-white sm:p-5", focusRing)}
                             >
-                              <span className="pointer-events-none absolute inset-y-0 -left-1/2 w-1/3 -skew-x-12 bg-white/25 opacity-0 blur-md transition-all duration-700 group-hover:left-[130%] group-hover:opacity-100" />
-                              <span className="absolute right-4 top-4 rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-bold backdrop-blur">{s.tag}</span>
-                              <motion.div
-                                animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 3, delay: idx * 0.6, ease: "easeInOut" }}
-                                className="mb-2.5 flex h-11 w-11 items-center justify-center rounded-xl bg-white text-orange-600 shadow-lg sm:mb-3 sm:h-12 sm:w-12"
-                              >
-                                <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
-                              </motion.div>
-                              <h3 className="text-base font-extrabold sm:text-lg">{s.name}</h3>
-                              <p className="mt-1 text-xs font-medium text-white sm:text-sm">{s.blurb}</p>
-                              <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-bold sm:mt-4 sm:text-xs">
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#c2410c] px-3 py-1.5 text-white"><Wand2 className="h-3.5 w-3.5" /> Priced to your needs</span>
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#232b57] px-3 py-1.5 text-orange-200"><Clock className="h-3.5 w-3.5" /> {s.timeline}</span>
-                                <ArrowRight className="ml-auto h-5 w-5 transition-transform group-hover:translate-x-1.5" />
-                              </div>
-                            </motion.button>
+                              <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-[#1c1410] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]">
+                                <Icon className="size-5" />
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="flex flex-wrap items-center gap-2">
+                                  <span className="font-[family-name:var(--font-display)] text-lg font-bold">{s.name}</span>
+                                  <span className="rounded border border-[#1c1410]/20 px-1.5 text-[10px] font-semibold uppercase leading-4 tracking-[0.1em] text-[#1c1410]/80">{s.tag}</span>
+                                </span>
+                                <span className="mt-1 block text-sm text-stone-600">{s.blurb}</span>
+                                <span className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-medium text-stone-600">
+                                  <span>Priced to your needs</span>
+                                  <span className="inline-flex items-center gap-1"><Clock className="size-3.5" /> {s.timeline}</span>
+                                </span>
+                              </span>
+                              <ArrowRight className="size-5 shrink-0 transition-transform group-hover:translate-x-1" />
+                            </button>
                           );
                         })}
                       </motion.div>
@@ -335,29 +280,32 @@ export function CraftModal({
 
                     {/* STEP 2 */}
                     {step === 2 && (
-                      <motion.div key="s2" custom={dir} variants={slide} initial="enter" animate="center" exit="exit" className="space-y-4">
+                      <motion.div key="s2" custom={dir} variants={slide} initial="enter" animate="center" exit="exit" className="space-y-5">
                         <SelectedBar info={info} canChange={!initialService} onChange={() => go(1)} />
 
-                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-2.5">
-                          {EVENTS.map((ev, i) => (
-                            <Tile key={ev.label} i={i} icon={ev.icon} label={ev.label} on={data.eventType === ev.label && !otherOpen}
-                              onClick={() => { setOtherOpen(false); set("eventType", ev.label); }} />
-                          ))}
-                          <Tile i={EVENTS.length} icon={Pencil} label="Something else" on={otherOpen}
-                            onClick={() => { setOtherOpen(true); if (EVENTS.some((e) => e.label === data.eventType)) set("eventType", ""); }} />
+                        <div>
+                          <span className={labelCls}>What are we celebrating?</span>
+                          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-2.5">
+                            {EVENTS.map((ev) => (
+                              <Tile key={ev.label} icon={ev.icon} label={ev.label} on={data.eventType === ev.label && !otherOpen}
+                                onClick={() => { setOtherOpen(false); set("eventType", ev.label); }} />
+                            ))}
+                            <Tile icon={Pencil} label="Something else" on={otherOpen}
+                              onClick={() => { setOtherOpen(true); if (EVENTS.some((e) => e.label === data.eventType)) set("eventType", ""); }} />
+                          </div>
                         </div>
 
                         <AnimatePresence initial={false}>
                           {otherOpen && (
-                            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden px-1 pb-2 pt-1">
+                            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden px-1 pb-1 pt-1">
                               <Field icon={Pencil} label="Tell us what it is" valid={data.eventType.trim().length > 1}>
-                                <input autoFocus type="text" value={data.eventType} onChange={(e) => set("eventType", e.target.value)} placeholder="e.g. Graduation party, Eid dinner…" className={inputCls} />
+                                <input autoFocus type="text" value={data.eventType} onChange={(e) => set("eventType", e.target.value)} placeholder="e.g. Graduation party, Eid dinner" className={inputCls} />
                               </Field>
                             </motion.div>
                           )}
                         </AnimatePresence>
 
-                        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                           <Field icon={User} label="Your name" valid={data.name.trim().length > 1}>
                             <input type="text" autoComplete="name" value={data.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Sarah Ahmed" className={inputCls} />
                           </Field>
@@ -367,7 +315,7 @@ export function CraftModal({
                         </div>
 
                         <NavRow onBack={initialService ? undefined : () => go(1)} nextLabel="Continue" disabled={!canContinue} />
-                        {!canContinue && <p className="-mt-2 text-center text-xs font-semibold text-slate-700">Pick an event and add your name and number to continue.</p>}
+                        {!canContinue && <p className="-mt-2 text-center text-xs text-stone-600">Pick an event and add your name and number to continue.</p>}
                       </motion.div>
                     )}
 
@@ -379,133 +327,122 @@ export function CraftModal({
                         <div>
                           <span className={labelCls}>How fast do you need it?</span>
                           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            {TIMELINES.map((t, i) => (
-                              <Tile key={t.value} row i={i} icon={t.icon} label={t.label} sub={t.sub} on={data.timeline === t.value} onClick={() => set("timeline", t.value)} />
+                            {TIMELINES.map((t) => (
+                              <Tile key={t.value} row icon={t.icon} label={t.label} sub={t.sub} on={data.timeline === t.value} onClick={() => set("timeline", t.value)} />
                             ))}
                           </div>
-                          <p className="mt-2 text-xs font-semibold text-slate-800">
+                          <p className="mt-2 text-xs text-stone-600">
                             {days !== null && days >= 0 && days <= 21
-                              ? `Your date is only ${days} days away, so a faster lane will keep you safe.`
+                              ? `Your date is only ${days} days away, so a faster option is safer.`
                               : `Typical for ${info.name}: ${info.timeline}.`}
                           </p>
                         </div>
 
-                        <NavRow onBack={() => go(2)} nextLabel={data.eventDate ? "Lock it in" : "Skip for now"} />
+                        <NavRow onBack={() => go(2)} nextLabel={data.eventDate ? "Continue" : "Skip for now"} />
                       </motion.div>
                     )}
 
                     {/* STEP 4 */}
                     {step === 4 && (
-                      <motion.div key="s4" custom={dir} variants={slide} initial="enter" animate="center" exit="exit" className="space-y-5">
+                      <motion.div key="s4" custom={dir} variants={slide} initial="enter" animate="center" exit="exit" className="space-y-6">
                         <div>
-                          <span className={labelCls}>Pick a palette</span>
+                          <span className={labelCls}>Colour palette</span>
                           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-2.5">
-                            {PALETTES.map((p, i) => {
+                            {PALETTES.map((p) => {
                               const on = data.palette === p.name;
                               return (
-                                <motion.button
+                                <button
                                   key={p.name} type="button" aria-pressed={on} onClick={() => set("palette", on ? "" : p.name)}
-                                  initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04, type: "spring", damping: 20, stiffness: 260 }}
-                                  whileHover={{ y: -3 }} whileTap={{ scale: 0.95 }}
-                                  className={`relative rounded-2xl border p-2 text-left transition-all ${focusRing} ${on ? "border-orange-700 bg-white shadow-[0_14px_28px_-12px_rgba(249,115,22,0.9)] ring-2 ring-orange-500" : idleTile}`}
+                                  className={cn("relative rounded-xl border p-2 text-left transition-colors", focusRing, on ? "border-[#1c1410] bg-white ring-1 ring-[#1c1410]" : idleTile)}
                                 >
-                                  <span className="block h-12 rounded-xl" style={{ backgroundImage: `linear-gradient(120deg, ${p.c[0]} 0%, ${p.c[1]} 55%, ${p.c[2]} 100%)` }} />
-                                  <span className="mt-1.5 block text-xs font-bold leading-tight text-slate-900">{p.name}</span>
-                                  {on && <><CheckBadge /><Pop /></>}
-                                </motion.button>
+                                  <span className="block h-12 rounded-lg" style={{ backgroundImage: `linear-gradient(120deg, ${p.c[0]} 0%, ${p.c[1]} 55%, ${p.c[2]} 100%)` }} />
+                                  <span className="mt-1.5 block text-xs font-semibold leading-tight">{p.name}</span>
+                                  {on && <CheckBadge />}
+                                </button>
                               );
                             })}
                           </div>
                         </div>
 
                         <div>
-                          <span className={labelCls}>Pick a style</span>
+                          <span className={labelCls}>Style</span>
                           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                            {STYLES.map((s, i) => (
-                              <Tile key={s.label} row i={i} icon={s.icon} label={s.label} on={data.style === s.label} onClick={() => set("style", data.style === s.label ? "" : s.label)} />
+                            {STYLES.map((s) => (
+                              <Tile key={s.label} row icon={s.icon} label={s.label} on={data.style === s.label} onClick={() => set("style", data.style === s.label ? "" : s.label)} />
                             ))}
                           </div>
                         </div>
 
                         <div>
-                          <div className="mb-1.5 flex items-center justify-between gap-2">
-                            <span className="text-[13px] font-extrabold text-slate-800">Power-ups <span className="ml-1 rounded-full bg-[#232b57] px-2 py-0.5 text-[11px] text-orange-200">{data.features.length} on</span></span>
-                            <Pill on={false} onClick={() => set("features", Array.from(new Set([...data.features, ...popularFor(data.eventType)])))}>
-                              <Star className="h-3.5 w-3.5" /> Add the popular ones
-                            </Pill>
-                          </div>
+                          <span className={labelCls}>Features ({data.features.length} selected)</span>
                           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-2.5">
-                            {FEATURES.map((f, i) => (
-                              <Tile key={f.label} i={i} icon={f.icon} label={f.label} on={data.features.includes(f.label)}
-                                badge={popularFor(data.eventType).includes(f.label) ? "Popular" : undefined} onClick={() => toggleFeature(f.label)} />
+                            {FEATURES.map((f) => (
+                              <Tile key={f.label} icon={f.icon} label={f.label} on={data.features.includes(f.label)} onClick={() => toggleFeature(f.label)} />
                             ))}
                           </div>
                         </div>
 
-                        <NavRow onBack={() => go(3)} nextLabel="Almost there" />
+                        <NavRow onBack={() => go(3)} nextLabel="Continue" />
                       </motion.div>
                     )}
 
                     {/* STEP 5 */}
                     {step === 5 && (
                       <motion.div key="s5" custom={dir} variants={slide} initial="enter" animate="center" exit="exit" className="space-y-5">
-                        {/* live site preview */}
-                        <div className="overflow-hidden rounded-2xl border border-orange-900/15 bg-white/70 shadow-sm">
-                          <div className="flex items-center gap-2 bg-[#232b57] px-3 py-2">
-                            <span className="flex gap-1">{["#fb7185", "#fbbf24", "#34d399"].map((c) => <i key={c} className="h-2 w-2 rounded-full" style={{ background: c }} />)}</span>
+                        <div className="overflow-hidden rounded-xl border border-black/[0.08] bg-white/70">
+                          <div className="flex items-center gap-2 bg-[#1c1410] px-3 py-2">
+                            <span className="flex gap-1">{["#fb7185", "#fbbf24", "#34d399"].map((c) => <i key={c} className="size-2 rounded-full" style={{ background: c }} />)}</span>
                             <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white">
-                              <Lock className="h-3 w-3 shrink-0 text-emerald-300" />
+                              <Lock className="size-3 shrink-0 text-emerald-300" />
                               <span className="truncate">{data.domain || "yourname.com"}</span>
-                              <motion.i animate={{ opacity: [1, 0, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="h-3 w-px shrink-0 bg-orange-300" />
                             </div>
                           </div>
                           <div
                             className="relative grid h-24 place-items-center text-center text-white"
-                            style={{ backgroundImage: palette ? `linear-gradient(120deg, ${palette.c[0]}, ${palette.c[1]}, ${palette.c[2]})` : SUN }}
+                            style={{ backgroundImage: palette ? `linear-gradient(120deg, ${palette.c[0]}, ${palette.c[1]}, ${palette.c[2]})` : "linear-gradient(120deg,#44403c,#1c1410)" }}
                           >
                             <span className="absolute inset-0 bg-black/30" />
                             <div className="relative px-4">
-                              <p className="font-[family-name:var(--font-display)] text-lg font-extrabold sm:text-xl">{first ? `${first}'s ${data.eventType || "celebration"}` : "Your celebration"}</p>
-                              <p className="text-xs font-semibold">{data.eventDate ? prettyDate(data.eventDate) : "Date to be announced"}</p>
+                              <p className="font-[family-name:var(--font-display)] text-lg font-bold sm:text-xl">{first ? `${first}'s ${data.eventType || "celebration"}` : "Your celebration"}</p>
+                              <p className="text-xs font-medium">{data.eventDate ? prettyDate(data.eventDate) : "Date to be announced"}</p>
                             </div>
                           </div>
                         </div>
 
                         <div>
-                          <Field icon={Globe} label="Pick your web address" valid={data.domain.includes(".")}>
+                          <Field icon={Globe} label="Preferred web address" valid={data.domain.includes(".")}>
                             <input type="text" value={data.domain} onChange={(e) => { setDomainHelp(false); set("domain", e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, "")); }} placeholder="e.g. sarahandali.com" className={inputCls} />
                           </Field>
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {TLDS.map((t) => <Pill key={t} on={data.domain.endsWith(t)} onClick={() => setTld(t)}>{t}</Pill>)}
-                            {suggestions.map((s) => <Pill key={s} on={data.domain === s} onClick={() => { setDomainHelp(false); set("domain", s); }}><Sparkles className="h-3.5 w-3.5" /> {s}</Pill>)}
-                            <Pill on={domainHelp} onClick={() => { setDomainHelp(!domainHelp); set("domain", ""); }}><Wand2 className="h-3.5 w-3.5" /> Suggest one for me</Pill>
+                            <Pill on={domainHelp} onClick={() => { setDomainHelp(!domainHelp); set("domain", ""); }}>Let the team choose</Pill>
                           </div>
-                          <p className="mt-1.5 text-xs font-medium text-slate-800">We handle the purchase and DNS setup, and confirm the name is available.</p>
+                          <p className="mt-1.5 text-xs text-stone-600">We handle the purchase and DNS setup, and confirm the name is available.</p>
                         </div>
 
                         <div>
                           <span className={labelCls}>Budget (optional)</span>
                           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                            {BUDGETS.map((b, i) => (
-                              <Tile key={b.label} row i={i} icon={b.icon} label={b.label} on={data.budget === b.label} onClick={() => set("budget", data.budget === b.label ? "" : b.label)} />
+                            {BUDGETS.map((b) => (
+                              <Tile key={b.label} row icon={b.icon} label={b.label} on={data.budget === b.label} onClick={() => set("budget", data.budget === b.label ? "" : b.label)} />
                             ))}
                           </div>
                         </div>
 
-                        <div>
-                          <Field tall icon={Sparkles} label="Your story (optional)" valid={data.requirements.trim().length > 10}>
-                            <textarea ref={taRef} rows={3} value={data.requirements} onChange={(e) => set("requirements", e.target.value)} placeholder="Tap a prompt below to get started…" className={`${inputCls} resize-none pt-3.5`} />
-                          </Field>
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {STARTERS.map((s) => <Pill key={s} on={false} onClick={() => addStarter(s)}>{s}</Pill>)}
-                          </div>
-                        </div>
+                        <label className="block">
+                          <span className={labelCls}>Requirements (optional)</span>
+                          <textarea
+                            rows={3} value={data.requirements} onChange={(e) => set("requirements", e.target.value)}
+                            placeholder="Tell us about your event, your guests and anything you want included"
+                            className="w-full resize-none rounded-xl border border-black/[0.1] bg-white/80 px-4 py-3 text-sm text-[#1c1410] outline-none transition placeholder:text-stone-400 hover:border-[#1c1410]/30 focus:border-[#1c1410] focus-visible:ring-2 focus-visible:ring-[#1c1410]/20"
+                          />
+                        </label>
 
                         <Field icon={Link2} label="Inspiration link (optional)" valid={data.references.trim().length > 6}>
                           <input type="text" value={data.references} onChange={(e) => set("references", e.target.value)} placeholder="A Pinterest board or site you love" className={inputCls} />
                         </Field>
 
-                        <NavRow onBack={() => go(4)} nextLabel="Send Request" final loading={isSubmitting} />
+                        <NavRow onBack={() => go(4)} nextLabel="Send request" final loading={isSubmitting} />
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -520,146 +457,108 @@ export function CraftModal({
 }
 
 /* ---------------- building blocks ---------------- */
-function Pop() {
+function CheckBadge() {
   return (
-    <span className="pointer-events-none absolute inset-0" aria-hidden>
-      {Array.from({ length: 10 }).map((_, i) => {
-        const a = (i / 10) * Math.PI * 2;
-        return (
-          <motion.span
-            key={i} className="absolute left-1/2 top-1/2 h-1.5 w-1.5 rounded-full" style={{ background: COLORS[i % COLORS.length] }}
-            initial={{ x: 0, y: 0, opacity: 1, scale: 1 }} animate={{ x: Math.cos(a) * 42, y: Math.sin(a) * 34, opacity: 0, scale: 0.3 }}
-            transition={{ duration: 0.65, ease: "easeOut" }}
-          />
-        );
-      })}
+    <span className="absolute right-1.5 top-1.5 grid size-5 place-items-center rounded-full bg-[#1c1410] text-white ring-2 ring-white">
+      <Check className="size-3" strokeWidth={3} />
     </span>
   );
 }
 
-function CheckBadge() {
-  return (
-    <motion.span initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 400, damping: 15 }}
-      className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-orange-700 text-white shadow">
-      <Check className="h-3 w-3" />
-    </motion.span>
-  );
-}
-
-function Tile({ on, onClick, icon: Ic, label, sub, badge, row, i = 0 }: {
-  on: boolean; onClick: () => void; icon: LucideIcon; label: string; sub?: string; badge?: string; row?: boolean; i?: number;
+function Tile({ on, onClick, icon: Ic, label, sub, row }: {
+  on: boolean; onClick: () => void; icon: LucideIcon; label: string; sub?: string; row?: boolean;
 }) {
   return (
-    <motion.button
+    <button
       type="button" onClick={onClick} aria-pressed={on}
-      initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.035, type: "spring", damping: 20, stiffness: 260 }}
-      whileHover={{ y: -3 }} whileTap={{ scale: 0.95 }}
-      className={`relative flex rounded-2xl border p-2.5 transition-colors sm:p-3 ${row ? "items-center gap-2.5 text-left" : "flex-col items-center gap-2 text-center"} ${on ? selectedTile : idleTile} ${focusRing}`}
+      className={cn(
+        "relative flex rounded-xl border p-2.5 transition-colors sm:p-3",
+        row ? "items-center gap-2.5 text-left" : "flex-col items-center gap-2 text-center",
+        on ? selectedTile : idleTile,
+        focusRing,
+      )}
     >
-      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl transition-colors ${on ? "bg-white/25 text-white" : "bg-orange-500/10 text-orange-700"}`}>
-        <Ic className="h-[18px] w-[18px]" />
+      <span className={cn("grid size-9 shrink-0 place-items-center rounded-lg transition-colors", on ? "bg-white/15 text-white" : "bg-[#1c1410]/[0.06] text-[#1c1410]")}>
+        <Ic className="size-[18px]" />
       </span>
       <span className="min-w-0">
-        <span className="block text-xs font-bold leading-tight sm:text-[13px]">{label}</span>
-        {sub && <span className={`mt-0.5 block text-[11px] font-medium ${on ? "text-white" : "text-slate-700"}`}>{sub}</span>}
+        <span className="block text-xs font-semibold leading-tight sm:text-[13px]">{label}</span>
+        {sub && <span className={cn("mt-0.5 block text-[11px]", on ? "text-white/80" : "text-stone-500")}>{sub}</span>}
       </span>
-      {badge && !on && (
-        <span className="absolute -top-2 right-2 inline-flex items-center gap-1 rounded-full bg-[#232b57] px-2 py-0.5 text-[10px] font-bold text-orange-200">
-          <Star className="h-2.5 w-2.5" /> {badge}
-        </span>
-      )}
-      {on && <><CheckBadge /><Pop /></>}
-    </motion.button>
+      {on && !row && <CheckBadge />}
+    </button>
   );
 }
 
 function Pill({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <motion.button
-      type="button" onClick={onClick} aria-pressed={on} whileTap={{ scale: 0.93 }} whileHover={{ y: -2 }}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-colors sm:text-xs ${focusRing} ${
-        on ? "border-orange-800 bg-[#c2410c] text-white" : "border-orange-900/15 bg-white/70 text-orange-900 hover:border-orange-400 hover:bg-white"
-      }`}
+    <button
+      type="button" onClick={onClick} aria-pressed={on}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors sm:text-xs",
+        focusRing,
+        on ? "border-[#1c1410] bg-[#1c1410] text-white" : "border-black/[0.1] bg-white/70 text-[#1c1410] hover:border-[#1c1410]/30 hover:bg-white",
+      )}
     >
       {children}
-    </motion.button>
+    </button>
   );
 }
 
-function Field({ icon: Ic, label, valid, tall, children }: {
-  icon: LucideIcon; label: string; valid?: boolean; tall?: boolean; children: React.ReactNode;
-}) {
+function Field({ icon: Ic, label, valid, children }: { icon: LucideIcon; label: string; valid?: boolean; children: React.ReactNode }) {
   return (
     <label className="block">
       <span className={labelCls}>{label}</span>
-      <span className="group relative block">
-        <span className={`pointer-events-none absolute left-2 z-10 grid h-8 w-8 place-items-center rounded-xl bg-orange-500/10 text-orange-700 transition-all duration-300 group-focus-within:scale-110 group-focus-within:bg-orange-600 group-focus-within:text-white ${tall ? "top-2.5" : "top-1/2 -translate-y-1/2"}`}>
-          <Ic className="h-4 w-4" />
-        </span>
+      <span className="relative block">
+        <Ic aria-hidden className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-stone-400" />
         {children}
-        <AnimatePresence>
-          {valid && (
-            <motion.span
-              initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0 }}
-              className={`pointer-events-none absolute right-3 grid h-5 w-5 place-items-center rounded-full bg-emerald-700 text-white ${tall ? "top-3.5" : "top-1/2 -translate-y-1/2"}`}
-            >
-              <Check className="h-3 w-3" />
-            </motion.span>
-          )}
-        </AnimatePresence>
+        {valid && (
+          <span className="pointer-events-none absolute right-3 top-1/2 grid size-5 -translate-y-1/2 place-items-center rounded-full bg-[#1c1410] text-white">
+            <Check className="size-3" strokeWidth={3} />
+          </span>
+        )}
       </span>
     </label>
-  );
-}
-
-function Coach({ text }: { text: string }) {
-  return (
-    <div className="flex items-center gap-2.5 rounded-2xl bg-[#232b57] px-3.5 py-3 text-white shadow-lg">
-      <motion.span
-        animate={{ rotate: [0, 14, -8, 0] }} transition={{ duration: 1.4, repeat: Infinity, repeatDelay: 2.5 }}
-        className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-orange-500"
-      >
-        <Wand2 className="h-4 w-4" />
-      </motion.span>
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.p key={text} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }} className="text-[13px] font-semibold leading-snug">
-          {text}
-        </motion.p>
-      </AnimatePresence>
-    </div>
   );
 }
 
 function SelectedBar({ info, canChange, onChange }: { info: (typeof SERVICE_INFO)[Service]; canChange: boolean; onChange: () => void }) {
   const Ic = info.icon;
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-orange-900/15 bg-white/70 p-2.5 text-sm text-slate-900">
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-black/[0.08] bg-white/70 p-2.5 text-sm">
       <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-orange-600 text-white"><Ic className="h-4 w-4" /></span>
-        <b>{info.name}</b>
-        <span className="flex items-center gap-1 text-xs font-semibold text-slate-700"><Clock className="h-3.5 w-3.5" /> {info.timeline}</span>
+        <span className="grid size-7 place-items-center rounded-lg bg-[#1c1410] text-white"><Ic className="size-4" /></span>
+        <b className="font-semibold">{info.name}</b>
+        <span className="flex items-center gap-1 text-xs text-stone-600"><Clock className="size-3.5" /> {info.timeline}</span>
       </span>
-      {canChange && <button type="button" onClick={onChange} className={`shrink-0 rounded text-xs font-bold text-orange-800 underline hover:text-orange-950 ${focusRing}`}>Change</button>}
+      {canChange && (
+        <button type="button" onClick={onChange} className={cn("shrink-0 rounded text-xs font-semibold underline underline-offset-4", focusRing)}>
+          Change
+        </button>
+      )}
     </div>
   );
 }
 
 function NavRow({ onBack, nextLabel, disabled, final, loading }: { onBack?: () => void; nextLabel: string; disabled?: boolean; final?: boolean; loading?: boolean }) {
   return (
-    <div className="flex gap-2.5 pt-1 sm:gap-3 sm:pt-2">
+    <div className="flex gap-2.5 pt-1 sm:gap-3">
       {onBack && (
-        <button type="button" onClick={onBack} className={`inline-flex items-center justify-center gap-2 rounded-xl border border-orange-900/15 bg-white/70 px-4 py-3.5 text-sm font-bold text-slate-800 hover:bg-white sm:px-5 sm:py-4 ${focusRing}`}>
-          <ArrowLeft className="h-4 w-4" /> Back
+        <button
+          type="button" onClick={onBack}
+          className={cn("inline-flex items-center justify-center gap-2 rounded-xl border border-[#1c1410]/20 bg-white/70 px-5 py-3 text-sm font-bold text-[#1c1410] transition-colors hover:bg-white", focusRing)}
+        >
+          <ArrowLeft className="size-4" /> Back
         </button>
       )}
       <button
         type="submit" disabled={disabled || loading}
-        className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-3.5 font-bold text-white transition-all hover:scale-[1.01] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 sm:py-4 ${primaryBtn} ${focusRing}`}
+        className={cn("flex flex-1 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50", darkBtn, focusRing)}
       >
         {loading ? (
-          <span className="flex items-center gap-2"><span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> Connecting to WhatsApp...</span>
+          <span className="flex items-center gap-2"><span className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> Opening WhatsApp</span>
         ) : (
-          <>{final && <MessageCircle className="h-5 w-5" />} {nextLabel} <ArrowRight className="h-5 w-5" /></>
+          <>{final && <MessageCircle className="size-4" />} {nextLabel} <ArrowRight className="size-4" /></>
         )}
       </button>
     </div>
@@ -687,28 +586,28 @@ function Calendar({ value, onChange }: { value: string; onChange: (v: string) =>
   };
 
   const days = value ? daysUntil(value) : null;
-  const navBtn = `grid h-9 w-9 place-items-center rounded-full bg-white text-orange-800 shadow transition-all hover:scale-110 disabled:opacity-30 disabled:hover:scale-100 ${focusRing}`;
+  const navBtn = cn("grid size-9 place-items-center rounded-full border border-black/[0.08] bg-white transition-colors hover:bg-[#1c1410] hover:text-white disabled:opacity-30 disabled:hover:bg-white disabled:hover:text-inherit", focusRing);
 
   return (
-    <div className="rounded-3xl border border-orange-900/15 bg-white/60 p-3 shadow-[0_18px_40px_-24px_rgba(154,52,18,0.5)] backdrop-blur sm:p-4">
+    <div className="rounded-2xl border border-black/[0.08] bg-white/60 p-3 sm:p-4">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-[15px] font-extrabold text-slate-900">
-          <span className="grid h-8 w-8 place-items-center rounded-xl bg-orange-600 text-white"><CalendarDays className="h-4 w-4" /></span>
+        <span className="flex items-center gap-2 text-[15px] font-bold">
+          <span className="grid size-8 place-items-center rounded-lg bg-[#1c1410] text-white"><CalendarDays className="size-4" /></span>
           {view.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
         </span>
         <span className="flex gap-2">
-          <button type="button" aria-label="Previous month" disabled={!canPrev} onClick={() => go(-1)} className={navBtn}><ChevronLeft className="h-4 w-4" /></button>
-          <button type="button" aria-label="Next month" onClick={() => go(1)} className={navBtn}><ChevronRight className="h-4 w-4" /></button>
+          <button type="button" aria-label="Previous month" disabled={!canPrev} onClick={() => go(-1)} className={navBtn}><ChevronLeft className="size-4" /></button>
+          <button type="button" aria-label="Next month" onClick={() => go(1)} className={navBtn}><ChevronRight className="size-4" /></button>
         </span>
       </div>
 
-      <div className="grid grid-cols-7 text-center text-xs font-bold text-orange-800">
+      <div className="grid grid-cols-7 text-center text-xs font-semibold text-stone-500">
         {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <span key={i} className="py-1">{d}</span>)}
       </div>
 
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
-          key={toISO(view)} initial={{ opacity: 0, x: dir * 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: dir * -24 }} transition={{ duration: 0.16 }}
+          key={toISO(view)} initial={{ opacity: 0, x: dir * 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: dir * -20 }} transition={{ duration: 0.16 }}
           className="grid grid-cols-7 gap-1"
         >
           {cells.map((day, i) => {
@@ -721,16 +620,14 @@ function Calendar({ value, onChange }: { value: string; onChange: (v: string) =>
             return (
               <button
                 key={i} type="button" disabled={past} aria-pressed={sel} aria-label={prettyDate(iso)} onClick={() => onChange(iso)}
-                className={`relative aspect-square rounded-xl text-sm font-bold transition-colors ${focusRing} ${
-                  sel ? "text-white" : past ? "cursor-not-allowed text-slate-400" : "text-slate-900 hover:bg-orange-500/15"
-                } ${isToday && !sel ? "ring-2 ring-orange-500/70" : ""}`}
-              >
-                {sel && (
-                  <motion.span layoutId="day-pill" transition={{ type: "spring", damping: 22, stiffness: 320 }}
-                    className="absolute inset-0 rounded-xl bg-gradient-to-b from-[#f97316] to-[#c2410c] shadow-[0_8px_18px_-8px_rgba(194,65,12,0.9)]" />
+                className={cn(
+                  "relative aspect-square rounded-lg text-sm font-semibold transition-colors",
+                  focusRing,
+                  sel ? "bg-[#1c1410] text-white" : past ? "cursor-not-allowed text-stone-300" : "hover:bg-[#1c1410]/[0.07]",
+                  isToday && !sel && "ring-1 ring-[#1c1410]/50",
                 )}
-                <span className="relative">{day}</span>
-                {sel && <Pop />}
+              >
+                {day}
               </button>
             );
           })}
@@ -744,11 +641,9 @@ function Calendar({ value, onChange }: { value: string; onChange: (v: string) =>
         <Pill on={!value} onClick={() => onChange("")}>Not decided yet</Pill>
       </div>
 
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.p key={value || "none"} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-2.5 text-[13px] font-bold text-slate-900">
-          {value && days !== null ? `${prettyDate(value)}. ${daysLabel(days)}.` : "No date yet. That's fine, we can plan around it."}
-        </motion.p>
-      </AnimatePresence>
+      <p className="mt-2.5 text-[13px] font-medium">
+        {value && days !== null ? `${prettyDate(value)}. ${daysLabel(days)}.` : "No date yet. That's fine, we can plan around it."}
+      </p>
     </div>
   );
 }

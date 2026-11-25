@@ -137,7 +137,7 @@ const FOOTER_LINKS: Record<"product" | "company" | "legal", FooterLinkItem[]> =
     ],
     company: [
       { label: "Our ethos", href: "/ethos" },
-      { label: "The concierge", href: "/concierge" },
+      { label: "The craft", href: "/craft" },
       { label: "Designers", href: "/ethos#designers" },
     ],
     legal: [

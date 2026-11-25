@@ -81,7 +81,7 @@ export const metadata: Metadata = {
 
 export default function CraftPage() {
   return (
-    <main className="min-h-screen w-full bg-[#fdeadb]">
+    <main className="min-h-screen w-full">
       <CraftClient />
     </main>
   );
