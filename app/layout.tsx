@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toast";
 import { SmoothScroll } from "@/components/providers/SmoothScroll";
 import { PublicShell } from "@/components/public/sections/PublicShell";
 import { CustomCursor } from "@/components/providers/CustomCursor";
+import { Suspense } from "react";
 
 const display = Bricolage_Grotesque({
   subsets: ["latin"],
@@ -40,25 +41,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         suppressHydrationWarning
         className="flex min-h-full flex-col bg-background font-[family-name:var(--font-body)] text-foreground selection:bg-orange-500/25 selection:text-orange-900 cursor-default"
       >
-          {/* 
-            2. SmoothScroll — Lenis scroll hijacking, only active on the page body.
-          */}
+        <Suspense fallback={null}>
           <SmoothScroll>
-            {/* 
-              3. PublicShell — conditionally renders Navbar + Footer
-                 (hidden on /admin, /dashboard, /login, /register).
-            */}
             <PublicShell>{children}</PublicShell>
           </SmoothScroll>
+        </Suspense>
 
-        {/* 
-          4. Global UI overlays — these intentionally sit OUTSIDE AppWrapper
-             so they don't flash during loading, but stay mounted for the whole app lifecycle.
-             - CustomCursor: pointer-following orange dot, z-index ~9999
-             - Toaster: toast notifications, z-index ~50
-             Both are below AppLoader's z-[999999], so the loader wipe covers them.
-        */}
-        <CustomCursor />
+        <Suspense fallback={null}>
+          <CustomCursor />
+        </Suspense>
         <Toaster />
       </body>
     </html>

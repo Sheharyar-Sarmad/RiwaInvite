@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { CheckoutFailClient } from "@/components/user/sections/checkout/CheckoutFailClient";
 import settings from "@/config/settings_config";
+import { Suspense } from "react";
 
 const config = settings();
 
@@ -72,16 +73,22 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function FailPage({ 
-  searchParams 
-}: { 
-  searchParams: Promise<{ orderId?: string }> 
-}) {
-  const resolvedParams = await searchParams;
+type FailSearchParams = Promise<{ orderId?: string }>;
 
-  if (!resolvedParams.orderId) {
+async function FailContent({ searchParams }: { searchParams: FailSearchParams }) {
+  const { orderId } = await searchParams;
+
+  if (!orderId) {
     redirect("/");
   }
 
-  return <CheckoutFailClient orderId={resolvedParams.orderId} />;
+  return <CheckoutFailClient orderId={orderId} />;
+}
+
+export default function FailPage({ searchParams }: { searchParams: FailSearchParams }) {
+  return (
+    <Suspense fallback={<div className="min-h-[60vh]" aria-busy="true" />}>
+      <FailContent searchParams={searchParams} />
+    </Suspense>
+  );
 }
