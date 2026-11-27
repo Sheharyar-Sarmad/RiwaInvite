@@ -10,8 +10,22 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
   // Prevents GSAP from recalculating on mobile URL bar resize (fixes iOS jump)
-  ScrollTrigger.config({ ignoreMobileResize: true }); 
+  ScrollTrigger.config({ ignoreMobileResize: true });
 }
+
+/**
+ * Anything matching these selectors scrolls natively and is ignored by Lenis.
+ * Covers custom modals (data-lenis-prevent / role="dialog" / aria-modal)
+ * and Radix portals (Dialog, Popper, ScrollArea) that render into document.body.
+ */
+const LENIS_PREVENT_SELECTOR = [
+  "[data-lenis-prevent]",
+  '[role="dialog"]',
+  '[role="alertdialog"]',
+  '[aria-modal="true"]',
+  "[data-radix-popper-content-wrapper]",
+  "[data-radix-scroll-area-viewport]",
+].join(", ");
 
 /**
  * Custom Event: 'lenis:lock' to stop scrolling, 'lenis:unlock' to resume.
@@ -122,6 +136,8 @@ export function SmoothScroll({ children }: { children: React.ReactNode }) {
       touchMultiplier: 1.5, // Native feel on mobile
       smoothWheel: !reduce, // Respect OS accessibility
       syncTouch: true, // CRITICAL: Stops iOS Safari momentum from fighting Lenis
+      // Let native scrolling work inside any modal / dialog / marked container
+      prevent: (node: HTMLElement) => !!node.closest(LENIS_PREVENT_SELECTOR),
     }),
     [reduce],
   );
