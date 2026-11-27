@@ -1,39 +1,45 @@
-import postgres from 'postgres';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import settings from '@/config/settings_config';
+
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
+import settings from "@/config/settings_config";
 
 const config = settings();
 
-const globalForPostgres = globalThis as unknown as {
-  pgPool: ReturnType<typeof postgres> | undefined;
-  pgDb: ReturnType<typeof drizzle> | undefined;
+const globalForPostgres = globalThis as typeof globalThis & {
+  pgPool?: ReturnType<typeof postgres>;
+  pgDb?: ReturnType<typeof drizzle>;
 };
 
+// Preserve the existing pool configuration.
+// Maximum of 5 connections per Node.js process.
+const requestedMax = Number(config.dbPoolMax ?? 3);
+
+const POOL_MAX = Number.isFinite(requestedMax)
+  ? Math.max(1, Math.min(Math.floor(requestedMax), 5))
+  : 3;
+
 function createPool() {
-  // This log will only show if a genuinely new pool is created
-  if (config.appPhase !== 'production') {
-    console.log(`[Postgres] Initializing connection pool (PID: ${process.pid})`);
-  }
+  console.log(
+    `[Postgres] Creating pool (PID: ${process.pid}, max: ${POOL_MAX})`
+  );
 
   return postgres(config.postgresUrl, {
-    max: config.dbPoolMax ?? 50,
-    idle_timeout: 30,       // Keep connections open for 30s to avoid rapid reconnects
-    connect_timeout: 30,    // Give Neon time to wake up from sleep
-    prepare: false,         // CRITICAL for Neon
+    max: POOL_MAX,
+    idle_timeout: 20,
+    connect_timeout: 15,
+    max_lifetime: 60 * 10,
+    prepare: false,
   });
 }
 
-// 1. Export the singleton
-export const sql = globalForPostgres.pgPool ?? createPool();
-export const dbClient = globalForPostgres.pgDb ?? drizzle(sql, { logger: false });
+// Reuse the existing pool across API routes and development HMR.
+export const sql =
+  globalForPostgres.pgPool ??
+  (globalForPostgres.pgPool = createPool());
 
-// 2. Save to global so Turbopack HMR doesn't recreate it
-globalForPostgres.pgPool = sql;
-globalForPostgres.pgDb = dbClient;
-
-// 3. Test connection ONCE on boot
-if (!globalForPostgres.pgPool) {
-  sql`SELECT 1`
-    .then(() => console.log('[Postgres] Connected successfully.'))
-    .catch((err) => console.error('[Postgres] Connection failed:', err.message));
-}
+// Reuse the existing Drizzle instance.
+export const dbClient =
+  globalForPostgres.pgDb ??
+  (globalForPostgres.pgDb = drizzle(sql, {
+    logger: false,
+  }));

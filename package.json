@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "assets:optimize": "node scripts/optimize-public-images.mjs",
+    "assets:optimize:images": "node scripts/optimize-public-images.mjs",
+    "assets:optimize:videos": "node scripts/optimize-public-videos.mjs"
   },
   "dependencies": {
     "@ai-sdk/groq": "^4.0.72",
@@ -79,6 +82,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "postgres": "^3.4.9",
+    "sharp": "^0.35.5",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

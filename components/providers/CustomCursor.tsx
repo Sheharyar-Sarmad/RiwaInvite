@@ -1,12 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
-import { motion, useMotionValue, useReducedMotion, useSpring } from "framer-motion";
 
 /* Lite cursor: dot + ring + soft glow + I-beam + click ripple + tiny on-demand sparkles.
-   No blend modes, no backdrop blur, no always-on animation loop. */
+   No blend modes, no backdrop blur, no always-on animation loop.
+
+   Perf notes:
+   - Gating component is tiny and renders nothing on touch / coarse pointers / hidden routes.
+   - No Framer Motion, no React state during pointer activity: transforms are written
+     straight to the DOM from ONE rAF loop that only runs while something is moving.
+   - State changes (hover, press, text, label) are data-attributes styled with CSS transitions.
+   - Canvas is created/sized lazily on first sparkle and resized at most once per frame. */
 
 const HIDDEN_ROUTES: string[] = ["/preview"];
 
@@ -31,156 +36,282 @@ html.has-fairy-cursor:root,
 html.has-fairy-cursor:root *:not(#fc-x),
 html.has-fairy-cursor:root *:not(#fc-x)::before,
 html.has-fairy-cursor:root *:not(#fc-x)::after { cursor: none !important; }
+
+#fc-root #fc-glow { opacity: 0; }
+#fc-root[data-visible] #fc-glow { opacity: 1; }
+
+#fc-root #fc-ring {
+  opacity: 0; transform: scale(1);
+  background-color: rgba(${ORANGE},0); border-color: rgba(${ORANGE},0.55);
+  transition: transform .45s cubic-bezier(.34,1.56,.64,1), background-color .25s, border-color .25s, opacity .2s;
+}
+#fc-root[data-visible]:not([data-text]) #fc-ring { opacity: 1; }
+#fc-root[data-hover] #fc-ring { transform: scale(1.6); background-color: rgba(${ORANGE},0.14); border-color: rgba(${ORANGE},0.85); }
+#fc-root[data-label] #fc-ring { transform: scale(1.3); background-color: rgba(${ORANGE},0.14); border-color: rgba(${ORANGE},0.85); }
+#fc-root[data-pressed] #fc-ring { transform: scale(.78); background-color: rgba(${ORANGE},0.22); border-color: rgba(${ORANGE},0.95); }
+
+#fc-root #fc-label {
+  opacity: 0; transform: translateX(-6px) scale(.85);
+  transition: opacity .2s, transform .45s cubic-bezier(.34,1.56,.64,1);
+}
+#fc-root[data-visible][data-label] #fc-label { opacity: 1; transform: translateX(0) scale(1); }
+
+#fc-root #fc-ibeam { opacity: 0; transition: opacity .2s; }
+#fc-root[data-visible][data-text] #fc-ibeam { opacity: 1; }
+
+#fc-root #fc-dot { opacity: 0; transform: scale(1); transition: opacity .2s, transform .35s cubic-bezier(.34,1.56,.64,1); }
+#fc-root[data-visible]:not([data-text]) #fc-dot { opacity: 1; }
+#fc-root[data-hover] #fc-dot, #fc-root[data-label] #fc-dot { transform: scale(.65); }
+#fc-root[data-pressed] #fc-dot { transform: scale(.5); }
+
+#fc-root[data-reduce] #fc-ring, #fc-root[data-reduce] #fc-label,
+#fc-root[data-reduce] #fc-ibeam, #fc-root[data-reduce] #fc-dot { transition-duration: 0s; }
 `;
 
 type P = { x: number; y: number; vx: number; vy: number; life: number; max: number; r: number };
-type Ripple = { id: number; x: number; y: number };
+type SpringCfg = { damping: number; stiffness: number; mass: number };
+type Follower = {
+  x: number; y: number; vx: number; vy: number;
+  tx: number; ty: number;
+  cfg: SpringCfg;
+  snap: boolean; // follow the target exactly (reduced motion)
+  els: (HTMLElement | null)[];
+};
+type Flag = "visible" | "hover" | "pressed" | "text" | "label";
 
-function useFinePointer(): boolean {
-  const [fine, setFine] = useState(false);
+/** Media-query hook that updates state only when the query result changes. */
+function useMedia(query: string): boolean {
+  const [match, setMatch] = useState(false);
   useEffect(() => {
-    const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
-    const update = () => setFine(mq.matches);
+    const mq = window.matchMedia(query);
+    const update = () => setMatch(mq.matches);
     update();
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
-  }, []);
-  return fine;
+  }, [query]);
+  return match;
 }
 
+/** Gate: does nothing (no listeners, no DOM) unless a fine pointer is present on an allowed route. */
 export function CustomCursor() {
   const pathname = usePathname();
-  const reduce = !!useReducedMotion();
-  const finePointer = useFinePointer();
-  const enabled = finePointer && !HIDDEN_ROUTES.some((r) => pathname?.startsWith(r));
+  const fine = useMedia("(hover: hover) and (pointer: fine)");
+  const reduce = useMedia("(prefers-reduced-motion: reduce)");
+  const enabled = fine && !HIDDEN_ROUTES.some((r) => pathname?.startsWith(r));
+  if (!enabled) return null;
+  return <CursorImpl reduce={reduce} />;
+}
 
-  const mx = useMotionValue(-1000);
-  const my = useMotionValue(-1000);
-  const dotX = useSpring(mx, DOT_SPRING);
-  const dotY = useSpring(my, DOT_SPRING);
-  const ringX = useSpring(mx, RING_SPRING);
-  const ringY = useSpring(my, RING_SPRING);
-  const glowX = useSpring(mx, GLOW_SPRING);
-  const glowY = useSpring(my, GLOW_SPRING);
-
-  const [visible, setVisible] = useState(false);
-  const [hovering, setHovering] = useState(false);
-  const [pressed, setPressed] = useState(false);
-  const [textMode, setTextMode] = useState(false);
-  const [label, setLabel] = useState("");
-  const [ripples, setRipples] = useState<Ripple[]>([]);
-
+function CursorImpl({ reduce }: { reduce: boolean }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const glowRef = useRef<HTMLDivElement>(null);
+  const ringRef = useRef<HTMLDivElement>(null);
+  const labelRef = useRef<HTMLSpanElement>(null);
+  const ibeamRef = useRef<HTMLDivElement>(null);
+  const dotRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const shown = useRef(false);
-  const rippleId = useRef(0);
-  const lastLabel = useRef("");
-  if (label) lastLabel.current = label;
 
   useEffect(() => {
-    const root = document.documentElement;
+    const root = rootRef.current;
+    if (!root) return;
+    const html = document.documentElement;
 
-    if (!enabled) {
-      root.classList.remove("has-fairy-cursor");
-      shown.current = false;
-      setVisible(false);
-      setHovering(false);
-      setPressed(false);
-      setTextMode(false);
-      setLabel("");
-      setRipples([]);
-      return;
-    }
-
-    root.classList.add("has-fairy-cursor");
+    html.classList.add("has-fairy-cursor");
     const styleEl = document.createElement("style");
     styleEl.textContent = CSS;
     document.head.appendChild(styleEl);
 
-    /* ---- sparkles: the loop only runs while particles exist ---- */
+    /* ---- state flags (data-attributes; no React re-renders) ---- */
+    const flags: Record<Flag, boolean> = {
+      visible: false, hover: false, pressed: false, text: false, label: false,
+    };
+    const setFlag = (k: Flag, v: boolean) => {
+      if (flags[k] === v) return;
+      flags[k] = v;
+      root.toggleAttribute(`data-${k}`, v);
+    };
+    let shown = false;
+    let lastLabelText = "";
+
+    /* ---- springs (same stiffness/damping/mass as before) ---- */
+    const mk = (cfg: SpringCfg, snap: boolean, els: (HTMLElement | null)[]): Follower => ({
+      x: -1000, y: -1000, vx: 0, vy: 0, tx: -1000, ty: -1000, cfg, snap, els,
+    });
+    const dot = mk(DOT_SPRING, reduce, [dotRef.current, ibeamRef.current]);
+    const ring = mk(RING_SPRING, reduce, [ringRef.current]);
+    const glow = mk(GLOW_SPRING, false, [glowRef.current]);
+    const followers = [dot, ring, glow];
+
+    const settled = (f: Follower) =>
+      f.snap
+        ? f.x === f.tx && f.y === f.ty
+        : Math.abs(f.x - f.tx) < 0.05 && Math.abs(f.y - f.ty) < 0.05 &&
+          Math.abs(f.vx) < 0.05 && Math.abs(f.vy) < 0.05;
+
+    const write = (f: Follower) => {
+      const t = `translate3d(${f.x}px,${f.y}px,0)`;
+      for (const el of f.els) if (el) el.style.transform = t;
+    };
+
+    const integrate = (f: Follower, dt: number) => {
+      if (f.snap) {
+        f.x = f.tx;
+        f.y = f.ty;
+        return;
+      }
+      const { stiffness: k, damping: c, mass: m } = f.cfg;
+      const n = Math.max(1, Math.ceil(dt / (1 / 120)));
+      const s = dt / n;
+      for (let i = 0; i < n; i++) {
+        f.vx += ((-k * (f.x - f.tx) - c * f.vx) / m) * s;
+        f.vy += ((-k * (f.y - f.ty) - c * f.vy) / m) * s;
+        f.x += f.vx * s;
+        f.y += f.vy * s;
+      }
+      if (settled(f)) {
+        f.x = f.tx; f.y = f.ty; f.vx = 0; f.vy = 0;
+      }
+    };
+
+    /* ---- sparkles: canvas is created lazily; loop only runs while something moves ---- */
     const canvas = canvasRef.current;
-    const ctx = !reduce && canvas ? canvas.getContext("2d") : null;
+    let ctx: CanvasRenderingContext2D | null = null;
+    let sizeDirty = true;
+    let drawn = false;
     const particles: P[] = [];
-    const timers: number[] = [];
+    const ripples: HTMLSpanElement[] = [];
     let raf = 0;
     let lastT = 0;
     const last = { x: -1000, y: -1000 };
 
-    const resize = () => {
-      if (!canvas) return;
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+    const ensureCtx = () => {
+      if (reduce || !canvas) return null;
+      if (!ctx) ctx = canvas.getContext("2d");
+      if (ctx && sizeDirty) {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        sizeDirty = false;
+      }
+      return ctx;
     };
-    resize();
-    window.addEventListener("resize", resize);
+    const onResize = () => {
+      sizeDirty = true; // applied lazily, at most once per frame / spawn
+    };
+    window.addEventListener("resize", onResize);
 
     const loop = (now: number) => {
       raf = 0;
-      if (!ctx) return;
-      const dt = Math.min(40, now - lastT) / 16.67;
+      const ms = Math.max(0, now - lastT);
       lastT = now;
-      ctx.clearRect(0, 0, canvas!.width, canvas!.height);
 
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.life += dt;
-        if (p.life >= p.max) {
-          particles.splice(i, 1);
-          continue;
-        }
-        p.vx *= 0.97;
-        p.vy = p.vy * 0.97 + 0.04 * dt;
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-        const k = 1 - p.life / p.max;
-        ctx.globalAlpha = k;
-        ctx.fillStyle = `rgb(${ORANGE})`;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r * (0.5 + k), 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#fff7ed";
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r * 0.4, 0, Math.PI * 2);
-        ctx.fill();
+      // springs
+      const sdt = Math.min(0.05, ms / 1000);
+      let moving = false;
+      for (const f of followers) {
+        if (settled(f)) continue;
+        integrate(f, sdt);
+        write(f);
+        if (!settled(f)) moving = true;
       }
-      ctx.globalAlpha = 1;
-      if (particles.length) raf = requestAnimationFrame(loop);
+
+      // particles
+      const c = ensureCtx();
+      if (c && (particles.length || drawn)) {
+        const dt = Math.min(40, ms) / 16.67;
+        c.clearRect(0, 0, canvas!.width, canvas!.height);
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          p.life += dt;
+          if (p.life >= p.max) {
+            particles.splice(i, 1);
+            continue;
+          }
+          p.vx *= 0.97;
+          p.vy = p.vy * 0.97 + 0.04 * dt;
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          const k = 1 - p.life / p.max;
+          c.globalAlpha = k;
+          c.fillStyle = `rgb(${ORANGE})`;
+          c.beginPath();
+          c.arc(p.x, p.y, p.r * (0.5 + k), 0, Math.PI * 2);
+          c.fill();
+          c.fillStyle = "#fff7ed";
+          c.beginPath();
+          c.arc(p.x, p.y, p.r * 0.4, 0, Math.PI * 2);
+          c.fill();
+        }
+        c.globalAlpha = 1;
+        drawn = particles.length > 0;
+      }
+
+      if (moving || particles.length) raf = requestAnimationFrame(loop);
+    };
+
+    const ensureLoop = () => {
+      if (raf) return;
+      lastT = performance.now();
+      raf = requestAnimationFrame(loop);
     };
 
     const spawn = (x: number, y: number, vx: number, vy: number) => {
-      if (!ctx) return;
+      if (!ensureCtx()) return;
       if (particles.length >= MAX_PARTICLES) particles.shift();
       particles.push({ x, y, vx, vy, life: 0, max: 28 + Math.random() * 20, r: 1.4 + Math.random() * 1.6 });
-      if (!raf) {
-        lastT = performance.now();
-        raf = requestAnimationFrame(loop);
-      }
+      ensureLoop();
+    };
+
+    const addRipple = (x: number, y: number) => {
+      const span = document.createElement("span");
+      span.className = "absolute left-0 top-0 rounded-full border-2 border-orange-500/70";
+      span.style.cssText = "width:40px;height:40px;margin:-20px 0 0 -20px;";
+      root.appendChild(span);
+      ripples.push(span);
+      if (ripples.length > 3) ripples.shift()?.remove();
+      const anim = span.animate(
+        [
+          { transform: `translate(${x}px,${y}px) scale(0.3)`, opacity: 0.8 },
+          { transform: `translate(${x}px,${y}px) scale(2.6)`, opacity: 0 },
+        ],
+        { duration: 600, easing: "cubic-bezier(0.16,1,0.3,1)", fill: "forwards" },
+      );
+      anim.onfinish = () => {
+        span.remove();
+        const i = ripples.indexOf(span);
+        if (i >= 0) ripples.splice(i, 1);
+      };
     };
 
     /* ---- listeners ---- */
+    const hide = () => {
+      shown = false;
+      setFlag("visible", false);
+    };
+
     const onMove = (e: PointerEvent) => {
       if (e.pointerType !== "mouse") {
-        shown.current = false;
-        setVisible(false);
+        hide();
         return;
       }
       const { clientX: x, clientY: y } = e;
-      mx.set(x);
-      my.set(y);
+      for (const f of followers) {
+        f.tx = x;
+        f.ty = y;
+      }
 
-      if (!shown.current) {
-        shown.current = true;
+      if (!shown) {
+        shown = true;
         last.x = x;
         last.y = y;
-        dotX.jump(x);
-        dotY.jump(y);
-        ringX.jump(x);
-        ringY.jump(y);
-        glowX.jump(x);
-        glowY.jump(y);
-        setVisible(true);
+        for (const f of followers) {
+          f.x = x; f.y = y; f.vx = 0; f.vy = 0;
+          write(f);
+        }
+        setFlag("visible", true);
         return;
       }
 
+      ensureLoop();
       if (Math.hypot(x - last.x, y - last.y) >= 22) {
         spawn(x, y, (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8);
         last.x = x;
@@ -191,30 +322,32 @@ export function CustomCursor() {
     const onOver = (e: MouseEvent) => {
       const t = e.target;
       if (!(t instanceof Element)) return;
-      setTextMode(!!t.closest(TEXTY));
-      setHovering(!!t.closest(CLICKABLE));
-      setLabel(t.closest<HTMLElement>(LABELLED)?.dataset.cursorLabel ?? "");
+      setFlag("text", !!t.closest(TEXTY));
+      setFlag("hover", !!t.closest(CLICKABLE));
+      const text = t.closest<HTMLElement>(LABELLED)?.dataset.cursorLabel ?? "";
+      if (text && text !== lastLabelText) {
+        lastLabelText = text;
+        if (labelRef.current) labelRef.current.textContent = text;
+      }
+      setFlag("label", text !== "");
     };
 
     const onDown = (e: PointerEvent) => {
       if (e.pointerType !== "mouse") return;
-      setPressed(true);
+      setFlag("pressed", true);
       if (reduce) return;
       for (let i = 0; i < 8; i++) {
         const a = (i / 8) * Math.PI * 2;
         spawn(e.clientX, e.clientY, Math.cos(a) * 2.6, Math.sin(a) * 2.6 - 0.5);
       }
-      const id = ++rippleId.current;
-      setRipples((r) => [...r.slice(-2), { id, x: e.clientX, y: e.clientY }]);
-      timers.push(window.setTimeout(() => setRipples((l) => l.filter((x) => x.id !== id)), 700));
+      addRipple(e.clientX, e.clientY);
     };
 
-    const onUp = () => setPressed(false);
+    const onUp = () => setFlag("pressed", false);
 
     const onLeave = () => {
-      shown.current = false;
-      setVisible(false);
-      setPressed(false);
+      hide();
+      setFlag("pressed", false);
     };
 
     const passive = { passive: true, capture: true } as const;
@@ -224,120 +357,88 @@ export function CustomCursor() {
     window.addEventListener("pointercancel", onUp, passive);
     window.addEventListener("blur", onUp);
     document.addEventListener("mouseover", onOver, { capture: true });
-    document.documentElement.addEventListener("mouseleave", onLeave);
+    html.addEventListener("mouseleave", onLeave);
 
     return () => {
       if (raf) cancelAnimationFrame(raf);
-      timers.forEach((t) => window.clearTimeout(t));
-      root.classList.remove("has-fairy-cursor");
+      ripples.forEach((r) => r.remove());
+      html.classList.remove("has-fairy-cursor");
       styleEl.remove();
-      window.removeEventListener("resize", resize);
+      window.removeEventListener("resize", onResize);
       window.removeEventListener("pointermove", onMove, passive);
       window.removeEventListener("pointerdown", onDown, passive);
       window.removeEventListener("pointerup", onUp, passive);
       window.removeEventListener("pointercancel", onUp, passive);
       window.removeEventListener("blur", onUp);
       document.removeEventListener("mouseover", onOver, { capture: true });
-      document.documentElement.removeEventListener("mouseleave", onLeave);
+      html.removeEventListener("mouseleave", onLeave);
     };
-  }, [enabled, reduce, mx, my, dotX, dotY, ringX, ringY, glowX, glowY]);
+  }, [reduce]);
 
-  if (!enabled) return null;
-
-  const dx = reduce ? mx : dotX;
-  const dy = reduce ? my : dotY;
-  const rx = reduce ? mx : ringX;
-  const ry = reduce ? my : ringY;
-
-  const hasLabel = label !== "";
-  const spring = reduce ? { duration: 0 } : { type: "spring" as const, stiffness: 280, damping: 22 };
-
-  const ringAnim = pressed
-    ? { scale: 0.78, backgroundColor: `rgba(${ORANGE},0.22)`, borderColor: `rgba(${ORANGE},0.95)` }
-    : hovering || hasLabel
-    ? { scale: hasLabel ? 1.3 : 1.6, backgroundColor: `rgba(${ORANGE},0.14)`, borderColor: `rgba(${ORANGE},0.85)` }
-    : { scale: 1, backgroundColor: `rgba(${ORANGE},0)`, borderColor: `rgba(${ORANGE},0.55)` };
-
-  return createPortal(
-    <div aria-hidden className="pointer-events-none fixed inset-0 z-[2147483647]">
-      {/* Soft glow: a small element moved by transform only, so it never repaints */}
-      <motion.div
+  return (
+    <div
+      id="fc-root"
+      ref={rootRef}
+      aria-hidden
+      data-reduce={reduce ? "" : undefined}
+      className="pointer-events-none fixed inset-0 z-[2147483647]"
+    >
+      {/* Soft glow: moved by transform only, so it never repaints */}
+      <div
+        id="fc-glow"
+        ref={glowRef}
         className="absolute left-0 top-0 rounded-full will-change-transform"
         style={{
-          x: glowX,
-          y: glowY,
           width: GLOW,
           height: GLOW,
           marginLeft: -GLOW / 2,
           marginTop: -GLOW / 2,
-          opacity: visible ? 1 : 0,
           background: `radial-gradient(circle, rgba(${ORANGE},0.16), transparent 65%)`,
         }}
       />
 
       {!reduce && <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />}
 
-      {ripples.map((r) => (
-        <motion.span
-          key={r.id}
-          className="absolute left-0 top-0 rounded-full border-2 border-orange-500/70"
-          style={{ x: r.x, y: r.y, width: 40, height: 40, marginLeft: -20, marginTop: -20 }}
-          initial={{ scale: 0.3, opacity: 0.8 }}
-          animate={{ scale: 2.6, opacity: 0 }}
-          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        />
-      ))}
-
       {/* Ring + label */}
-      <motion.div
-        className="absolute left-0 top-0"
-        style={{ x: rx, y: ry, width: RING, height: RING, marginLeft: -RING / 2, marginTop: -RING / 2 }}
+      <div
+        ref={ringRef}
+        className="absolute left-0 top-0 will-change-transform"
+        style={{ width: RING, height: RING, marginLeft: -RING / 2, marginTop: -RING / 2 }}
       >
-        <motion.div
-          initial={false}
-          animate={{ ...ringAnim, opacity: visible && !textMode ? 1 : 0 }}
-          transition={spring}
+        <div
+          id="fc-ring"
           className="h-full w-full rounded-full border-[1.5px] shadow-[0_0_16px_rgba(249,115,22,0.35)]"
         />
-        <motion.span
-          initial={false}
-          animate={{ opacity: visible && hasLabel ? 1 : 0, scale: hasLabel ? 1 : 0.85, x: hasLabel ? 0 : -6 }}
-          transition={spring}
+        <span
+          id="fc-label"
+          ref={labelRef}
           className="absolute left-[34px] top-[22px] whitespace-nowrap rounded-full bg-gradient-to-b from-orange-400 to-orange-600 px-3 py-1 font-[family-name:var(--font-body)] text-xs font-semibold text-white shadow-[0_6px_16px_rgba(249,115,22,0.35)]"
-        >
-          {label || lastLabel.current}
-        </motion.span>
-      </motion.div>
+        />
+      </div>
 
       {/* I-beam over text fields */}
-      <motion.div
-        className="absolute left-0 top-0"
-        style={{ x: dx, y: dy, width: 2, height: 24, marginLeft: -1, marginTop: -12 }}
+      <div
+        ref={ibeamRef}
+        className="absolute left-0 top-0 will-change-transform"
+        style={{ width: 2, height: 24, marginLeft: -1, marginTop: -12 }}
       >
-        <motion.div
-          initial={false}
-          animate={{ opacity: visible && textMode ? 1 : 0 }}
-          transition={spring}
+        <div
+          id="fc-ibeam"
           className="h-full w-full rounded-full bg-orange-500 shadow-[0_0_10px_2px_rgba(249,115,22,0.6)]"
         />
-      </motion.div>
+      </div>
 
       {/* Dot */}
-      <motion.div
-        className="absolute left-0 top-0"
-        style={{ x: dx, y: dy, width: DOT, height: DOT, marginLeft: -DOT / 2, marginTop: -DOT / 2 }}
+      <div
+        ref={dotRef}
+        className="absolute left-0 top-0 will-change-transform"
+        style={{ width: DOT, height: DOT, marginLeft: -DOT / 2, marginTop: -DOT / 2 }}
       >
-        <motion.div
-          initial={false}
-          animate={{
-            opacity: visible && !textMode ? 1 : 0,
-            scale: pressed ? 0.5 : hovering || hasLabel ? 0.65 : 1,
-          }}
-          transition={spring}
+        <div
+          id="fc-dot"
           className="h-full w-full rounded-full bg-orange-500 shadow-[0_0_12px_2px_rgba(249,115,22,0.7)] ring-1 ring-white/90"
         />
-      </motion.div>
-    </div>,
-    document.body,
+      </div>
+    </div>
   );
 }

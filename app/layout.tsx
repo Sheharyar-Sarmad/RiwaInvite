@@ -1,13 +1,26 @@
+
 import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Geist } from "next/font/google";
 import "./globals.css";
-import settings from "@/config/settings_config";
 import { Toaster } from "@/components/ui/toast";
 import { SmoothScroll } from "@/components/providers/SmoothScroll";
 import { PublicShell } from "@/components/public/sections/PublicShell";
 import { CustomCursor } from "@/components/providers/CustomCursor";
 import { Suspense } from "react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+
+export const metadata: Metadata = {
+  title: {
+    default: "RiwaInvite",
+    template: "%s | RiwaInvite",
+  },
+
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
+};
 
 const display = Bricolage_Grotesque({
   subsets: ["latin"],
@@ -21,8 +34,6 @@ const body = Geist({
   display: "swap",
   variable: "--font-body",
 });
-
-const config = settings();
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -51,6 +62,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Suspense fallback={null}>
           <CustomCursor />
         </Suspense>
+
         <Toaster />
         <SpeedInsights />
       </body>

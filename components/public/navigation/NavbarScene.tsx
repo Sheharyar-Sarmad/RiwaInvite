@@ -1,138 +1,27 @@
 "use client";
 
-import { useRef, useMemo, useEffect, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { Float, Environment } from "@react-three/drei";
-import * as THREE from "three";
+import dynamic from "next/dynamic";
+import { useEffect, useRef, useState } from "react";
 
 /**
- * Premium Navbar Backdrop
- * Slow-falling, rotating geometric "diamonds" (Octahedrons) 
- * and soft glowing particles. Elegant, classy, and performance-optimized.
+ * Premium Navbar Backdrop (loader/wrapper)
+ * The Three.js / R3F code lives in NavbarSceneCanvas and is only downloaded
+ * after the navbar is in view AND the browser is idle, so it never competes
+ * with first paint / LCP. Until then the navbar shows the same masked, transparent
+ * layer it always had (just without particles).
  */
-
-// Individual falling element
-function FallingElement({ 
-  position, 
-  speed, 
-  rotationSpeed, 
-  color, 
-  isWireframe 
-}: { 
-  position: [number, number, number]; 
-  speed: number; 
-  rotationSpeed: [number, number]; 
-  color: string; 
-  isWireframe: boolean; 
-}) {
-  const ref = useRef<THREE.Mesh>(null);
-  
-  useFrame((state, delta) => {
-    if (!ref.current) return;
-    // Slow, continuous downward movement
-    ref.current.position.y -= speed * delta;
-    
-    // Gentle rotation
-    ref.current.rotation.x += rotationSpeed[0] * delta;
-    ref.current.rotation.y += rotationSpeed[1] * delta;
-
-    // Reset to top when it falls below the screen
-    if (ref.current.position.y < -5) {
-      ref.current.position.y = 5;
-      // Randomize x position slightly on reset for organic feel
-      ref.current.position.x = (Math.random() - 0.5) * 20;
-    }
-  });
-
-  return (
-    <mesh ref={ref} position={position}>
-      {/* Octahedron looks like a diamond - very premium */}
-      <octahedronGeometry args={[0.15, 0]} />
-      <meshBasicMaterial 
-        color={color} 
-        wireframe={isWireframe} 
-        transparent 
-        opacity={isWireframe ? 0.3 : 0.15} 
-      />
-    </mesh>
-  );
-}
-
-// A soft glowing point light/particle
-function GlowParticle({ position, size, color }: { position: [number, number, number], size: number, color: string }) {
-  const ref = useRef<THREE.Mesh>(null);
-  useFrame((_, delta) => {
-    if (!ref.current) return;
-    ref.current.position.y -= 0.2 * delta;
-    if (ref.current.position.y < -5) ref.current.position.y = 5;
-  });
-
-  return (
-    <mesh ref={ref} position={position}>
-      <sphereGeometry args={[size, 16, 16]} />
-      <meshBasicMaterial color={color} transparent opacity={0.1} />
-    </mesh>
-  );
-}
-
-function Scene() {
-  // Generate a static array of elements so they don't re-render randomly
-  const elements = useMemo(() => {
-    const colors = ["#f97316", "#fb923c", "#fdba74"]; // Orange gradient palette
-    const items = [];
-    
-    // Create 15 floating diamonds
-    for (let i = 0; i < 15; i++) {
-      items.push({
-        type: "diamond" as const,
-        position: [
-          (Math.random() - 0.5) * 20, // spread across X
-          (Math.random() - 0.5) * 10, // spread across Y
-          (Math.random() - 0.5) * 5   // slight Z depth
-        ] as [number, number, number],
-        speed: 0.2 + Math.random() * 0.3,
-        rotationSpeed: [Math.random() * 0.5, Math.random() * 0.5] as [number, number],
-        color: colors[Math.floor(Math.random() * colors.length)],
-        isWireframe: Math.random() > 0.5, // Mix of solid and wireframe
-      });
-    }
-
-    // Create 10 soft glowing background orbs
-    for (let i = 0; i < 10; i++) {
-        items.push({
-            type: "glow" as const,
-            position: [
-              (Math.random() - 0.5) * 25,
-              (Math.random() - 0.5) * 10,
-              -2 // push back
-            ] as [number, number, number],
-            size: 0.1 + Math.random() * 0.2,
-            color: "#f97316",
-        });
-    }
-
-    return items;
-  }, []);
-
-  return (
-    <>
-      <ambientLight intensity={1} />
-      {elements.map((el, i) => {
-        if (el.type === "diamond") {
-          return <FallingElement key={i} {...el} />;
-        }
-        if (el.type === "glow") {
-          return <GlowParticle key={i} position={el.position} size={el.size} color={el.color} />;
-        }
-        return null;
-      })}
-    </>
-  );
-}
+const NavbarSceneCanvas = dynamic(
+  () => import("./NavbarSceneCanvas").then((m) => m.NavbarSceneCanvas),
+  { ssr: false },
+);
 
 export function NavbarScene({ paused = false }: { paused?: boolean }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [load, setLoad] = useState(false); // download + mount the 3D scene (once)
+  const [inView, setInView] = useState(false);
   const [tabHidden, setTabHidden] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [ready, setReady] = useState(false);
 
   // Check for reduced motion preference
   useEffect(() => {
@@ -151,24 +40,64 @@ export function NavbarScene({ paused = false }: { paused?: boolean }) {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
 
+  // Visibility-based activation: load once when first visible (during idle time),
+  // and pause rendering whenever the navbar is scrolled out of view.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    let scheduled = false;
+    let idleId = 0;
+    let timeoutId = 0;
+
+    const arm = () => {
+      if (scheduled) return;
+      scheduled = true;
+      const start = () => setLoad(true);
+      if (typeof window.requestIdleCallback === "function") {
+        idleId = window.requestIdleCallback(start, { timeout: 2000 });
+      } else {
+        timeoutId = window.setTimeout(start, 300);
+      }
+    };
+
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        setInView(entry.isIntersecting);
+        if (entry.isIntersecting) arm();
+      },
+      { rootMargin: "100px" },
+    );
+    io.observe(el);
+
+    return () => {
+      io.disconnect();
+      if (idleId && typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(idleId);
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+  }, []);
+
   // Fade out the edges so it blends perfectly with the navbar
   const fade = "linear-gradient(to right, transparent, black 10%, black 90%, transparent)";
 
+  const frameloop: "always" | "demand" | "never" =
+    paused || tabHidden || !inView ? "never" : reduceMotion ? "demand" : "always";
+
   return (
     <div
+      ref={containerRef}
       aria-hidden
       className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
       style={{ maskImage: fade, WebkitMaskImage: fade }}
     >
-      <Canvas
-        orthographic
-        camera={{ position: [0, 0, 10], zoom: 100 }} // Zoom makes the objects small and subtle
-        dpr={[1, 1.5]}
-        gl={{ alpha: true, antialias: true, powerPreference: "low-power" }}
-        frameloop={paused || tabHidden ? "never" : reduceMotion ? "demand" : "always"}
-      >
-        <Scene />
-      </Canvas>
+      {load && (
+        <div
+          className="absolute inset-0"
+          style={{ opacity: ready ? 1 : 0, transition: "opacity 400ms ease" }}
+        >
+          <NavbarSceneCanvas frameloop={frameloop} onReady={() => setReady(true)} />
+        </div>
+      )}
     </div>
   );
 }

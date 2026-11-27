@@ -1,12 +1,23 @@
+
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["three", "@react-three/fiber", "@react-three/drei"],
+  // Keep these for your Three.js ecosystem if currently required.
+  transpilePackages: [
+    "three",
+    "@react-three/fiber",
+    "@react-three/drei",
+  ],
+
   experimental: {
+    // Development-time feedback for coding agents.
     agentFeedback: true,
   },
+
+  // Cache Components and Partial Prefetching.
   cacheComponents: true,
   partialPrefetching: true,
+
   turbopack: {
     rules: {
       "*.css": {
@@ -15,8 +26,14 @@ const nextConfig: NextConfig = {
       },
     },
   },
+
   images: {
+    // Only allow these image quality values.
     qualities: [75, 90],
+
+    // Serve modern formats through next/image.
+    formats: ["image/avif", "image/webp"],
+
     remotePatterns: [
       {
         protocol: "https",
