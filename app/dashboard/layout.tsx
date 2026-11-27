@@ -1,5 +1,4 @@
 export const instant = false;
-
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { UserShell } from "@/components/user/sections/UserShell";

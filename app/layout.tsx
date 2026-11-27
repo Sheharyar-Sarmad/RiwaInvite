@@ -7,6 +7,7 @@ import { SmoothScroll } from "@/components/providers/SmoothScroll";
 import { PublicShell } from "@/components/public/sections/PublicShell";
 import { CustomCursor } from "@/components/providers/CustomCursor";
 import { Suspense } from "react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const display = Bricolage_Grotesque({
   subsets: ["latin"],
@@ -51,6 +52,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <CustomCursor />
         </Suspense>
         <Toaster />
+        <SpeedInsights />
       </body>
     </html>
   );

@@ -13,11 +13,7 @@ if (typeof window !== "undefined") {
   ScrollTrigger.config({ ignoreMobileResize: true });
 }
 
-/**
- * Anything matching these selectors scrolls natively and is ignored by Lenis.
- * Covers custom modals (data-lenis-prevent / role="dialog" / aria-modal)
- * and Radix portals (Dialog, Popper, ScrollArea) that render into document.body.
- */
+/** Anything matching these scrolls natively and is ignored by Lenis. */
 const LENIS_PREVENT_SELECTOR = [
   "[data-lenis-prevent]",
   '[role="dialog"]',
@@ -27,9 +23,57 @@ const LENIS_PREVENT_SELECTOR = [
   "[data-radix-scroll-area-viewport]",
 ].join(", ");
 
+/** Used to decide whether a body scroll lock is legitimate (a modal is open). */
+const MODAL_SELECTOR = '[role="dialog"], [role="alertdialog"], [aria-modal="true"], [data-scroll-lock]';
+
+const LENIS_CLASSES = ["lenis", "lenis-smooth", "lenis-stopped", "lenis-scrolling"];
+
+/**
+ * Admin routes run without Lenis, so nothing there cleans up a stuck scroll lock.
+ * This guard removes leftover Lenis classes and any orphaned `overflow: hidden`
+ * on <html>/<body> whenever no modal is open. It never touches modal code.
+ */
+function AdminScrollGuard() {
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    let raf = 0;
+
+    const heal = () => {
+      // Leftovers from a Lenis instance that ran on a previous route / hot reload
+      LENIS_CLASSES.forEach((c) => {
+        html.classList.remove(c);
+        body.classList.remove(c);
+      });
+
+      if (document.querySelector(MODAL_SELECTOR)) return; // a modal legitimately owns the lock
+
+      if (body.style.overflow === "hidden") body.style.overflow = "";
+      if (html.style.overflow === "hidden") html.style.overflow = "";
+    };
+
+    const schedule = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(heal);
+    };
+
+    heal();
+
+    const observer = new MutationObserver(schedule);
+    observer.observe(body, { attributes: true, attributeFilter: ["style", "class"], childList: true, subtree: true });
+    observer.observe(html, { attributes: true, attributeFilter: ["style", "class"] });
+
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, []);
+
+  return null;
+}
+
 /**
  * Custom Event: 'lenis:lock' to stop scrolling, 'lenis:unlock' to resume.
- * This is much safer than relying on body { overflow: hidden }
  */
 function LenisManager() {
   const lenis = useLenis();
@@ -67,13 +111,9 @@ function LenisManager() {
       });
     };
 
-    // Refresh on route change
     refresh();
-
-    // Refresh on window resize
     window.addEventListener("resize", refresh);
 
-    // Refresh when the body height changes (e.g., data loaded, accordion opened)
     resizeObserverRef.current = new ResizeObserver(() => refresh());
     resizeObserverRef.current.observe(document.body);
 
@@ -84,7 +124,7 @@ function LenisManager() {
     };
   }, [lenis, pathname]);
 
-  // 3. The Bulletproof Self-Healing Scroll Lock
+  // 3. Self-healing scroll lock
   useEffect(() => {
     if (!lenis) return;
 
@@ -95,22 +135,16 @@ function LenisManager() {
       if (lenis.isStopped) lenis.start();
     };
 
-    // Listen for custom events (dispatch these when modals open/close)
     window.addEventListener("lenis:lock", handleLock);
     window.addEventListener("lenis:unlock", handleUnlock);
 
-    // Failsafe: If React leaves body overflow hidden, but no modal exists, clean it up
     const cleanupOverflow = () => {
-      if (
-        document.body.style.overflow === "hidden" &&
-        !document.querySelector('[role="dialog"], [aria-modal="true"], [data-scroll-lock]')
-      ) {
+      if (document.body.style.overflow === "hidden" && !document.querySelector(MODAL_SELECTOR)) {
         document.body.style.overflow = "";
         handleUnlock();
       }
     };
 
-    // Observe DOM changes to auto-clean orphaned locks
     const observer = new MutationObserver(cleanupOverflow);
     observer.observe(document.body, { attributes: true, attributeFilter: ["style"] });
 
@@ -128,22 +162,28 @@ export function SmoothScroll({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const reduce = !!useReducedMotion();
 
-  // 50M SaaS Config: Slow, buttery lerp + optimized touch handling
   const options = useMemo(
     () => ({
-      lerp: 0.08, // Buttery smooth (lower = smoother, 0.08 is perfect for SaaS)
-      wheelMultiplier: 0.9, // Slightly dampened mouse wheel for control
-      touchMultiplier: 1.5, // Native feel on mobile
-      smoothWheel: !reduce, // Respect OS accessibility
-      syncTouch: true, // CRITICAL: Stops iOS Safari momentum from fighting Lenis
-      // Let native scrolling work inside any modal / dialog / marked container
+      lerp: 0.08,
+      wheelMultiplier: 0.9,
+      touchMultiplier: 1.5,
+      smoothWheel: !reduce,
+      syncTouch: true,
+      // Native scrolling inside any modal / dialog / marked container
       prevent: (node: HTMLElement) => !!node.closest(LENIS_PREVENT_SELECTOR),
     }),
     [reduce],
   );
 
-  // Optional: Skip smooth scroll in the Admin Panel (where scrolling fast matters more)
-  if (pathname?.startsWith("/admin")) return <>{children}</>;
+  // Admin panel: no Lenis, but keep native scrolling healthy
+  if (pathname?.startsWith("/admin")) {
+    return (
+      <>
+        <AdminScrollGuard />
+        {children}
+      </>
+    );
+  }
 
   return (
     <ReactLenis root options={options}>
