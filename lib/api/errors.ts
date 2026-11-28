@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { STATUS_CODE } from "../status_codes"; // adjust path
+import { STATUS_CODE } from "../status_codes";
 
 type PgError = { code?: string; constraint?: string; detail?: string };
 
@@ -20,7 +20,7 @@ export function pgErrorToResponse(err: unknown) {
     return errorResponse(
       STATUS_CODE.CONFLICT,
       "CONFLICT",
-      "This plan is referenced by existing subscriptions and cannot be removed. Deactivate it instead.",
+      "This record is linked to other data and cannot be changed or removed. Remove or reassign the related records first.",
       { constraint: e.constraint }
     );
   }

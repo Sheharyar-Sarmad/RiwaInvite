@@ -597,3 +597,101 @@ CREATE TABLE IF NOT EXISTS subscription_template_unlocks (
 
 CREATE INDEX IF NOT EXISTS idx_sub_unlocks_user_created ON subscription_template_unlocks (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sub_unlocks_template     ON subscription_template_unlocks (template_id);
+
+
+BEGIN;
+
+-- Subscription trigger: only validate rows that are themselves live, and lock per user.
+CREATE OR REPLACE FUNCTION enforce_single_active_subscription()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.status <> 'active' OR NEW.expires_at <= NOW() THEN RETURN NEW; END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended('sub:' || NEW.user_id::text, 0));
+  IF EXISTS (SELECT 1 FROM user_subscriptions
+             WHERE user_id = NEW.user_id AND status = 'active'
+               AND expires_at > NOW() AND id <> NEW.id) THEN
+    RAISE EXCEPTION 'SINGLE_ACTIVE_SUBSCRIPTION: user already has a live subscription.';
+  END IF;
+  RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+
+-- Integrity checks added NOT VALID: existing rows are not rejected.
+DO $$ BEGIN ALTER TABLE guests ADD CONSTRAINT chk_guests_number_of_guests
+  CHECK (number_of_guests IS NULL OR number_of_guests >= 1) NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE orders ADD CONSTRAINT chk_orders_amount_nonneg
+  CHECK (amount >= 0) NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE orders ADD CONSTRAINT chk_orders_order_type
+  CHECK (order_type IN ('plan','template')) NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+COMMIT;
+
+SELECT LOWER(slug), COUNT(*) FROM invitations GROUP BY 1 HAVING COUNT(*) > 1;
+
+
+-- NEW (each supports a proven query)
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_invitations_slug_lower ON invitations (LOWER(slug));
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_template_purchases_template_id ON template_purchases (template_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_status_created ON orders (status, created_at DESC);
+
+-- Confirm all three are valid before dropping anything:
+SELECT indexrelid::regclass, indisvalid FROM pg_index
+WHERE indexrelid::regclass::text IN
+ ('idx_invitations_slug_lower','idx_template_purchases_template_id','idx_orders_status_created');
+
+-- DROP (each is covered by a UNIQUE constraint or a wider index; no route names indexes)
+DROP INDEX CONCURRENTLY IF EXISTS idx_admin_sessions_token_hash;
+DROP INDEX CONCURRENTLY IF EXISTS idx_user_sessions_token_hash;
+DROP INDEX CONCURRENTLY IF EXISTS idx_template_categories_slug;
+DROP INDEX CONCURRENTLY IF EXISTS idx_template_categories_name;
+DROP INDEX CONCURRENTLY IF EXISTS idx_payment_logs_event;
+DROP INDEX CONCURRENTLY IF EXISTS idx_user_ai_credentials_user_provider;
+DROP INDEX CONCURRENTLY IF EXISTS idx_template_bodies_template;
+DROP INDEX CONCURRENTLY IF EXISTS idx_orders_user;
+DROP INDEX CONCURRENTLY IF EXISTS idx_user_subscriptions_user_id;
+DROP INDEX CONCURRENTLY IF EXISTS idx_invitations_user;
+DROP INDEX CONCURRENTLY IF EXISTS idx_guests_invitation;
+DROP INDEX CONCURRENTLY IF EXISTS idx_template_purchases_user;
+DROP INDEX CONCURRENTLY IF EXISTS idx_user_drafts_user_template;
+DROP INDEX CONCURRENTLY IF EXISTS idx_user_drafts_lookup;
+DROP INDEX CONCURRENTLY IF EXISTS idx_orders_status;
+
+ANALYZE invitations; ANALYZE orders; ANALYZE template_purchases;
+
+-- Public + marquee template listing: WHERE status='published' ORDER BY created_at DESC, id DESC
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_templates_published_created
+  ON templates (created_at DESC, id DESC) WHERE status = 'published';
+
+-- Billing, library and invitation-create look up the latest completed order per (user, template)
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_user_ref_completed
+  ON orders (user_id, reference_id, created_at DESC) WHERE status = 'completed';
+
+-- Admin invitations list: ORDER BY created_at DESC across all users
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_invitations_created
+  ON invitations (created_at DESC);
+
+-- Admin RSVP analytics: guests filtered by created_at alone, plus attendance_status breakdown
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_guests_created_only
+  ON guests (created_at DESC);
+
+-- Admin payment-logs list: ORDER BY created_at DESC, id DESC with status/provider filters
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_payment_logs_created_id
+  ON payment_logs (created_at DESC, id DESC);
+
+-- Admin orders / analytics by type over time
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_type_created
+  ON orders (order_type, created_at DESC);
+
+-- Expiry sweeps and "live invitation" checks: published and not yet expired
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_invitations_live
+  ON invitations (expires_at) WHERE status = 'published';
+
+-- Live-subscription lookups by expiry across all users (admin analytics, cron)
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_subs_live
+  ON user_subscriptions (expires_at) WHERE status = 'active';
+
+-- Subscription unlock counts per subscription and tier (unlock route, allowance)
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_sub_unlocks_sub_premium
+  ON subscription_template_unlocks (subscription_id, is_premium);

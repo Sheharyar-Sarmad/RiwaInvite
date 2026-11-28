@@ -5,6 +5,8 @@ import { errorResponse, pgErrorToResponse } from "@/lib/api/errors";
 import { STATUS_CODE } from "@/lib/status_codes";
 import { SLUG_RE, getPublicInvitation } from "@/lib/invitations/public-invitation";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /* -------------------------------------------------------------------------- */
 /*  GET: public invitation data (no auth)                                      */
 /* -------------------------------------------------------------------------- */
@@ -85,13 +87,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   }
 
   try {
-    const [inv] = await sql`
-      SELECT id, user_id, title, status, expires_at
-      FROM invitations
-      WHERE LOWER(slug) = LOWER(${slug}) OR id::text = ${slug}
-      ORDER BY (LOWER(slug) = LOWER(${slug})) DESC
-      LIMIT 1
-    `;
+    // Indexed lookup: slug first (idx_invitations_slug_lower), then primary key if it is a UUID.
+    // One round trip; a slug match always wins over an id match.
+    const [inv] = UUID_RE.test(slug)
+      ? await sql`
+          SELECT id, user_id, title, status, expires_at FROM (
+            SELECT 0 AS ord, id, user_id, title, status, expires_at
+            FROM invitations WHERE LOWER(slug) = LOWER(${slug})
+            UNION ALL
+            SELECT 1 AS ord, id, user_id, title, status, expires_at
+            FROM invitations WHERE id = ${slug}::uuid
+          ) m
+          ORDER BY ord
+          LIMIT 1
+        `
+      : await sql`
+          SELECT id, user_id, title, status, expires_at
+          FROM invitations
+          WHERE LOWER(slug) = LOWER(${slug})
+          LIMIT 1
+        `;
+
     const live =
       inv &&
       inv.status === "published" &&

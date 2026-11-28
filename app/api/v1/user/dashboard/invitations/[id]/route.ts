@@ -31,14 +31,17 @@ export async function PATCH(
     return errorResponse(STATUS_CODE.BAD_REQUEST, "INVALID_STATUS", "Status must be draft or published.");
   }
 
+  // Never pass `undefined` into a postgres.js template (it throws).
+  const nextStatus: string | null = status ? String(status) : null;
+
   try {
     const [inv] = await sql`
       UPDATE invitations
-      SET 
-        title = ${title}, 
+      SET
+        title = ${title},
         event_date = ${eventDate}::date,
-        status = ${status || sql`status`},
-        published_at = CASE WHEN ${status} = 'published' THEN NOW() ELSE published_at END
+        status = COALESCE(${nextStatus}::invitation_status, status),
+        published_at = CASE WHEN ${nextStatus}::text = 'published' THEN NOW() ELSE published_at END
       WHERE id = ${id} AND user_id = ${userId}
       RETURNING id, title, event_date, expires_at, status
     `;
@@ -50,7 +53,6 @@ export async function PATCH(
   }
 }
 
-// Add this GET request to your existing file
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },

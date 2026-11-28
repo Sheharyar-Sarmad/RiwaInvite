@@ -8,9 +8,9 @@ import { z } from "zod";
 const ListPaymentLogsQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
   limit: z.coerce.number().min(1).max(100).default(20),
-  search: z.string().optional(),
+  search: z.string().trim().max(100).optional(),
   status: z.enum(["all", "received", "processed", "failed"]).default("all"),
-  provider: z.string().default("all"),
+  provider: z.string().max(20).default("all"),
 });
 
 export async function GET(req: NextRequest) {
@@ -32,25 +32,25 @@ export async function GET(req: NextRequest) {
   const { page, limit, search, status, provider } = parsed.data;
   const offset = (page - 1) * limit;
 
-  // 3. Setup Redis Cache
-  let redis;
-  let cachedData = null;
-  let version = "1";
+  // 3. Redis cache (search requests are never cached: unbounded keys)
+  const useCache = !search;
+  let redis: Awaited<ReturnType<typeof getRedisClient>> | null = null;
+  let cacheKey: string | null = null;
 
-  // Unique cache key for this specific query
-  const cacheKey = `admin:payment_logs:v${version}:p${page}:l${limit}:s${search || "none"}:st${status}:pr${provider}`;
-
-  try {
-    redis = await getRedisClient();
-    // Bumping the version key here is optional, but good practice if you need to invalidate all logs at once.
-    version = (await redis.get("payment_logs:version")) || "1";
-    
-    cachedData = await redis.get(cacheKey);
-    if (cachedData) {
-      return NextResponse.json(JSON.parse(cachedData), { status: STATUS_CODE.OK });
+  if (useCache) {
+    try {
+      redis = await getRedisClient();
+      const version = (await redis.get("payment_logs:version")) || "1";
+      cacheKey = `admin:payment_logs:v${version}:p${page}:l${limit}:st${status}:pr${provider}`;
+      const cachedData = await redis.get(cacheKey);
+      if (cachedData) {
+        return NextResponse.json(JSON.parse(cachedData), { status: STATUS_CODE.OK });
+      }
+    } catch (e) {
+      console.warn("[Redis] Failed to fetch cache, falling back to Postgres:", e);
+      redis = null;
+      cacheKey = null;
     }
-  } catch (e) {
-    console.warn("[Redis] Failed to fetch cache, falling back to Postgres:", e);
   }
 
   // 4. Build Dynamic SQL Query
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
     whereClause = sql`${whereClause} AND provider = ${provider}`;
   }
   if (search) {
-    const searchPattern = `%${search}%`;
+    const searchPattern = `%${search.replace(/[\\%_]/g, "\\$&")}%`;
     whereClause = sql`${whereClause} AND (
       event_id ILIKE ${searchPattern} OR 
       error_message ILIKE ${searchPattern}
@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
           created_at
         FROM payment_logs
         WHERE ${whereClause}
-        ORDER BY created_at DESC
+        ORDER BY created_at DESC, id DESC
         LIMIT ${limit} OFFSET ${offset}
       `,
       sql`
@@ -110,10 +110,7 @@ export async function GET(req: NextRequest) {
     };
 
     // 6. Save to Redis Cache (30 seconds)
-    // 30s is the perfect sweet spot for an admin panel: 
-    // - Data stays fresh enough to feel real-time.
-    // - If an admin refreshes the page 20 times in a minute, only 2 queries hit the DB.
-    if (redis) {
+    if (redis && cacheKey) {
       try {
         await redis.setEx(cacheKey, 30, JSON.stringify(responseData));
       } catch (e) {
@@ -124,7 +121,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(responseData, { 
       status: STATUS_CODE.OK,
       headers: {
-        // Ensures the browser doesn't cache it, so it always hits the Next.js SSR route
         "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
       }
     });

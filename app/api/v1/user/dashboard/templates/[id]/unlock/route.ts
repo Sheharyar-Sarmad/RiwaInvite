@@ -5,12 +5,12 @@ import { getRedisClient } from "@/db/connections/redis_connection";
 import { billingCacheKey } from "@/lib/api/billing_cache";
 import { errorResponse, pgErrorToResponse } from "@/lib/api/errors";
 import { loadAllowance, type PlanAllowance, type Q } from "@/lib/api/plan_allowance";
+import { safeInvalidateCache } from "@/lib/api/helpers";
 import { STATUS_CODE } from "@/lib/status_codes";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type HttpStatus = (typeof STATUS_CODE)[keyof typeof STATUS_CODE];
-
 
 /** Thrown inside the transaction so it rolls back, then mapped to an HTTP error. */
 class Fail extends Error {
@@ -132,13 +132,14 @@ export async function POST(
       return { tpl, allowance, alreadyUnlocked: false };
     });
 
-    // Billing page caches for 60s: drop it so the usage bars update right away.
+    // Billing (60s) and library (5 min) are cached: drop both so the UI updates right away.
     try {
       const redis = await getRedisClient();
       await redis.del(billingCacheKey(userId));
     } catch (e) {
       console.warn("[UNLOCK_CACHE] invalidate failed (response unaffected):", e);
     }
+    await safeInvalidateCache(`library:v3:${userId}:*`, `library_summary:v3:${userId}`);
 
     return NextResponse.json(
       {

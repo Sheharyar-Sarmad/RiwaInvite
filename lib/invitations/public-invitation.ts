@@ -2,6 +2,7 @@
 import { sql } from "@/db/connections/postgres_connection";
 
 export const SLUG_RE = /^[\w-]{1,100}$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type PublicInvitation = {
   id: string;
@@ -37,19 +38,78 @@ const asObj = (v: unknown): Record<string, any> => {
 const httpsOnly = (v: unknown): string | null =>
   typeof v === "string" && /^https:\/\//i.test(v.trim()) ? v.trim() : null;
 
+/* -------------------------------------------------------------------------- */
+/*  Short-lived in-memory cache + request coalescing                           */
+/* -------------------------------------------------------------------------- */
+// Caches the raw DB row (not the final state), so expiry is still checked on every call.
+// Missing invitations are never cached. TTL matches the route's 30s CDN window.
+type Row = Record<string, any>;
+const TTL_MS = 15_000;
+const MAX_ENTRIES = 500;
+const cache = new Map<string, { at: number; row: Row }>();
+const inflight = new Map<string, Promise<Row | null>>();
+
+async function fetchRow(slug: string, lower: string): Promise<Row | null> {
+  // Slug match first (idx_invitations_slug_lower), then primary key only if it is a UUID.
+  // A slug match always wins over an id match, same as the old ORDER BY.
+  const rows = UUID_RE.test(slug)
+    ? await sql`
+        SELECT id, slug, title, status, event_date, event_time, expires_at,
+               design_schema, selected_music_url, venue_details
+        FROM (
+          SELECT 0 AS ord, id, slug, title, status,
+                 event_date::text AS event_date, event_time::text AS event_time,
+                 expires_at, design_schema, selected_music_url, venue_details
+          FROM invitations WHERE LOWER(slug) = ${lower}
+          UNION ALL
+          SELECT 1 AS ord, id, slug, title, status,
+                 event_date::text AS event_date, event_time::text AS event_time,
+                 expires_at, design_schema, selected_music_url, venue_details
+          FROM invitations WHERE id = ${slug}::uuid
+        ) m
+        ORDER BY ord
+        LIMIT 1
+      `
+    : await sql`
+        SELECT id, slug, title, status,
+               event_date::text AS event_date, event_time::text AS event_time,
+               expires_at, design_schema, selected_music_url, venue_details
+        FROM invitations
+        WHERE LOWER(slug) = ${lower}
+        LIMIT 1
+      `;
+  return (rows[0] as Row | undefined) ?? null;
+}
+
+async function loadRow(slug: string): Promise<Row | null> {
+  const lower = slug.toLowerCase();
+  const now = Date.now();
+
+  const hit = cache.get(lower);
+  if (hit && now - hit.at < TTL_MS) return hit.row;
+
+  // Many guests opening the same link at once share ONE database query.
+  const pending = inflight.get(lower);
+  if (pending) return pending;
+
+  const p = fetchRow(slug, lower)
+    .then((row) => {
+      if (row) {
+        if (cache.size >= MAX_ENTRIES) cache.delete(cache.keys().next().value as string);
+        cache.set(lower, { at: Date.now(), row });
+      }
+      return row;
+    })
+    .finally(() => inflight.delete(lower));
+
+  inflight.set(lower, p);
+  return p;
+}
+
 export async function getPublicInvitation(slug: string): Promise<PublicLookup> {
   if (!SLUG_RE.test(slug)) return { state: "missing" };
 
-  const [row] = await sql`
-    SELECT id, slug, title, status,
-           event_date::text AS event_date,
-           event_time::text AS event_time,
-           expires_at, design_schema, selected_music_url, venue_details
-    FROM invitations
-    WHERE LOWER(slug) = LOWER(${slug}) OR id::text = ${slug}
-    ORDER BY (LOWER(slug) = LOWER(${slug})) DESC
-    LIMIT 1
-  `;
+  const row = await loadRow(slug);
 
   if (!row || row.status === "draft" || row.status === "archived") return { state: "missing" };
 

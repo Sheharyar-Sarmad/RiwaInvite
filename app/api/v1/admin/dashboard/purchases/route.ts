@@ -8,10 +8,13 @@ import { z } from "zod";
 const ListPurchasesQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
   limit: z.coerce.number().min(1).max(100).default(10),
-  search: z.string().optional(),
+  search: z.string().trim().max(100).optional(),
 });
 
 export async function GET(req: NextRequest) {
+  const adminId = req.headers.get("x-admin-id");
+  if (!adminId) return errorResponse(STATUS_CODE.UNAUTHORIZED, "UNAUTHORIZED", "Missing Admin ID.");
+
   const parsed = ListPurchasesQuerySchema.safeParse(
     Object.fromEntries(req.nextUrl.searchParams)
   );
@@ -22,31 +25,32 @@ export async function GET(req: NextRequest) {
 
   const { page, limit, search } = parsed.data;
 
-  let redis;
-  let version = "1";
-  let cachedData = null;
+  // Search requests are not cached (unbounded keys).
+  const useCache = !search;
+  let redis: Awaited<ReturnType<typeof getRedisClient>> | null = null;
+  let cacheKey: string | null = null;
 
-  try {
-    redis = await getRedisClient();
-    // 1. Fetch the current global version for purchases
-    version = (await redis.get("purchases:version")) || "1";
-    
-    // 2. Build the cache key using the version
-    const cacheKey = `purchases:v${version}:${page}:${limit}:${search || "none"}`;
-    cachedData = await redis.get(cacheKey);
-    
-    if (cachedData) {
-      return NextResponse.json(JSON.parse(cachedData), { status: STATUS_CODE.OK });
+  if (useCache) {
+    try {
+      redis = await getRedisClient();
+      const version = (await redis.get("purchases:version")) || "1";
+      cacheKey = `purchases:v${version}:${page}:${limit}:none`;
+      const cachedData = await redis.get(cacheKey);
+      if (cachedData) {
+        return NextResponse.json(JSON.parse(cachedData), { status: STATUS_CODE.OK });
+      }
+    } catch (e) {
+      console.warn("[Redis] Failed to fetch cache, falling back to Postgres:", e);
+      redis = null;
+      cacheKey = null;
     }
-  } catch (e) {
-    console.warn("[Redis] Failed to fetch cache, falling back to Postgres:", e);
   }
 
   const offset = (page - 1) * limit;
   
   let whereClause = sql`1=1`;
   if (search) {
-    const searchPattern = `%${search}%`;
+    const searchPattern = `%${search.replace(/[\\%_]/g, "\\$&")}%`;
     whereClause = sql`${whereClause} AND (
       u.email ILIKE ${searchPattern} OR 
       u.first_name ILIKE ${searchPattern} OR 
@@ -66,7 +70,7 @@ export async function GET(req: NextRequest) {
         JOIN users u ON tp.user_id = u.id
         JOIN templates t ON tp.template_id = t.id
         WHERE ${whereClause}
-        ORDER BY tp.purchased_at DESC
+        ORDER BY tp.purchased_at DESC, tp.id DESC
         LIMIT ${limit} OFFSET ${offset}
       `,
       sql`
@@ -89,10 +93,8 @@ export async function GET(req: NextRequest) {
       meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
     };
 
-    if (redis) {
+    if (redis && cacheKey) {
       try {
-        // 3. Save with the versioned key
-        const cacheKey = `purchases:v${version}:${page}:${limit}:${search || "none"}`;
         await redis.setEx(cacheKey, 300, JSON.stringify(responseData));
       } catch (e) {
         console.warn("[Redis] Failed to save cache:", e);

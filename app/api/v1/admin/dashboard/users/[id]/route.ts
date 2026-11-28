@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { sql } from "@/lib/db";
 import { STATUS_CODE } from "@/lib/status_codes";
 import settings from "@/config/settings_config";
 import { getRedisClient } from "@/db/connections/redis_connection";
+import { isValidUuid } from "@/lib/api/helpers";
 
 export const instant = false;
 
@@ -74,6 +75,12 @@ export async function DELETE(
   }
 
   const { id } = await params;
+  if (!isValidUuid(id)) {
+    return NextResponse.json(
+      { error: "Invalid user id", message: "Invalid user id", status: "error" },
+      { status: STATUS_CODE.BAD_REQUEST },
+    );
+  }
 
   let body: DeleteBody = {};
   try {
@@ -83,7 +90,6 @@ export async function DELETE(
   const mode: DeleteMode = body.mode === "deactivate" ? "deactivate" : "soft_delete";
   const reason = body.reason?.trim() || null;
 
-  console.time("[TIMER] DELETE Transaction (DB)");
   try {
     const result = await sql.begin<TxResult>(async (tx: any) => {
       const [user] = await tx<{ id: string; email: string; first_name: string; last_name: string }[]>`
@@ -146,7 +152,6 @@ export async function DELETE(
 
       return { kind: "deleted", original_email: user.email, archived_invitations: archived.length, cancelled_subscriptions: cancelled.length, revoked_sessions: revoked.length };
     });
-    console.timeEnd("[TIMER] DELETE Transaction (DB)");
 
     if (result.kind === "not_found") {
       return NextResponse.json({ error: "User not found", message: "User not found", status: "error" }, { status: STATUS_CODE.NOT_FOUND });
@@ -165,13 +170,8 @@ export async function DELETE(
       }, { status: STATUS_CODE.CONFLICT });
     }
 
-    // ── 4. NON-BLOCKING Cache Invalidation ─────────────────────
-    console.time("[TIMER] Redis Cache Invalidation (Async)");
-    Promise.all([
-      bumpUserListVersion(),
-      delCacheKey(`users:detail:${id}`),
-    ]).then(() => console.timeEnd("[TIMER] Redis Cache Invalidation (Async)"))
-      .catch((err) => console.error("Cache invalidation error:", err));
+    // Runs after the response is sent, but is guaranteed to finish on Vercel.
+    after(() => Promise.all([bumpUserListVersion(), delCacheKey(`users:detail:${id}`)]));
 
     if (result.kind === "deactivated") {
       return NextResponse.json({
@@ -188,7 +188,6 @@ export async function DELETE(
     });
 
   } catch (err: any) {
-    console.timeEnd("[TIMER] DELETE Transaction (DB)");
     console.error("DELETE /admin/dashboard/users/[id] error:", err);
     return NextResponse.json(
       { error: settings().isProduction ? "Internal server error" : err.message, message: "Internal server error", status: "error" },

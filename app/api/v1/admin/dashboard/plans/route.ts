@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/db/connections/postgres_connection";
 import { getRedisClient } from "@/db/connections/redis_connection";
 import { errorResponse, pgErrorToResponse } from "@/lib/api/errors";
+import { safeInvalidateCache } from "@/lib/api/helpers";
 import { STATUS_CODE } from "@/lib/status_codes";
 import { createPlanSchema, listPlansQuerySchema } from "@/lib/validations/plan";
 
@@ -15,6 +16,9 @@ function serializePlan(row: any) {
 }
 
 export async function GET(req: NextRequest) {
+  const adminId = req.headers.get("x-admin-id");
+  if (!adminId) return errorResponse(STATUS_CODE.UNAUTHORIZED, "UNAUTHORIZED", "Missing Admin ID.");
+
   const parsed = listPlansQuerySchema.safeParse(
     Object.fromEntries(req.nextUrl.searchParams),
   );
@@ -22,14 +26,16 @@ export async function GET(req: NextRequest) {
     return errorResponse(STATUS_CODE.BAD_REQUEST, "VALIDATION_ERROR", "Invalid query.", parsed.error.issues);
 
   const { page, limit, search, is_active } = parsed.data;
-  const cacheKey = `plans:admin:${page}:${limit}:${search || "none"}:${is_active ?? "all"}`;
+  // Search requests are not cached (unbounded keys); canonical list pages are.
+  const useCache = !search;
+  const cacheKey = `plans:admin:${page}:${limit}:none:${is_active ?? "all"}`;
 
-  let redis;
-  let cachedData = null;
-  
+  let redis: Awaited<ReturnType<typeof getRedisClient>> | null = null;
+  let cachedData: string | null = null;
+
   try {
     redis = await getRedisClient();
-    cachedData = await redis.get(cacheKey);
+    if (useCache) cachedData = await redis.get(cacheKey);
   } catch (e) {
     console.warn("[Redis] Failed to fetch cache, falling back to Postgres:", e);
   }
@@ -63,7 +69,7 @@ export async function GET(req: NextRequest) {
       meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
     };
 
-    if (redis) {
+    if (redis && useCache) {
       try {
         await redis.setEx(cacheKey, 300, JSON.stringify(responseData));
       } catch (e) {
@@ -78,8 +84,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  // Added adminId extraction for the notification
   const adminId = req.headers.get("x-admin-id");
+  if (!adminId) return errorResponse(STATUS_CODE.UNAUTHORIZED, "UNAUTHORIZED", "Missing Admin ID.");
 
   let body: unknown;
   try {
@@ -101,8 +107,8 @@ export async function POST(req: NextRequest) {
       RETURNING *
     `;
 
-    // NEW: Insert Admin Notification ONLY when created
-    if (adminId) {
+    // The plan is already saved: a failed notification must not turn this into a 500.
+    try {
       await sql`
         INSERT INTO admin_notifications (admin_id, type, title, message)
         VALUES (
@@ -112,15 +118,11 @@ export async function POST(req: NextRequest) {
           ${`New subscription plan "${row.name}" was successfully created.`}
         )
       `;
+    } catch (e) {
+      console.warn("[NOTIFICATION_ERROR]", e);
     }
 
-    try {
-      const redis = await getRedisClient();
-      const keys = await redis.keys("plans:*");
-      if (keys.length > 0) await redis.del(keys);
-    } catch (e) {
-      console.warn("[Redis] Failed to invalidate cache:", e);
-    }
+    await safeInvalidateCache("plans:*", "public:plans:*");
 
     return NextResponse.json({ data: serializePlan(row) }, { status: STATUS_CODE.CREATED });
   } catch (err) {

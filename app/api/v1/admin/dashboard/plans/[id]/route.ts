@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/db/connections/postgres_connection";
-import { getRedisClient } from "@/db/connections/redis_connection";
 import { errorResponse, pgErrorToResponse } from "@/lib/api/errors";
+import { safeInvalidateCache } from "@/lib/api/helpers";
 import { STATUS_CODE } from "@/lib/status_codes";
 import { updatePlanSchema } from "@/lib/validations/plan";
 
@@ -17,22 +17,30 @@ function serializePlan(row: any) {
   };
 }
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
+  const adminId = req.headers.get("x-admin-id");
+  if (!adminId) return errorResponse(STATUS_CODE.UNAUTHORIZED, "UNAUTHORIZED", "Missing Admin ID.");
+
   const { id } = await params;
   if (!UUID_RE.test(id))
     return errorResponse(STATUS_CODE.BAD_REQUEST, "INVALID_ID", "Invalid plan id.");
 
-  const [row] = await sql`SELECT * FROM plans WHERE id = ${id} LIMIT 1`;
-  if (!row)
-    return errorResponse(STATUS_CODE.NOT_FOUND, "NOT_FOUND", "Plan not found.");
+  try {
+    const [row] = await sql`SELECT * FROM plans WHERE id = ${id} LIMIT 1`;
+    if (!row)
+      return errorResponse(STATUS_CODE.NOT_FOUND, "NOT_FOUND", "Plan not found.");
 
-  return NextResponse.json({ data: serializePlan(row) }, { status: STATUS_CODE.OK });
+    return NextResponse.json({ data: serializePlan(row) }, { status: STATUS_CODE.OK });
+  } catch (err) {
+    return pgErrorToResponse(err);
+  }
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   const adminId = req.headers.get("x-admin-id");
+  if (!adminId) return errorResponse(STATUS_CODE.UNAUTHORIZED, "UNAUTHORIZED", "Missing Admin ID.");
+
   const { id } = await params;
-  
   if (!UUID_RE.test(id))
     return errorResponse(STATUS_CODE.BAD_REQUEST, "INVALID_ID", "Invalid plan id.");
 
@@ -53,8 +61,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   try {
+    // Only LIVE subscriptions block price/limit edits (history does not).
     const [usage] = await sql`
-      SELECT COUNT(*)::int AS active_subs FROM user_subscriptions WHERE plan_id = ${id}
+      SELECT COUNT(*)::int AS active_subs
+      FROM user_subscriptions
+      WHERE plan_id = ${id} AND status = 'active' AND expires_at > NOW()
     `;
 
     if (usage.active_subs > 0) {
@@ -74,8 +85,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (!row)
       return errorResponse(STATUS_CODE.NOT_FOUND, "NOT_FOUND", "Plan not found.");
 
-    // Insert Admin Notification
-    if (adminId) {
+    try {
       await sql`
         INSERT INTO admin_notifications (admin_id, type, title, message)
         VALUES (
@@ -85,15 +95,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           ${`Plan "${row.name}" was updated.`}
         )
       `;
+    } catch (e) {
+      console.warn("[NOTIFICATION_ERROR]", e);
     }
 
-    try {
-      const redis = await getRedisClient();
-      const keys = await redis.keys("plans:*");
-      if (keys.length > 0) await redis.del(keys);
-    } catch (e) {
-      console.warn("[Redis] Failed to invalidate cache:", e);
-    }
+    await safeInvalidateCache("plans:*", "public:plans:*");
 
     return NextResponse.json({ data: serializePlan(row) }, { status: STATUS_CODE.OK });
   } catch (err) {
@@ -103,34 +109,34 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
 export async function DELETE(req: NextRequest, { params }: Params) {
   const adminId = req.headers.get("x-admin-id");
+  if (!adminId) return errorResponse(STATUS_CODE.UNAUTHORIZED, "UNAUTHORIZED", "Missing Admin ID.");
+
   const { id } = await params;
-  
   if (!UUID_RE.test(id)) {
     return errorResponse(STATUS_CODE.BAD_REQUEST, "INVALID_ID", "Invalid plan id.");
   }
 
   try {
+    // Any subscription row (even expired) blocks deletion: user_subscriptions.plan_id is ON DELETE RESTRICT.
     const [usage] = await sql`
-      SELECT COUNT(*)::int AS active_subs FROM user_subscriptions WHERE plan_id = ${id}
+      SELECT COUNT(*)::int AS subs FROM user_subscriptions WHERE plan_id = ${id}
     `;
 
-    if (usage.active_subs > 0) {
+    if (usage.subs > 0) {
       return errorResponse(
         STATUS_CODE.CONFLICT,
         "PLAN_IN_USE",
-        `Cannot delete this plan because ${usage.active_subs} user(s) are subscribed to it. You can deactivate it instead (PATCH is_active = false).`
+        `Cannot delete this plan because ${usage.subs} subscription record(s) use it. You can deactivate it instead (PATCH is_active = false).`
       );
     }
 
-    // Changed RETURNING to include name for the notification message
     const [row] = await sql`DELETE FROM plans WHERE id = ${id} RETURNING id, name`;
 
     if (!row) {
       return errorResponse(STATUS_CODE.NOT_FOUND, "NOT_FOUND", "Plan not found.");
     }
 
-    // Insert Admin Notification
-    if (adminId) {
+    try {
       await sql`
         INSERT INTO admin_notifications (admin_id, type, title, message)
         VALUES (
@@ -140,15 +146,11 @@ export async function DELETE(req: NextRequest, { params }: Params) {
           ${`Plan "${row.name}" was permanently deleted.`}
         )
       `;
+    } catch (e) {
+      console.warn("[NOTIFICATION_ERROR]", e);
     }
 
-    try {
-      const redis = await getRedisClient();
-      const keys = await redis.keys("plans:*");
-      if (keys.length > 0) await redis.del(keys);
-    } catch (e) {
-      console.warn("[Redis] Failed to invalidate cache:", e);
-    }
+    await safeInvalidateCache("plans:*", "public:plans:*");
 
     return NextResponse.json({ data: { id: row.id, message: "Plan permanently deleted." } }, { status: STATUS_CODE.OK });
   } catch (err) {

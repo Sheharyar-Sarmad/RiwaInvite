@@ -18,23 +18,29 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const { page, limit, offset } = getPagination(searchParams);
-    const search = searchParams.get("search")?.trim() || "";
+    const search = (searchParams.get("search")?.trim() || "").slice(0, 60);
 
-    const redis = await getRedisClient();
     const useCache = search === "";
     const cacheKey = `admin:categories:page=${page}:limit=${limit}`;
+    let redis: Awaited<ReturnType<typeof getRedisClient>> | null = null;
 
     if (useCache) {
-      const cachedData = await redis.get(cacheKey);
-      if (cachedData) {
-        return NextResponse.json(
-          { status: "success", data: JSON.parse(cachedData) },
-          { status: STATUS_CODE.OK },
-        );
+      try {
+        redis = await getRedisClient();
+        const cachedData = await redis.get(cacheKey);
+        if (cachedData) {
+          return NextResponse.json(
+            { status: "success", data: JSON.parse(cachedData) },
+            { status: STATUS_CODE.OK },
+          );
+        }
+      } catch (e) {
+        console.warn("[Redis] categories cache read failed, using Postgres:", e);
+        redis = null;
       }
     }
 
-    const searchPattern = `%${search}%`;
+    const searchPattern = `%${search.replace(/[\\%_]/g, "\\$&")}%`;
     const [dataResult, countResult] = await Promise.all([
       sql`SELECT id, name, slug, description, thumbnail_url, created_at FROM template_categories WHERE (name ILIKE ${searchPattern} OR slug ILIKE ${searchPattern}) ORDER BY name ASC LIMIT ${limit} OFFSET ${offset}`,
       sql`SELECT COUNT(*)::int as total FROM template_categories WHERE (name ILIKE ${searchPattern} OR slug ILIKE ${searchPattern})`,
@@ -55,8 +61,12 @@ export async function GET(req: NextRequest) {
       },
     };
 
-    if (useCache) {
-      await redis.setEx(cacheKey, 300, JSON.stringify(responsePayload));
+    if (useCache && redis) {
+      try {
+        await redis.setEx(cacheKey, 300, JSON.stringify(responsePayload));
+      } catch (e) {
+        console.warn("[Redis] categories cache write failed:", e);
+      }
     }
 
     return NextResponse.json(
@@ -106,9 +116,13 @@ export async function POST(req: NextRequest) {
       console.warn("[NOTIFICATION_ERROR]", notifError);
     }
 
-    // Category data is embedded in cached template lists (category_name),
-    // so both prefixes must be invalidated.
-    await safeInvalidateCache("admin:categories:*", "admin:templates:*");
+    // Admin lists + the public template/category caches the site reads.
+    await safeInvalidateCache(
+      "admin:categories:*",
+      "admin:templates:*",
+      "public:templates:*",
+      "public:template_categories:*",
+    );
 
     return NextResponse.json(
       { status: "success", data: category },

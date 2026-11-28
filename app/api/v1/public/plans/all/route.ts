@@ -3,46 +3,54 @@ import { sql } from "@/db/connections/postgres_connection";
 import { getRedisClient } from "@/db/connections/redis_connection";
 import { STATUS_CODE } from "@/lib/status_codes";
 
+const SORTS = ["price_asc", "price_desc", "newest"] as const;
+const CDN = { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" };
+
 export async function GET(req: NextRequest) {
   try {
-    const redis = await getRedisClient();
     const { searchParams } = new URL(req.url);
 
-    // 1. Parse Query Params
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "10", 10);
-    const search = searchParams.get("search") || "";
-    // Sort options: price_asc, price_desc, newest
-    const sort = searchParams.get("sort") || "price_asc"; 
-    
-    // Ensure valid pagination
-    const validPage = Math.max(1, page);
-    const validLimit = Math.max(1, limit);
+    // 1. Parse + clamp query params
+    const validPage = Math.min(1000, Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1));
+    const validLimit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "10", 10) || 10));
+    const search = (searchParams.get("search") || "").trim().slice(0, 50);
+    const sortParam = searchParams.get("sort") || "price_asc";
+    const sort = (SORTS as readonly string[]).includes(sortParam) ? sortParam : "price_asc";
     const offset = (validPage - 1) * validLimit;
 
-    // 2. Redis Version-Key Caching
-    const versionKey = "public:plans:version";
-    let version = await redis.get(versionKey);
-    if (!version) {
-      version = "1";
-      await redis.set(versionKey, version, { NX: true });
+    // Only un-searched pages are cached (search text would let anyone create unlimited keys).
+    const useCache = search === "";
+
+    // 2. Redis is an optimisation: if it is down, fall through to Postgres.
+    let redis: Awaited<ReturnType<typeof getRedisClient>> | null = null;
+    let cacheKey: string | null = null;
+    if (useCache) {
+      try {
+        redis = await getRedisClient();
+        const versionKey = "public:plans:version";
+        let version = await redis.get(versionKey);
+        if (!version) {
+          version = "1";
+          await redis.set(versionKey, version, { NX: true });
+        }
+        cacheKey = `public:plans:all:v${version}:p${validPage}:l${validLimit}:st${sort}`;
+        const cachedData = await redis.get(cacheKey);
+        if (cachedData) {
+          return NextResponse.json(JSON.parse(cachedData), { status: STATUS_CODE.OK, headers: CDN });
+        }
+      } catch (e) {
+        console.warn("[PUBLIC_PLANS_ALL] cache read failed, using Postgres:", e);
+        redis = null;
+        cacheKey = null;
+      }
     }
 
-    // Unique cache key for this specific query
-    const cacheKey = `public:plans:all:v${version}:p${validPage}:l${validLimit}:s${search}:st${sort}`;
-    
-    // Check cache first
-    const cachedData = await redis.get(cacheKey);
-    if (cachedData) {
-      return NextResponse.json(JSON.parse(cachedData), { status: STATUS_CODE.OK });
-    }
-
-    // 3. Build Dynamic SQL for Sorting
+    // 3. Build Dynamic SQL for Sorting (whitelisted above)
     let orderBySQL = sql`price ASC`;
     if (sort === "price_desc") orderBySQL = sql`price DESC`;
     if (sort === "newest") orderBySQL = sql`created_at DESC`;
 
-    const searchPattern = `%${search}%`;
+    const searchPattern = `%${search.replace(/[\\%_]/g, "\\$&")}%`;
 
     // 4. Fetch Data from Materialized View
     const plans = await sql`
@@ -73,7 +81,7 @@ export async function GET(req: NextRequest) {
 
     const total = countResult?.total || 0;
 
-    // 6. Construct Response Payload
+    // 6. Construct Response Payload (unchanged shape)
     const payload = {
       status: "success",
       message: "Plans fetched successfully",
@@ -89,15 +97,21 @@ export async function GET(req: NextRequest) {
       error: null,
     };
 
-    // 7. Cache the response for 1 hour (3600 seconds)
-    await redis.setEx(cacheKey, 3600, JSON.stringify(payload));
+    // 7. Cache the response for 1 hour (never fails the request)
+    if (redis && cacheKey) {
+      try {
+        await redis.setEx(cacheKey, 3600, JSON.stringify(payload));
+      } catch (e) {
+        console.warn("[PUBLIC_PLANS_ALL] cache write failed (response unaffected):", e);
+      }
+    }
 
-    return NextResponse.json(payload, { status: STATUS_CODE.OK });
+    return NextResponse.json(payload, { status: STATUS_CODE.OK, headers: useCache ? CDN : undefined });
     
   } catch (error: any) {
     console.error("[PUBLIC_PLANS_ALL_GET]", error);
     return NextResponse.json(
-      { status: "error", message: "Internal server error", error: error.message },
+      { status: "error", message: "Internal server error" },
       { status: STATUS_CODE.INTERNAL_SERVER_ERROR },
     );
   }

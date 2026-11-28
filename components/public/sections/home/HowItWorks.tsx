@@ -96,6 +96,11 @@ const STEPS: Step[] = [
 const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 const MAX_TILT = 3.5;
 
+/** Tiny peach placeholder shown instantly while the real image streams in. */
+const BLUR_PLACEHOLDER = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 6'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#fff4ea'/><stop offset='1' stop-color='#fbdcc0'/></linearGradient></defs><rect width='8' height='6' fill='url(#g)'/></svg>",
+)}`;
+
 /** JS-side media query so decorative, size-dependent elements aren't just hidden with CSS. */
 function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState(false);
@@ -199,7 +204,14 @@ const sweepHover: Variants = {
 
 function CursorOrb({ animated }: { animated: boolean }) {
   const orb = (
-    <span className="relative block h-7 w-7 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 shadow-[0_0_28px_10px_rgba(249,115,22,0.5)] ring-2 ring-white/90" />
+    <span className="relative block h-7 w-7 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 shadow-[0_0_28px_10px_rgba(249,115,22,0.5)] ring-2 ring-white/90">
+      {animated && (
+        <span
+          aria-hidden
+          className="absolute inset-0 animate-ping rounded-full bg-orange-400/40"
+        />
+      )}
+    </span>
   );
 
   if (!animated) {
@@ -230,9 +242,31 @@ function CursorOrb({ animated }: { animated: boolean }) {
   );
 }
 
-function LiveBadge({ pulsing }: { pulsing: boolean }) {
+function LiveBadge({
+  pulsing,
+  show,
+  reduce,
+}: {
+  pulsing: boolean;
+  show: boolean;
+  reduce: boolean;
+}) {
   return (
-    <div className="absolute right-4 top-4 flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1.5 text-sm font-semibold text-emerald-700 shadow-lg shadow-emerald-900/5 backdrop-blur-md">
+    <motion.div
+      className="absolute right-4 top-4 flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1.5 text-sm font-semibold text-emerald-700 shadow-lg shadow-emerald-900/5 backdrop-blur-md"
+      initial={reduce ? false : { opacity: 0, scale: 0.6, y: -12 }}
+      animate={
+        show
+          ? { opacity: 1, scale: 1, y: 0 }
+          : { opacity: 0, scale: 0.6, y: -12 }
+      }
+      transition={{
+        type: "spring",
+        stiffness: 240,
+        damping: 16,
+        delay: show ? 0.35 : 0,
+      }}
+    >
       <span className="relative flex h-2.5 w-2.5" aria-hidden>
         {pulsing && (
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -240,7 +274,7 @@ function LiveBadge({ pulsing }: { pulsing: boolean }) {
         <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
       </span>
       Live
-    </div>
+    </motion.div>
   );
 }
 
@@ -264,9 +298,19 @@ function RsvpNotification({
         }
         transition={{ duration: 0.6, ease: EASE_OUT, delay: visible ? 0.5 : 0 }}
       >
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white shadow-[0_0_16px_rgba(16,185,129,0.55)]">
+        <motion.span
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white shadow-[0_0_16px_rgba(16,185,129,0.55)]"
+          initial={reduce ? false : { scale: 0 }}
+          animate={visible ? { scale: 1 } : { scale: 0 }}
+          transition={{
+            type: "spring",
+            stiffness: 300,
+            damping: 14,
+            delay: visible ? 0.9 : 0,
+          }}
+        >
           <Check className="h-4 w-4" strokeWidth={3} />
-        </span>
+        </motion.span>
         <span className="text-sm font-semibold text-neutral-900">
           {RSVP_SAMPLE_MESSAGE}
         </span>
@@ -275,17 +319,45 @@ function RsvpNotification({
   );
 }
 
-function StepVisual({ step }: { step: Step }) {
+function StepVisual({
+  step,
+  near,
+  priority,
+}: {
+  step: Step;
+  /** True once the section is within ~1500px of the viewport: images load eagerly from then on. */
+  near: boolean;
+  priority: boolean;
+}) {
   const reduce = !!useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
   // Not `once`: looping effects mount only while the visual is on screen.
   const inView = useInView(ref, { amount: 0.35 });
+  // `once`: entrance animations play a single time.
+  const seen = useInView(ref, { amount: 0.2, once: true });
   const [imageFailed, setImageFailed] = useState(false);
   const tilt = useTilt(!reduce);
   const loopsActive = inView && !reduce;
 
+  // Subtle parallax while scrolling past the visual.
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start end", "end start"],
+  });
+  const parallaxY = useTransform(scrollYProgress, [0, 1], [-16, 16]);
+
   return (
-    <div ref={ref} className="relative" style={{ perspective: 1000 }}>
+    <motion.div
+      ref={ref}
+      className="relative"
+      style={{ perspective: 1000 }}
+      animate={loopsActive ? { y: [0, -8, 0] } : { y: 0 }}
+      transition={
+        loopsActive
+          ? { duration: 6, repeat: Infinity, ease: "easeInOut" }
+          : { duration: 0.6, ease: EASE_OUT }
+      }
+    >
       <motion.div
         className="relative aspect-[4/3] overflow-hidden rounded-3xl border border-white/80 bg-gradient-to-br from-[#fff4ea] to-[#fdeadb] shadow-2xl shadow-orange-900/10"
         style={{ rotateX: tilt.rotateX, rotateY: tilt.rotateY }}
@@ -294,21 +366,46 @@ function StepVisual({ step }: { step: Step }) {
         initial="rest"
         whileHover="hover"
       >
-        {/* Image layer. Only the gallery step scales on hover. */}
+        {/* Parallax layer (oversized so the shift never reveals an edge) */}
         <motion.div
-          className="absolute inset-0"
-          variants={step.kind === "gallery" && !reduce ? imageHover : undefined}
+          className="absolute -inset-5"
+          style={{ y: reduce ? 0 : parallaxY }}
         >
-          {!imageFailed && (
-            <Image
-              src={step.image}
-              alt={step.alt}
-              fill
-              sizes="(min-width: 1024px) 560px, 100vw"
-              className="object-cover"
-              onError={() => setImageFailed(true)}
-            />
-          )}
+          {/* Entrance: fade + settle */}
+          <motion.div
+            className="absolute inset-0"
+            initial={reduce ? false : { opacity: 0, scale: 1.1 }}
+            animate={
+              seen || reduce
+                ? { opacity: 1, scale: 1 }
+                : { opacity: 0, scale: 1.1 }
+            }
+            transition={{ duration: 1, ease: EASE_OUT }}
+          >
+            {/* Image layer. Only the gallery step scales on hover. */}
+            <motion.div
+              className="absolute inset-0"
+              variants={
+                step.kind === "gallery" && !reduce ? imageHover : undefined
+              }
+            >
+              {!imageFailed && (
+                <Image
+                  src={step.image}
+                  alt={step.alt}
+                  fill
+                  sizes="(min-width: 1024px) 560px, 100vw"
+                  quality={80}
+                  loading={near ? "eager" : "lazy"}
+                  fetchPriority={near && priority ? "high" : "auto"}
+                  placeholder="blur"
+                  blurDataURL={BLUR_PLACEHOLDER}
+                  className="object-cover"
+                  onError={() => setImageFailed(true)}
+                />
+              )}
+            </motion.div>
+          </motion.div>
         </motion.div>
 
         {/* Step 01: glass reflection sweep */}
@@ -327,14 +424,20 @@ function StepVisual({ step }: { step: Step }) {
         )}
 
         {/* Step 03: live badge */}
-        {step.kind === "publish" && <LiveBadge pulsing={loopsActive} />}
+        {step.kind === "publish" && (
+          <LiveBadge
+            pulsing={loopsActive}
+            show={seen || reduce}
+            reduce={reduce}
+          />
+        )}
 
         {/* Step 04: RSVP notification */}
         {step.kind === "rsvp" && (
           <RsvpNotification visible={inView} reduce={reduce} />
         )}
       </motion.div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -346,46 +449,89 @@ function StepRow({
   step,
   index,
   showNode,
+  near,
 }: {
   step: Step;
   index: number;
   showNode: boolean;
+  near: boolean;
 }) {
   const reversed = index % 2 === 1;
+  const reduce = !!useReducedMotion();
+  const dir = reversed ? 1 : -1;
 
   return (
     <li className="relative grid items-center gap-8 lg:grid-cols-2 lg:gap-24">
       {showNode && (
         <span
           aria-hidden
-          className="absolute left-1/2 top-1/2 -ml-2 -mt-2 h-4 w-4 rounded-full bg-white ring-4 ring-orange-400/80"
-        />
+          className="absolute left-1/2 top-1/2 -ml-2 -mt-2 h-4 w-4"
+        >
+          <motion.span
+            className="absolute inset-0 rounded-full bg-white ring-4 ring-orange-400/80"
+            initial={reduce ? false : { scale: 0 }}
+            whileInView={{ scale: 1 }}
+            viewport={{ once: true, margin: "-20% 0px" }}
+            transition={{ type: "spring", stiffness: 260, damping: 16 }}
+          />
+          {!reduce && (
+            <motion.span
+              className="absolute inset-0 rounded-full bg-orange-400/60"
+              initial={{ scale: 1, opacity: 0 }}
+              whileInView={{ scale: [1, 3, 3], opacity: [0.7, 0, 0] }}
+              viewport={{ once: true, margin: "-20% 0px" }}
+              transition={{ duration: 1.3, ease: "easeOut", delay: 0.15 }}
+            />
+          )}
+        </span>
       )}
 
-      <div className={reversed ? "lg:order-2" : undefined}>
-        <StepVisual step={step} />
-      </div>
+      <motion.div
+        className={reversed ? "lg:order-2" : undefined}
+        initial={reduce ? false : { opacity: 0, x: dir * 48 }}
+        whileInView={{ opacity: 1, x: 0 }}
+        viewport={{ once: true, margin: "-60px" }}
+        transition={{ duration: 0.9, ease: EASE_OUT }}
+      >
+        <StepVisual step={step} near={near} priority={index === 0} />
+      </motion.div>
 
       <div className={reversed ? "lg:order-1 lg:text-right" : undefined}>
-        <span className="bg-gradient-to-br from-orange-500 to-amber-400 bg-clip-text font-[family-name:var(--font-display)] text-6xl font-bold text-transparent">
+        <motion.span
+          className="inline-block bg-gradient-to-br from-orange-500 to-amber-400 bg-clip-text font-[family-name:var(--font-display)] text-6xl font-bold text-transparent"
+          initial={reduce ? false : { opacity: 0, scale: 0.6, rotate: -8 }}
+          whileInView={{ opacity: 1, scale: 1, rotate: 0 }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ type: "spring", stiffness: 180, damping: 14 }}
+        >
           {step.number}
-        </span>
+        </motion.span>
         <RevealHeading
           as="h3"
           className="mt-3 font-[family-name:var(--font-display)] text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl"
         >
           {step.headline}
         </RevealHeading>
-        <p className="mt-2 text-lg font-medium text-orange-600">
+        <motion.p
+          className="mt-2 text-lg font-medium text-orange-600"
+          initial={reduce ? false : { opacity: 0, x: -dir * 28 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.7, ease: EASE_OUT, delay: 0.25 }}
+        >
           {step.subheadline}
-        </p>
-        <p
+        </motion.p>
+        <motion.p
           className={`mt-4 max-w-md font-[family-name:var(--font-body)] text-base leading-relaxed text-neutral-600 ${
             reversed ? "lg:ml-auto" : ""
           }`}
+          initial={reduce ? false : { opacity: 0, y: 22 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.8, ease: EASE_OUT, delay: 0.38 }}
         >
           {step.body}
-        </p>
+        </motion.p>
       </div>
     </li>
   );
@@ -487,6 +633,11 @@ export default function HowItWorks() {
   const sectionRef = useRef<HTMLElement>(null);
   const raf = useRef(0);
   const sectionInView = useInView(sectionRef, { amount: 0.1 });
+  // Flips to true once, ~1500px before the section scrolls in, so images are already loaded on arrival.
+  const near = useInView(sectionRef, {
+    once: true,
+    margin: "1500px 0px 1500px 0px",
+  });
   const finePointer = useMediaQuery("(hover: hover) and (pointer: fine)");
 
   const setSpot = useCallback((x: string, y: string) => {
@@ -524,6 +675,8 @@ export default function HowItWorks() {
     damping: 28,
     mass: 0.4,
   });
+  // Glowing head that rides the tip of the progress line.
+  const headTop = useTransform(progress, [0, 1], ["0%", "100%"]);
 
   return (
     <section
@@ -541,19 +694,31 @@ export default function HowItWorks() {
 
       <div className="relative z-10 mx-auto max-w-6xl px-6">
         <header className="mx-auto max-w-2xl text-center">
-          <span className="inline-flex items-center rounded-full border border-orange-200 bg-white/70 px-4 py-1.5 text-sm font-medium text-orange-700 shadow-sm backdrop-blur-md">
+          <motion.span
+            className="inline-flex items-center rounded-full border border-orange-200 bg-white/70 px-4 py-1.5 text-sm font-medium text-orange-700 shadow-sm backdrop-blur-md"
+            initial={reduce ? false : { opacity: 0, y: -14, scale: 0.9 }}
+            whileInView={{ opacity: 1, y: 0, scale: 1 }}
+            viewport={{ once: true, margin: "-60px" }}
+            transition={{ duration: 0.7, ease: EASE_OUT }}
+          >
             How it works
-          </span>
+          </motion.span>
           <RevealHeading
             as="h2"
             className="mt-6 font-[family-name:var(--font-display)] text-4xl font-bold tracking-tight text-neutral-900 sm:text-5xl"
           >
             From idea to published in minutes.
           </RevealHeading>
-          <p className="mt-5 font-[family-name:var(--font-body)] text-lg leading-relaxed text-neutral-600">
+          <motion.p
+            className="mt-5 font-[family-name:var(--font-body)] text-lg leading-relaxed text-neutral-600"
+            initial={reduce ? false : { opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-60px" }}
+            transition={{ duration: 0.8, ease: EASE_OUT, delay: 0.35 }}
+          >
             You don&apos;t need a designer or a developer. Here is exactly how
             Riwainvite turns your vision into a live, interactive invitation.
-          </p>
+          </motion.p>
         </header>
 
         <ol ref={listRef} className="relative mt-20 space-y-20 sm:space-y-28">
@@ -565,11 +730,18 @@ export default function HowItWorks() {
                 className="absolute bottom-0 left-1/2 top-0 w-px bg-orange-200/70"
               />
               {!reduce && (
-                <motion.span
-                  aria-hidden
-                  className="absolute bottom-0 left-1/2 top-0 w-px origin-top bg-gradient-to-b from-orange-500 to-amber-400"
-                  style={{ scaleY: progress }}
-                />
+                <>
+                  <motion.span
+                    aria-hidden
+                    className="absolute bottom-0 left-1/2 top-0 w-px origin-top bg-gradient-to-b from-orange-500 to-amber-400"
+                    style={{ scaleY: progress }}
+                  />
+                  <motion.span
+                    aria-hidden
+                    className="absolute left-1/2 -ml-[5px] -mt-[5px] h-2.5 w-2.5 rounded-full bg-orange-500 shadow-[0_0_14px_4px_rgba(249,115,22,0.55)]"
+                    style={{ top: headTop }}
+                  />
+                </>
               )}
             </>
           )}
@@ -580,6 +752,7 @@ export default function HowItWorks() {
               step={step}
               index={i}
               showNode={isWide}
+              near={near}
             />
           ))}
         </ol>

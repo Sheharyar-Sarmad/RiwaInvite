@@ -5,6 +5,8 @@ import { errorResponse, pgErrorToResponse } from "@/lib/api/errors";
 import { STATUS_CODE } from "@/lib/status_codes";
 import { SLUG_RE } from "@/lib/invitations/public-invitation";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Public guestbook: latest guest messages (name + message only, no counts or status). */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -12,12 +14,26 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
     return errorResponse(STATUS_CODE.BAD_REQUEST, "INVALID_SLUG", "Invalid invitation link");
   }
   try {
-    const [inv] = await sql`
-      SELECT id, status, expires_at FROM invitations
-      WHERE LOWER(slug) = LOWER(${slug}) OR id::text = ${slug}
-      ORDER BY (LOWER(slug) = LOWER(${slug})) DESC
-      LIMIT 1
-    `;
+    // Indexed lookup: slug first (idx_invitations_slug_lower), then primary key if it is a UUID.
+    const [inv] = UUID_RE.test(slug)
+      ? await sql`
+          SELECT id, status, expires_at FROM (
+            SELECT 0 AS ord, id, status, expires_at
+            FROM invitations WHERE LOWER(slug) = LOWER(${slug})
+            UNION ALL
+            SELECT 1 AS ord, id, status, expires_at
+            FROM invitations WHERE id = ${slug}::uuid
+          ) m
+          ORDER BY ord
+          LIMIT 1
+        `
+      : await sql`
+          SELECT id, status, expires_at
+          FROM invitations
+          WHERE LOWER(slug) = LOWER(${slug})
+          LIMIT 1
+        `;
+
     const live =
       inv && inv.status === "published" && (!inv.expires_at || new Date(inv.expires_at).getTime() > Date.now());
     if (!live) return errorResponse(STATUS_CODE.NOT_FOUND, "NOT_FOUND", "Invitation not found");

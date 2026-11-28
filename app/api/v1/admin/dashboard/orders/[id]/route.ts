@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/db/connections/postgres_connection";
-import { getRedisClient } from "@/db/connections/redis_connection";
 import { errorResponse, pgErrorToResponse } from "@/lib/api/errors";
+import { safeInvalidateCache } from "@/lib/api/helpers";
 import { STATUS_CODE } from "@/lib/status_codes";
 import { z } from "zod";
 
@@ -12,33 +12,36 @@ const UpdateOrderStatusSchema = z.object({
   status: z.enum(["pending", "completed", "failed"]),
 });
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
+  const adminId = req.headers.get("x-admin-id");
+  if (!adminId) return errorResponse(STATUS_CODE.UNAUTHORIZED, "UNAUTHORIZED", "Missing Admin ID");
+
   const { id } = await params;
   if (!UUID_RE.test(id)) {
     return errorResponse(STATUS_CODE.BAD_REQUEST, "INVALID_ID", "Invalid order id.");
   }
 
   try {
-    // 1. Fetch Order & User
-    const [order] = await sql`
-      SELECT 
-        o.*,
-        u.first_name, u.last_name, u.email
-      FROM orders o
-      JOIN users u ON o.user_id = u.id
-      WHERE o.id = ${id}
-    `;
+    const [orderRows, items] = await Promise.all([
+      sql`
+        SELECT 
+          o.*,
+          u.first_name, u.last_name, u.email
+        FROM orders o
+        JOIN users u ON o.user_id = u.id
+        WHERE o.id = ${id}
+      `,
+      sql`
+        SELECT id, item_type, item_id, price, created_at
+        FROM order_items
+        WHERE order_id = ${id}
+      `,
+    ]);
 
+    const order = orderRows[0];
     if (!order) {
       return errorResponse(STATUS_CODE.NOT_FOUND, "NOT_FOUND", "Order not found.");
     }
-
-    // 2. Fetch Order Items
-    const items = await sql`
-      SELECT id, item_type, item_id, price, created_at
-      FROM order_items
-      WHERE order_id = ${id}
-    `;
 
     return NextResponse.json({
       data: {
@@ -84,7 +87,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return errorResponse(STATUS_CODE.NOT_FOUND, "NOT_FOUND", "Order not found.");
     }
 
-    // Insert Admin Notification
     try {
       await sql`
         INSERT INTO admin_notifications (admin_id, type, title, message)
@@ -99,14 +101,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       console.warn("[NOTIFICATION_ERROR]", notifError);
     }
 
-    // Invalidate Cache (List API)
-    try {
-      const redis = await getRedisClient();
-      const keys = await redis.keys("orders:admin:*");
-      if (keys.length > 0) await redis.del(keys);
-    } catch (e) {
-      console.warn("[Redis] Failed to invalidate cache:", e);
-    }
+    // Non-blocking SCAN-based invalidation (replaces redis.keys)
+    await safeInvalidateCache("orders:admin:*");
 
     return NextResponse.json({ data: updatedOrder }, { status: STATUS_CODE.OK });
   } catch (err) {
